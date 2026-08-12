@@ -16,18 +16,28 @@
  * десятков тысяч, кириллица. На таких данных видно, где вёрстка ломается
  * и где цифры не сходятся — на выдуманных не видно ничего.
  *
- * Запуск:
- *   node scripts/fill_my_shop.js --phone +77771234567 --password ВашПароль
+ * ЗАПУСК НА СЕРВЕРЕ — изнутри контейнера, потому что Node.js стоит
+ * только там, а не на самой машине:
  *
- * Или через сервер, если запускаете на нём:
- *   API_URL=https://tabys.duckdns.org/api node scripts/fill_my_shop.js ...
+ *   docker compose -p tabys -f /opt/tabys/deploy/docker-compose.prod.yml \
+ *     exec -T server node scripts/fill_my_shop.js \
+ *     --phone +77771234567 --password ВашПароль
+ *
+ * Изнутри контейнера сервер доступен по адресу 127.0.0.1:3000 — это
+ * быстрее и надёжнее, чем идти наружу через домен и обратно.
+ *
+ * На своём компьютере (если поставлен Node.js):
+ *   node scripts/fill_my_shop.js --phone ... --password ...
  *
  * ПОВТОРНЫЙ ЗАПУСК безопасен: скрипт добавляет данные, а не чистит.
  * Но лучше запускать один раз — иначе товары задвоятся.
  */
 const { randomUUID } = require('crypto');
 
-const API = process.env.API_URL ?? 'https://tabys.duckdns.org/api';
+// Внутри контейнера сервер рядом — идём напрямую, не через интернет.
+// Снаружи (с компьютера) нужен полный адрес.
+const API = process.env.API_URL
+  ?? (require('fs').existsSync('/app/dist/main.js') ? 'http://127.0.0.1:3000' : 'https://tabys.duckdns.org/api');
 const args = process.argv.slice(2);
 const arg = (n) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : null; };
 const PHONE = arg('phone');
