@@ -67,6 +67,10 @@ const NAV: [string, [string, string][]][] = [
   ['Управление', [
     ['/employees', 'Сотрудники'],
     ['/stores', 'Точки и кассы'],
+    // Подписка вынесена из «Настроек» отдельным разделом: пять вкладок там
+    // настраивают один раз при запуске, а деньги смотрят каждый месяц —
+    // владелец искал её не там. Право у раздела своё: billing, не settings.
+    ['/billing', 'Подписка'],
     ['/settings', 'Настройки'],
   ]],
 ];
@@ -162,6 +166,13 @@ export default function CabLayout({ children }: { children: React.ReactNode }) {
         ? sync.ready ? <Badge tone="ok">Кассы синхронизированы</Badge> : <Badge tone="warn">Есть неотданные данные</Badge>
         : <Badge tone="dim">Синхронизация…</Badge>}
       </div>
+      {/* Подписка теперь свой раздел: статус показывает проблему —
+          ссылка говорит, куда идти её решать. */}
+      {access && !access.canSell && (
+        <a href="/billing" style={{ color: C.accentDark, fontSize: 13, minHeight: 34, display: 'flex', alignItems: 'center' }}>
+          Продлить подписку →
+        </a>
+      )}
       <a href="/login" onClick={() => tokens.clear()}
         style={{ color: C.dim, fontSize: 13, minHeight: 34, display: 'flex', alignItems: 'center' }}>Выйти</a>
     </div>
