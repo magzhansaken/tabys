@@ -250,6 +250,11 @@ const RULES = [
   { file: 'server/src/reports/report.service.ts', must: 'async openShifts',
     why: 'Открытые смены одной выборкой на два ответа: две копии разъезжаются, и одна начинает показывать не то' },
 
+  { file: 'deploy/05_update.sh', must: '"$SRC"/scripts "$DST"',
+    why: 'Папка scripts должна доезжать на сервер: без неё нечем наполнить магазин данными и проверить правила' },
+  { file: 'deploy/docker-compose.prod.yml', must: '../scripts:/app/scripts:ro',
+    why: 'Скрипты подключены к контейнеру: Node.js стоит только внутри, на самой машине его нет' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

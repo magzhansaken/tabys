@@ -17,6 +17,10 @@ cp -r "$SRC"/admin "$DST"/
 cp -r "$SRC"/db "$DST"/
 cp -r "$SRC"/docs "$DST"/ 2>/dev/null || true
 cp -r "$SRC"/shared "$DST"/ 2>/dev/null || true
+# Служебные скрипты: наполнение магазина данными, проверка правил.
+# Раньше не копировались вовсе — папка была в проекте, но на сервер
+# не доезжала, и запустить их было нечем.
+cp -r "$SRC"/scripts "$DST"/ 2>/dev/null || true
 # скрипты и compose обновляем, .env оставляем как есть
 for f in "$SRC"/deploy/*.sh "$SRC"/deploy/docker-compose*.yml; do cp "$f" "$DST"/deploy/; done
 echo "· код обновлён, .env сохранён"
