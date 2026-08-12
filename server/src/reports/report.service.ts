@@ -128,23 +128,7 @@ export class ReportService {
   async mobileSnapshot(accountId: string, storeIds?: string[]) {
     const today = await this.dayFor(accountId);
     const dash = await this.dashboardDay(accountId, today, storeIds);
-    const openShifts = await this.db.withTenant(accountId, async (c) =>
-      (await c.query(
-        `SELECT s.id, s.opened_at, st.name AS store, cr.name AS register,
-                (e.first_name || ' ' || coalesce(e.last_name,'')) AS cashier,
-                coalesce((SELECT sum(CASE WHEN sl.return_of_id IS NULL THEN sl.total ELSE -sl.total END)
-                            FROM sale sl WHERE sl.shift_id = s.id), 0) AS revenue,
-                (SELECT count(*) FROM sale sl WHERE sl.shift_id = s.id AND sl.return_of_id IS NULL) AS receipts
-           FROM shift s
-           LEFT JOIN cash_register cr ON cr.id = s.cash_register_id
-           LEFT JOIN store st ON st.id = cr.store_id
-           LEFT JOIN employee e ON e.id = s.opened_by
-          WHERE s.account_id = $1 AND s.closed_at IS NULL
-          ORDER BY s.opened_at`, [accountId])).rows
-        .map((r: any) => ({
-          id: r.id, store: r.store, register: r.register, cashier: (r.cashier ?? '').trim() || '—',
-          openedAt: r.opened_at, revenue: Number(r.revenue), receipts: Number(r.receipts),
-        })));
+    const openShifts = await this.openShifts(accountId);
     return {
       today: {
         revenue: dash.revenue, receipts: dash.receipts, profit: dash.grossProfit,
@@ -186,6 +170,38 @@ export class ReportService {
         outCount: items.filter((i) => i.out).length,
       };
     });
+  }
+
+  /**
+   * Открытые смены: где сейчас торгуют, кто за кассой, сколько наторговали.
+   *
+   * Вынесено в отдельный метод, потому что нужно двум ответам сразу. Две
+   * копии одной выборки рано или поздно разъезжаются, и одна из них
+   * начинает показывать не то — а это как раз тот случай, когда владелец
+   * смотрит с телефона и принимает решение.
+   *
+   * Зачем владельцу: «какие точки открылись» — одна из главных причин
+   * вообще лезть в телефон. Он видит, что смена не открыта в девять
+   * утра, и звонит продавцу, а не узнаёт об этом вечером из отчёта.
+   */
+  async openShifts(accountId: string) {
+    return this.db.withTenant(accountId, async (c) =>
+      (await c.query(
+        `SELECT s.id, s.opened_at, st.name AS store, cr.name AS register,
+                (e.first_name || ' ' || coalesce(e.last_name,'')) AS cashier,
+                coalesce((SELECT sum(CASE WHEN sl.return_of_id IS NULL THEN sl.total ELSE -sl.total END)
+                            FROM sale sl WHERE sl.shift_id = s.id), 0) AS revenue,
+                (SELECT count(*) FROM sale sl WHERE sl.shift_id = s.id AND sl.return_of_id IS NULL) AS receipts
+           FROM shift s
+           LEFT JOIN cash_register cr ON cr.id = s.cash_register_id
+           LEFT JOIN store st ON st.id = cr.store_id
+           LEFT JOIN employee e ON e.id = s.opened_by
+          WHERE s.account_id = $1 AND s.closed_at IS NULL
+          ORDER BY s.opened_at`, [accountId])).rows
+        .map((r: any) => ({
+          id: r.id, store: r.store, register: r.register, cashier: (r.cashier ?? '').trim() || '—',
+          openedAt: r.opened_at, revenue: Number(r.revenue), receipts: Number(r.receipts),
+        })));
   }
 
   /** График выручки: «сумма выручки за каждый отдельный день» (UMAG). */
@@ -605,7 +621,7 @@ export class ReportService {
     const yesterday = this.day(-1);
     const week = this.quickPeriod('week');
 
-    const [d, y, chart, accounts, sync, top, low] = await Promise.all([
+    const [d, y, chart, accounts, sync, top, low, shifts] = await Promise.all([
       this.dashboardDay(accountId, today, storeIds),
       this.dashboardDay(accountId, yesterday, storeIds),
       this.revenueChart(accountId, week, storeIds),
@@ -616,6 +632,10 @@ export class ReportService {
       // Идёт СЕДЬМЫМ в том же наборе, а не отдельным запросом: в областях
       // связь медленная, и два ожидания вместо одного заметны на телефоне.
       this.lowStockShort(accountId),
+      // Открытые смены — восьмым в том же наборе. «Какие точки открылись» —
+      // одна из главных причин лезть в телефон: владелец видит, что смена
+      // не открыта в девять утра, и звонит продавцу, а не узнаёт вечером.
+      this.openShifts(accountId),
     ]);
 
     const delta = y.revenue > 0 ? Math.round(((d.revenue - y.revenue) / y.revenue) * 100) : null;
@@ -637,6 +657,10 @@ export class ReportService {
       // Пять самых острых позиций и общее число: владельцу с телефона
       // нужен не полный список из сорока, а «что везти сегодня».
       lowStock: low,
+      openShifts: shifts,
+      // Число точек, а не смен: на одной точке может быть две кассы, и
+      // «открыто 2» при одном работающем магазине сбивает с толку.
+      openStoresCount: new Set(shifts.map((x: any) => x.store)).size,
     };
   }
 

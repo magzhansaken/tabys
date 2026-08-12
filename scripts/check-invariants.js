@@ -242,6 +242,14 @@ const RULES = [
   { file: 'admin/lib/ui.tsx', must: 'export function BaseStyles',
     why: 'Печать, сброс страницы и карточки на телефоне живут в одном месте, а не копируются по страницам' },
 
+  // ── Право billing отдельно от settings ─────────────────────────────
+  { file: 'shared/permissions.json', must: '"billing"',
+    why: 'Подписка — деньги, настройки — фискализация. Бухгалтеру можно дать оплату счетов, не открывая настройку касс' },
+  { file: 'server/src/admin/admin.module.ts', must: "RequirePermission('billing'",
+    why: 'Эндпоинты подписки под своим правом: иначе раздел «Подписка» виден только тем, у кого доступ к настройкам' },
+  { file: 'server/src/reports/report.service.ts', must: 'async openShifts',
+    why: 'Открытые смены одной выборкой на два ответа: две копии разъезжаются, и одна начинает показывать не то' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

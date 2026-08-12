@@ -98,6 +98,8 @@ const wait = async () => { for (let i = 0; i < 50; i++) { try { await fetch(API 
      '★ «Что заканчивается» пришло ТЕМ ЖЕ запросом');
   ok(typeof mob?.lowStock?.total === 'number' && typeof mob?.lowStock?.outCount === 'number',
      '★ Видно общее число и сколько закончилось совсем — «что везти сегодня»');
+  ok(Array.isArray(mob?.openShifts) && typeof mob?.openStoresCount === 'number',
+     '★ Открытые смены вернулись в мобильный: «какие точки открылись» — главная причина лезть в телефон');
   ok(mob.lowStock.items.length <= 5,
      `На телефоне не больше пяти позиций (пришло ${mob.lowStock.items.length}) — список из сорока не читают`);
 

@@ -1,10 +1,57 @@
 {
   "_comment": "Единый список для сервера, кассы и кабинета. Меняется одним коммитом на всех трёх — иначе они разъедутся.",
-  "sections": ["dashboard","goods","stock","pos","sales","purchases","contragents","finance","reports","documents","loyalty","employees","devices","settings"],
-  "actions": ["view","create","edit","delete"],
+  "sections": [
+    "dashboard",
+    "goods",
+    "stock",
+    "pos",
+    "sales",
+    "purchases",
+    "contragents",
+    "finance",
+    "reports",
+    "documents",
+    "loyalty",
+    "employees",
+    "devices",
+    "billing",
+    "settings"
+  ],
+  "actions": [
+    "view",
+    "create",
+    "edit",
+    "delete"
+  ],
   "systemRoles": {
-    "owner":   { "*": { "view": true, "create": true, "edit": true, "delete": true } },
-    "admin":   { "*": { "view": true, "create": true, "edit": true, "delete": true } },
-    "cashier": { "pos": { "view": true, "create": true }, "goods": { "view": true }, "contragents": { "view": true, "create": true } }
+    "owner": {
+      "*": {
+        "view": true,
+        "create": true,
+        "edit": true,
+        "delete": true
+      }
+    },
+    "admin": {
+      "*": {
+        "view": true,
+        "create": true,
+        "edit": true,
+        "delete": true
+      }
+    },
+    "cashier": {
+      "pos": {
+        "view": true,
+        "create": true
+      },
+      "goods": {
+        "view": true
+      },
+      "contragents": {
+        "view": true,
+        "create": true
+      }
+    }
   }
 }

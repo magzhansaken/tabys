@@ -568,41 +568,50 @@ export class EquipmentController {
 // =====================================================================
 // БИЛЛИНГ И ПОДПИСКА
 // =====================================================================
+/**
+ * ПОДПИСКА И ПЛАТЕЖИ — своё право `billing`, а не общее `settings`.
+ *
+ * Зачем разделили: подписка это деньги, а настройки это фискализация,
+ * оборудование и доступы. Владелец должен уметь дать бухгалтеру оплату
+ * счетов, не открывая ему настройку кассовых аппаратов. Раньше это было
+ * одно право на двоих, и раздел «Подписка» пришлось бы прятать от всех,
+ * кому не доверены настройки.
+ */
 @Controller('billing')
 export class BillingController {
   constructor(private bill: BillingService) {}
 
-  @Get('tariffs') @RequirePermission('settings', 'view')
+  @Get('tariffs') @RequirePermission('billing', 'view')
   tariffs() { return this.bill.tariffs(); }
 
-  @Get('access') @RequirePermission('settings', 'view')
+  @Get('access') @RequirePermission('billing', 'view')
   access(@Ctx() ctx: EmployeeContext) { return this.bill.access(ctx.accountId); }
 
-  @Post('subscribe') @RequirePermission('settings', 'edit')
+  @Post('subscribe') @RequirePermission('billing', 'edit')
   subscribe(@Ctx() ctx: EmployeeContext, @Body() d: { tariffCode: string; stores?: number }) {
     return this.bill.subscribe(ctx.accountId, d.tariffCode, d.stores ?? 1);
   }
 
-  @Post('topup') @RequirePermission('settings', 'edit')
+  @Post('topup') @RequirePermission('billing', 'edit')
   topup(@Ctx() ctx: EmployeeContext, @Body() d: { amount: number; comment?: string }) {
     return this.bill.topup(ctx.accountId, d.amount, d.comment);
   }
 
   // ---- онлайн-оплата (часть 29) ----
-  @Post('invoice') @RequirePermission('settings', 'edit')
+  @Post('invoice') @RequirePermission('billing', 'edit')
   createInvoice(@Ctx() ctx: EmployeeContext, @Body() d: any) {
     return this.bill.createInvoice(ctx.accountId, d);
   }
 
-  @Get('invoices') @RequirePermission('settings', 'view')
+  @Get('invoices') @RequirePermission('billing', 'view')
   invoices(@Ctx() ctx: EmployeeContext) { return this.bill.invoices(ctx.accountId); }
 
-  @Post('auto-renew') @RequirePermission('settings', 'edit')
+  @Post('auto-renew') @RequirePermission('billing', 'edit')
   autoRenew(@Ctx() ctx: EmployeeContext, @Body() d: { enabled: boolean }) {
     return this.bill.setAutoRenew(ctx.accountId, d.enabled);
   }
 
-  @Post('run-auto-renew') @RequirePermission('settings', 'edit')
+  @Post('run-auto-renew') @RequirePermission('billing', 'edit')
   runAutoRenew(@Ctx() ctx: EmployeeContext) { return this.bill.runAutoRenew(ctx.accountId); }
 
   // ПУБЛИЧНЫЙ webhook оплаты — приходит от провайдера, без токена, но с
@@ -614,11 +623,11 @@ export class BillingController {
     return this.bill.handlePaymentWebhook(provider, JSON.stringify(body), sig, body);
   }
 
-  @Get('history') @RequirePermission('settings', 'view')
+  @Get('history') @RequirePermission('billing', 'view')
   history(@Ctx() ctx: EmployeeContext) { return this.bill.history(ctx.accountId); }
 
   /** Журнал действий сотрудников — «кто удалил товар» */
-  @Get('audit') @RequirePermission('settings', 'view')
+  @Get('audit') @RequirePermission('billing', 'view')
   audit(@Ctx() ctx: EmployeeContext, @Query() q: any) {
     return this.bill.audit(ctx.accountId, { entity: q.entity, employeeId: q.employeeId,
       limit: q.limit ? +q.limit : undefined });
