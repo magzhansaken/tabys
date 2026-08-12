@@ -164,6 +164,34 @@ export default function MobileDashboard() {
             </div>
           )}
 
+          {/* Какие точки открылись — третье, ради чего открывают телефон.
+              Владелец видит в девять утра, что смена не открыта, и звонит
+              продавцу — а не узнаёт вечером из отчёта. */}
+          <SectionTitle>
+            {snap.openStoresCount > 0 ? `Открытые точки · ${snap.openStoresCount}` : 'Открытые точки'}
+          </SectionTitle>
+          {(snap.openShifts ?? []).length === 0 ? (
+            <div style={{ ...card, color: C.dim, fontSize: 14, lineHeight: 1.5 }}>
+              Сейчас нет открытых смен — все кассы закрыты.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {snap.openShifts.map((s: any, i: number) => (
+                <div key={s.id ?? i} style={card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+                    <div style={{ fontSize: 15, fontWeight: 600 }}>{s.store ?? 'Точка'}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.accentDark, whiteSpace: 'nowrap',
+                      fontVariantNumeric: 'tabular-nums' }}>{money(s.revenue)}</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.dim, marginTop: 4, lineHeight: 1.5 }}>
+                    {s.register} · {s.cashier} · {s.receipts} чеков
+                    {s.openedAt ? ` · с ${new Date(s.openedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <SectionTitle>Топ товаров сегодня</SectionTitle>
           {(snap.topProducts ?? []).length === 0 ? (
             <div style={{ ...card, color: C.dim, fontSize: 14, lineHeight: 1.5 }}>

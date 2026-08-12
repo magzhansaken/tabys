@@ -1,25 +1,22 @@
 'use client';
 /**
- * Настройки: чек-лист запуска, подписка, фискализация, оборудование, учёт
- * и доступ, фирменный стиль. Чек-лист — модель онбординга из части 12:
+ * Настройки: чек-лист запуска, фискализация, оборудование, учёт и доступ,
+ * фирменный стиль. Подписка вынесена отдельным разделом — это деньги, куда
+ * возвращаются каждый месяц, а не настройка при запуске. Чек-лист — модель онбординга из части 12:
  * владелец видит, что осталось сделать до первого чека.
  *
- * Шесть таблиц в одном разделе разведены по шести вкладкам: без этого
- * человек не понимает, где находится. Вкладка «Учёт и доступ» новая —
- * туда собраны граница операционного дня и ключи публичного API.
+ * Таблицы разведены по вкладкам: без этого человек не понимает, где
+ * находится. Вкладка «Учёт и доступ» новая — туда собраны граница
+ * операционного дня и ключи публичного API.
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Card, Table, DataTable, PageHeader, Tabs, Toggle, RevealOnce, Btn, Field, Input, Select,
+import { Card, Table, DataTable, PageHeader, Tabs, RevealOnce, Btn, Field, Input, Select,
   confirmDanger, money, dt, MONO, C, ErrLine, Badge } from '../../../lib/ui';
 
 export default function SettingsPage() {
   const [tab, setTab] = useState('onboarding');
-  const [payAmount, setPayAmount] = useState('');
   const [onb, setOnb] = useState<any>(null);
-  const [access, setAccess] = useState<any>(null);
-  const [tariffs, setTariffs] = useState<any[]>([]);
-  const [billHist, setBillHist] = useState<any[]>([]);
   const [fiscal, setFiscal] = useState<any>(null);
   const [readiness, setReadiness] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
@@ -37,11 +34,6 @@ export default function SettingsPage() {
   const load = async () => {
     try {
       if (tab === 'onboarding') setOnb(await api('/onboarding'));
-      if (tab === 'billing') {
-        setAccess(await api('/billing/access'));
-        setTariffs(await api('/billing/tariffs'));
-        setBillHist(await api('/billing/history'));
-      }
       if (tab === 'fiscal') { setFiscal(await api('/fiscal/health')); setKeys(await api('/documents/keys/health')); setReadiness(await api('/fiscal/readiness')); }
       if (tab === 'equipment') setEquipment(await api('/equipment'));
       if (tab === 'access') {
@@ -57,13 +49,6 @@ export default function SettingsPage() {
   };
   useEffect(() => { setErr(''); load(); }, [tab]);
 
-  const subscribe = async (code: string) => {
-    setErr(''); setMsg('');
-    try { await api('/billing/subscribe', { method: 'POST', body: JSON.stringify({ tariffCode: code }) });
-      setMsg('Тариф выбран'); load(); }
-    catch (e: any) { setErr(e.message); }
-  };
-
   const stepDone = async (code: string) => {
     try { await api(`/onboarding/steps/${code}/complete`, { method: 'POST', body: JSON.stringify({}) }); load(); }
     catch (e: any) { setErr(e.message); }
@@ -75,9 +60,7 @@ export default function SettingsPage() {
 
   const fact = tab === 'onboarding'
     ? (steps.length ? `${done} из ${steps.length} шагов готово${waiting ? ` · осталось ${waiting}` : ''}` : 'Чек-лист загружается…')
-    : tab === 'billing'
-      ? (access ? `${access.canSell ? 'Продажи открыты' : 'Продажи закрыты'}${access.paidUntil ? ` · оплачено до ${new Date(access.paidUntil).toLocaleDateString('ru-RU')}` : ''} · баланс ${money(access.balance)}` : 'Загрузка…')
-      : tab === 'fiscal'
+    : tab === 'fiscal'
         ? `${readiness.filter((r: any) => r.env === 'production').length} касс в боевом режиме из ${readiness.length}`
         : tab === 'equipment'
           ? `${equipment.length} устройств${equipment.filter((e: any) => !e.online).length ? ` · ${equipment.filter((e: any) => !e.online).length} без связи` : ''}`
@@ -94,7 +77,6 @@ export default function SettingsPage() {
       <div style={{ marginTop: 14 }}>
         <Tabs active={tab} onChange={setTab} tabs={[
           { key: 'onboarding', label: 'Чек-лист запуска' },
-          { key: 'billing', label: 'Подписка' },
           { key: 'fiscal', label: 'Фискализация и ЭЦП' },
           { key: 'equipment', label: 'Оборудование' },
           { key: 'access', label: 'Учёт и доступ' },
@@ -138,87 +120,6 @@ export default function SettingsPage() {
               ]}
               rows={steps} />
           </Card>
-        )}
-
-        {tab === 'billing' && (
-          <>
-            <Card>
-              {access ? (
-                <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 210 }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: C.faint }}>Подписка</div>
-                    <div style={{ marginTop: 10 }}>
-                      {access.canSell ? <Badge tone="ok">Продажи открыты</Badge> : <Badge tone="bad">{access.reason ?? 'Продажи закрыты'}</Badge>}
-                    </div>
-                    <div style={{ fontSize: 13.5, color: C.dim, marginTop: 12, lineHeight: 1.55 }}>
-                      {access.status ?? '—'}
-                      {access.paidUntil ? `, оплачено до ${new Date(access.paidUntil).toLocaleDateString('ru-RU')}` : ''}
-                    </div>
-                  </div>
-                  {access.priceLocked != null && (
-                    <div style={{ paddingLeft: 40, borderLeft: `1px solid ${C.lineIn}`, minWidth: 190 }}>
-                      <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: C.faint }}>Цена зафиксирована</div>
-                      <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-.015em', lineHeight: 1.1, marginTop: 8,
-                        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{money(access.priceLocked)}</div>
-                      <div style={{ fontSize: 13.5, color: C.dim, marginTop: 9 }}>в месяц, не изменится</div>
-                    </div>
-                  )}
-                  <div style={{ paddingLeft: 40, borderLeft: `1px solid ${C.lineIn}`, minWidth: 170 }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: C.faint }}>Баланс</div>
-                    <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-.015em', lineHeight: 1.1, marginTop: 8,
-                      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-                      color: Number(access.balance) < 0 ? C.red : C.text }}>{money(access.balance)}</div>
-                  </div>
-                </div>
-              ) : 'Загрузка…'}
-            </Card>
-
-            <Card title="Пополнить онлайн" style={{ marginTop: 14 }}
-              right={access && (
-                <Toggle checked={!!access.autoRenew} on="Автопродление включено" off="Автопродление выключено"
-                  onChange={async (v) => { await api('/billing/auto-renew', { method: 'POST', body: JSON.stringify({ enabled: v }) }); load(); }} />
-              )}>
-              <p style={{ fontSize: 13.5, color: C.dim, marginTop: 0, lineHeight: 1.55, maxWidth: '80ch' }}>
-                Оплата через Kaspi или картой. Создайте счёт — откроется ссылка, после
-                оплаты баланс пополнится сам. С автопродлением платить вручную не нужно:
-                доступ не закроется в выходной, когда позвонить некому.
-              </p>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <Field label="Сумма, ₸">
-                  <Input type="number" placeholder="6900" value={payAmount} style={{ textAlign: 'right' }} onChange={(e: any) => setPayAmount(e.target.value)} w={150} />
-                </Field>
-                <Btn onClick={async () => {
-                  setErr(''); setMsg('');
-                  try { const inv = await api('/billing/invoice', { method: 'POST', body: JSON.stringify({ amount: +payAmount, provider: 'mock' }) });
-                    setMsg(`Счёт создан. Оплатите по ссылке: ${inv.payUrl}`); setPayAmount(''); load(); }
-                  catch (e: any) { setErr(e.message); }
-                }}>Создать счёт</Btn>
-              </div>
-            </Card>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14, marginTop: 14 }}>
-              <Card title="Тарифы">
-                <DataTable storageKey="settings-2" exportName="settings-2" search={false}
-                  hint="Скидки за длинный срок нет: три месяца стоят ровно втрое."
-                  empty="Тарифы не загрузились. Обновите страницу — если не помогло, напишите нам в поддержку" cols={[
-                  { h: 'Тариф', k: 'name' },
-                  { h: 'В месяц', right: true, r: (r) => money(r.price_month) },
-                  { h: 'Доп. точка', right: true, r: (r) => money(r.price_extra_store) },
-                  { h: '', r: (r) => <Btn kind="ghost" onClick={() => subscribe(r.code)}>Выбрать</Btn> },
-                ]} rows={tariffs} />
-              </Card>
-              <Card title="История платежей">
-                <DataTable storageKey="settings-3" exportName="settings-3" search={false}
-                  hint="Платежи через Kaspi зачисляются вручную и могут появиться не сразу. Если оплата прошла, а строки нет больше часа — пришлите чек в поддержку."
-                  empty="Платежей ещё не было"
-                  cols={[
-                    { h: 'Когда', r: (r) => dt(r.ts ?? r.created_at) },
-                    { h: 'Что', r: (r) => r.kind ?? r.comment ?? <span style={{ color: C.faint }}>—</span> },
-                    { h: 'Сумма', right: true, r: (r) => money(r.amount) },
-                  ]} rows={billHist} />
-              </Card>
-            </div>
-          </>
         )}
 
         {tab === 'fiscal' && (
