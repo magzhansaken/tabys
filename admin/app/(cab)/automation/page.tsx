@@ -166,6 +166,7 @@ export default function AutomationPage() {
                   setF({}); setMsg('Вебхук добавлен'); load(); } catch (e: any) { setErr(e.message); } }}>Добавить</Btn>
             </div>
             <DataTable storageKey="automation-3" exportName="automation-3" search={false}
+              hint="Секрет нужен, чтобы принимающая сторона убедилась: событие пришло от вас, а не от постороннего. Без него подпись не считается."
               empty="Вебхуков нет. Они нужны, только если у вас есть своя программа, которой надо знать о продажах" cols={[
               { h: 'URL', k: 'url' },
               { h: 'События', r: (r: any) => (r.events ?? []).join(', ') },
@@ -181,7 +182,9 @@ export default function AutomationPage() {
             {deliveries.length > 0 && (
               <>
                 <h3 style={{ fontSize: 15, fontWeight: 600, marginTop: 22, marginBottom: 12 }}>Журнал доставки</h3>
-                <DataTable storageKey="automation-4" exportName="automation-4" search={false} cols={[
+                <DataTable storageKey="automation-4" exportName="automation-4" search={false}
+                  hint="Сюда смотрят, когда сторонняя программа «не видит продаж»: видно, ушло событие или упало, и с каким ответом."
+                  empty="Событий ещё не отправлялось" cols={[
                   { h: 'Событие', k: 'event' }, { h: 'URL', k: 'url' },
                   { h: 'Статус', r: (r: any) => r.status === 'ok' ? <Badge tone="ok">доставлено {r.response_code}</Badge> : <Badge tone="bad">ошибка</Badge> },
                   { h: 'Когда', r: (r: any) => dt(r.created_at) },

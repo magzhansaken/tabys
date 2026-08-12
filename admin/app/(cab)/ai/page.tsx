@@ -142,7 +142,8 @@ export default function AiPage() {
                       {checks.summary.priceUp > 0 && <Badge tone="warn">Подорожание: {checks.summary.priceUp}</Badge>}
                       {checks.summary.newProducts > 0 && <Badge tone="dim">Новый товар: {checks.summary.newProducts}</Badge>}
                     </div>
-                    <DataTable storageKey="ai-2" exportName="ai-2" search={false} cols={[
+                    <DataTable storageKey="ai-2" exportName="ai-2" search={false}
+                      empty="Расхождений по этой накладной нет" cols={[
                       { h: 'Товар', k: 'product_name' },
                       { h: 'Тип', r: (r: any) => <Badge tone={CHECK_TONE[r.kind]}>{CHECK_LABEL[r.kind] ?? r.kind}</Badge> },
                       { h: 'Что делать', k: 'note' },
@@ -174,6 +175,7 @@ export default function AiPage() {
                 {voiceResult.recognized.length > 0 && (
                   <DataTable storageKey="ai-3" exportName="ai-3" search={false}
                     hint="Проверьте количества глазами: «пятнадцать» и «пятьдесят» на слух похожи, а разница в остатке — тридцать пять единиц."
+                    empty="Ни одного товара не распознали. Называйте так, как товар записан в каталоге: «молоко», а не «молочко»."
                     cols={[
                       { h: 'Товар', k: 'product' },
                       { h: 'Количество', right: true, r: (r: any) => num(r.qty) },

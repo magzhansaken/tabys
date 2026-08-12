@@ -160,7 +160,10 @@ export default function StockPage() {
           </div>
           {items.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <DataTable storageKey="stock" exportName="stock" search={false} cols={[
+              <DataTable storageKey="stock" exportName="stock" search={false}
+                hint="Строки уже сохранены в черновике: можно закрыть окно и вернуться завтра. На остатки они начнут влиять только после проведения."
+                empty="В документе пока нет строк — найдите товар и добавьте первую"
+                cols={[
                 { h: 'Товар', k: 'name' },
                 { h: 'Кол-во', right: true, r: (r) => num(r.qty) },
                 { h: 'Цена', right: true, r: (r) => r.price ? money(r.price) : <span style={{ color: C.faint }}>—</span> },

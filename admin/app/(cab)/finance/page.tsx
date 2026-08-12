@@ -124,6 +124,7 @@ export default function FinancePage() {
               <div style={{ marginTop: 18 }}>
                 <DataTable storageKey="finance" exportName="finance"
                   hint="Расходы красным, приходы изумрудным. Самая крупная строка расхода — первое, что стоит проверить: обычно там аренда или закуп."
+                  empty="За период денег не приходило и не уходило. Если продажи были, проверьте, что кассы передали данные."
                   cols={[
                     { h: 'Статья', r: (r: any) => r.category ?? r.name ?? '—' },
                     { h: 'Направление', r: (r: any) => (
@@ -157,6 +158,7 @@ export default function FinancePage() {
             <div style={{ marginTop: 18 }}>
               <DataTable storageKey="finance-2" exportName="finance-2" search={false}
                 hint="«В долг» — это выручка, которой у вас пока нет на руках. Она уже в прибыли, но ещё не в кассе."
+                empty="Продаж за период не было — разбивать по способам оплаты нечего"
                 cols={[
                   { h: 'Показатель', k: 'n' },
                   { h: 'Сумма', right: true, r: (r: any) => r.minus

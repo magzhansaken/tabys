@@ -199,7 +199,8 @@ export default function SettingsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14, marginTop: 14 }}>
               <Card title="Тарифы">
                 <DataTable storageKey="settings-2" exportName="settings-2" search={false}
-                  hint="Скидки за длинный срок нет: три месяца стоят ровно втрое." cols={[
+                  hint="Скидки за длинный срок нет: три месяца стоят ровно втрое."
+                  empty="Тарифы не загрузились. Обновите страницу — если не помогло, напишите нам в поддержку" cols={[
                   { h: 'Тариф', k: 'name' },
                   { h: 'В месяц', right: true, r: (r) => money(r.price_month) },
                   { h: 'Доп. точка', right: true, r: (r) => money(r.price_extra_store) },
@@ -208,6 +209,7 @@ export default function SettingsPage() {
               </Card>
               <Card title="История платежей">
                 <DataTable storageKey="settings-3" exportName="settings-3" search={false}
+                  hint="Платежи через Kaspi зачисляются вручную и могут появиться не сразу. Если оплата прошла, а строки нет больше часа — пришлите чек в поддержку."
                   empty="Платежей ещё не было"
                   cols={[
                     { h: 'Когда', r: (r) => dt(r.ts ?? r.created_at) },
@@ -243,9 +245,9 @@ export default function SettingsPage() {
                 неактивна намеренно, пока не внесены РНМ и ЗНМ (получите в Кабинете
                 налогоплательщика) и не прошла проверка связи.
               </p>
-              {(readiness ?? []).length === 0
-                ? <div style={{ fontSize: 14, color: C.dim, padding: '10px 0' }}>Кассы с фискализацией не настроены.</div>
-                : <DataTable storageKey="settings-4" exportName="settings-4" search={false} cols={[
+              <DataTable storageKey="settings-4" exportName="settings-4" search={false}
+                hint="Колонки «Ключи» и «РНМ/ЗНМ» отвечают на вопрос «почему кнопка неактивна»: красный прочерк и есть причина."
+                empty="Кассы с фискализацией не настроены. Сначала договор с оператором фискальных данных и регистрация ККМ в КГД — это в чек-листе запуска" cols={[
                     { h: 'Касса', k: 'cashRegister' },
                     { h: 'Оператор', k: 'provider' },
                     { h: 'Режим', r: (r: any) => r.env === 'production'
@@ -278,7 +280,7 @@ export default function SettingsPage() {
                             }}>В тест</Btn>}
                       </div>
                     ) },
-                  ]} rows={readiness} />}
+                  ]} rows={readiness} />
             </Card>
 
             <Card title="ЭЦП для счетов-фактур" style={{ marginTop: 14 }}>
@@ -288,9 +290,9 @@ export default function SettingsPage() {
                 обычно в тот момент, когда оптовый клиент просит счёт.
               </p>
               {keys ? (
-                Array.isArray(keys) && keys.length === 0
-                  ? <div style={{ fontSize: 14, color: C.dim, padding: '10px 0' }}>Ключи не загружены. Понадобятся для выписки ЭСФ.</div>
-                  : <DataTable storageKey="settings-5" exportName="settings-5" search={false} cols={[
+                <DataTable storageKey="settings-5" exportName="settings-5" search={false}
+                  hint="Ключ выдаётся на год и истекает тихо. Заглядывайте сюда раз в месяц, а не в день, когда понадобилась СФ."
+                  empty="Ключи не загружены. Они нужны только для выписки счетов-фактур — розничной торговле обычно не требуются" cols={[
                       { h: 'Ключ', r: (r: any) => r.name ?? r.owner ?? '—' },
                       { h: 'Действует до', r: (r: any) => r.expires_at
                           ? <span style={{ color: r.expired ? C.red : C.text, fontWeight: r.expired ? 600 : 400, whiteSpace: 'nowrap' }}>
@@ -298,7 +300,7 @@ export default function SettingsPage() {
                             </span>
                           : <span style={{ color: C.faint }}>—</span> },
                       { h: 'Статус', r: (r: any) => r.expired ? <Badge tone="bad">истёк</Badge> : <Badge tone="ok">действует</Badge> },
-                    ]} rows={Array.isArray(keys) ? keys : keys.keys ?? []} />
+                  ]} rows={Array.isArray(keys) ? keys : keys.keys ?? []} />
               ) : 'Загрузка…'}
             </Card>
           </>
