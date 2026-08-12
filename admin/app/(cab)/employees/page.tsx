@@ -159,6 +159,7 @@ export default function EmployeesPage() {
           <Btn onClick={hireConsultant} disabled={!cform.name}>Добавить</Btn>
         </div>
         <DataTable storageKey="employees-2" exportName="employees-2" search={false}
+          hint="Продавец-консультант — не сотрудник кабинета: у него нет ни PIN, ни пароля. Он только указывается в чеке, чтобы посчитать процент."
           empty="Продавцов пока нет — добавьте, если платите процент с продаж"
           cols={[
             { h: 'Имя', k: 'name' },

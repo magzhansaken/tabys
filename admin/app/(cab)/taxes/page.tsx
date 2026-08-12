@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { api, downloadXlsx } from '../../../lib/api';
 import { Card, Table, DataTable, PageHeader, Tabs, Btn, Input, Select, Field, Stat, Status,
-  money, dt, C, ErrLine, Badge } from '../../../lib/ui';
+  confirmDanger, money, dt, C, ErrLine, Badge } from '../../../lib/ui';
 
 export default function TaxesPage() {
   const now = new Date();
@@ -119,6 +119,13 @@ export default function TaxesPage() {
                 <Btn onClick={downloadXml}>Скачать XML для КНП</Btn>
                 <Btn kind="ghost" onClick={async () => {
                   setErr(''); setMsg('');
+                  // Снимок цифр, а не живой отчёт: провёденные потом задним
+                  // числом документы в него уже не попадут. Об этом лучше
+                  // сказать до сохранения, а не объяснять расхождение после.
+                  if (!confirmDanger(
+                    `Сохранить декларацию за ${year}, ${half}-е полугодие?`,
+                    'В историю ляжет снимок цифр на сейчас. Если позже вы проведёте документы задним числом, сохранённая декларация останется прежней — новый расчёт будет отличаться.',
+                  )) return;
                   try { await api('/taxes/declaration/910', { method: 'POST', body: JSON.stringify({ year, half }) });
                     setMsg('Декларация сохранена в историю'); }
                   catch (e: any) { setErr(e.message); }
@@ -146,7 +153,9 @@ export default function TaxesPage() {
                   { h: 'Сумма', right: true, r: (r: any) => (
                       <span style={{ fontWeight: r.bold ? 600 : 400, whiteSpace: 'nowrap' }}>{money(r.v)}</span>
                     ) },
-                ]} rows={[
+                ]}
+                empty="За это полугодие продаж не было — декларация выйдет нулевой. Это нормально, если магазин ещё не открылся, и повод проверить кассы, если он работал."
+                rows={[
                   { n: '910.00.001 — доход всего', v: calc.lines['910.00.001'], bold: true },
                   { n: '910.00.001 I — в том числе наличными', v: calc.lines['910.00.001_I'] },
                   { n: '910.00.001 II — в том числе безналичными', v: calc.lines['910.00.001_II'] },
@@ -162,7 +171,9 @@ export default function TaxesPage() {
                   { h: 'Сумма за полугодие', right: true, r: (r: any) => (
                       <span style={{ fontWeight: r.bold ? 600 : 400, whiteSpace: 'nowrap' }}>{money(r.v)}</span>
                     ) },
-                ]} rows={[
+                ]}
+                empty="Соцплатежи не посчитаны: не задан заявленный доход. Задайте его во вкладке «Настройки налогов» — без него ОПВ, СО и ВОСМС считать не от чего."
+                rows={[
                   { n: 'ОПВ — пенсионные, 10%', v: calc.social.opv },
                   { n: 'ОПВР — пенсионные работодателя, 3,5%', v: calc.social.opvr },
                   { n: 'СО — социальные отчисления, 5%', v: calc.social.so },
@@ -240,6 +251,12 @@ export default function TaxesPage() {
               </label>
               <Btn style={{ justifySelf: 'start' }} onClick={async () => {
                 setErr(''); setMsg('');
+                // Ошибка здесь самая тихая в кабинете: декларация посчитается
+                // и выгрузится, неверной окажется только сумма.
+                if (!confirmDanger(
+                  'Сохранить настройки налогов?',
+                  'Все следующие расчёты пойдут по новым значениям. Неверный код ОГД или ставка маслихата не вызовут ошибку — декларация просто посчитается неправильно, и узнаете вы об этом от налоговой.',
+                )) return;
                 try {
                   const rate = (document.getElementById('rate') as HTMLSelectElement).value;
                   await api('/taxes/settings', { method: 'POST', body: JSON.stringify({
