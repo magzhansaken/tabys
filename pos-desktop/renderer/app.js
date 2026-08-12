@@ -165,6 +165,52 @@ $('search').onkeydown = (e) => {
   }
 };
 
+// ── Быстрые товары ──────────────────────────────────────────────────
+// Часто продаваемое плитками, чтобы не искать поиском по сто раз за смену.
+// Что именно и в каких группах — задаёт владелец в кабинете; касса просто
+// показывает то, что пришло в каталоге, и ничего не решает сама.
+let quickGroup = null;
+
+function quickItems() {
+  return catalog.filter((g) => g.quick || g.quickGroup);
+}
+
+function drawQuick() {
+  const items = quickItems();
+  const tabs = $('quickTabs'), grid = $('quickGrid');
+  if (!tabs || !grid) return;
+
+  if (!items.length) {
+    tabs.innerHTML = '';
+    // Пустое состояние говорит, что сделать, а не «ничего нет».
+    grid.innerHTML = '<div class="quick-empty">Быстрые товары не настроены. ' +
+      'Владелец добавляет их в кабинете: сигареты, пакеты, вода — то, что ' +
+      'продаётся десятки раз в день, чтобы не искать поиском.</div>';
+    return;
+  }
+
+  const groups = [];
+  for (const g of items) {
+    const name = g.quickGroup || 'Ходовое';
+    if (!groups.includes(name)) groups.push(name);
+  }
+  if (!groups.includes(quickGroup)) quickGroup = groups[0];
+
+  tabs.innerHTML = groups.map((name) =>
+    `<button data-g="${escapeHtml(name)}" class="${name === quickGroup ? 'on' : ''}">${escapeHtml(name)}</button>`).join('');
+  tabs.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { quickGroup = b.dataset.g; drawQuick(); };
+  });
+
+  const inGroup = items.filter((g) => (g.quickGroup || 'Ходовое') === quickGroup);
+  grid.innerHTML = inGroup.map((g) =>
+    `<button class="qtile" data-i="${catalog.indexOf(g)}">
+       <span class="qn">${escapeHtml(g.name)}</span><span class="qp">${money(g.price)}</span></button>`).join('');
+  grid.querySelectorAll('.qtile').forEach((b) => {
+    b.onclick = () => addToCart(catalog[Number(b.dataset.i)]);
+  });
+}
+
 function drawGoods(q) {
   const list = q
     ? catalog.filter((g) => g.name.toLowerCase().includes(q.toLowerCase())
@@ -187,7 +233,21 @@ function addToCart(g) {
   else cart.push({ productId: g.id, name: g.name, price: g.price, qty: 1 });
   drawCart();
 }
+let voids = 0;      // отмен позиций за смену
+let discounts = 0;  // скидок за смену
+
+function drawVoids() {
+  const el = $('voidLabel');
+  if (!el) return;
+  const parts = [];
+  if (voids) parts.push('отмен: ' + voids);
+  if (discounts) parts.push('скидок: ' + discounts);
+  el.textContent = parts.join(' · ');
+  el.classList.toggle('hidden', parts.length === 0);
+}
+
 function drawCart() {
+  drawQuick();
   $('cart').innerHTML = cart.map((l, i) => {
     const sum = l.price * l.qty - (l.discount || 0);
     return `
@@ -198,13 +258,24 @@ function drawCart() {
       </div>
       <div class="sum">${money(sum)}</div>
       <button class="del" data-s="${i}" title="Скидка на позицию">%</button>
-      <button class="del" data-d="${i}">✕</button>
+      <button class="del" data-d="${i}" title="Убрать позицию">✕</button>
     </div>`; }).join('') || '<p class="muted">Чек пуст. Выберите товар слева.</p>';
   $('cart').querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
       if (b.dataset.p != null) cart[b.dataset.p].qty += 1;
       if (b.dataset.m != null) { const l = cart[b.dataset.m]; l.qty -= 1; if (l.qty <= 0) cart.splice(b.dataset.m, 1); }
-      if (b.dataset.d != null) cart.splice(b.dataset.d, 1);
+      if (b.dataset.d != null) {
+        // Первое касание взводит, второе убирает. Окна нет — очередь ждёт, —
+        // но случайно смахнуть позицию локтем уже нельзя.
+        if (!b.classList.contains('armed')) {
+          b.classList.add('armed');
+          b.textContent = 'Убрать?';
+          setTimeout(() => { b.classList.remove('armed'); b.textContent = '✕'; }, 3000);
+          return;
+        }
+        cart.splice(b.dataset.d, 1);
+        voids += 1; drawVoids();
+      }
       if (b.dataset.s != null) {
         // Скидка на позицию действует только в этом чеке — как у UMAG.
         const l = cart[b.dataset.s];
@@ -212,6 +283,7 @@ function drawCart() {
         const v = prompt(`Скидка на «${l.name}» в тенге (не больше ${max}):`, String(l.discount || 0));
         if (v !== null) {
           const d = Math.max(0, Math.min(Number(v) || 0, max));
+          if (d > 0 && d !== (l.discount || 0)) { discounts += 1; drawVoids(); }
           l.discount = d;
         }
       }
@@ -268,7 +340,7 @@ async function updateParkedCount() {
 $('btnPay').onclick = () => {
   const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
   openModal(`
-    <h2>Оплата ${money(total)}</h2>
+    <h2>К оплате<span class="amount">${money(total)}</span></h2>
     <div class="pay-tabs">
       <button data-w="cash" class="on">Наличные</button>
       <button data-w="card">Карта</button>
@@ -291,7 +363,7 @@ $('btnPay').onclick = () => {
     const c = $('pCash');
     if (c) c.oninput = () => {
       const got = Number(c.value || 0);
-      if ($('change')) $('change').textContent = got > total ? 'Сдача: ' + money(got - total) : '';
+      if ($('change')) $('change').textContent = got > total ? 'Сдача ' + money(got - total) : '';
     };
   };
   render();
@@ -429,6 +501,11 @@ function syncLoop() { trySync(); setInterval(trySync, 30000); }
 async function updatePending() {
   const n = ((await K.outboxPending()).data || []).length;
   $('pendingLabel').textContent = n ? `не отправлено: ${n}` : '';
+  $('pendingLabel').classList.toggle('warn', n > 0);
+  // Номер текущего чека: кассир называет его при возврате и при разборе
+  // расхождений, и искать его в бумажной ленте — время при покупателях.
+  const rc = $('receiptLabel');
+  if (rc) rc.textContent = S.lastNumber ? 'Чек №' + S.lastNumber : '';
 }
 function setDot(ok) { $('syncDot').className = 'dot ' + (ok ? 'ok' : 'bad'); }
 
