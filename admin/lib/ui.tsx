@@ -8,6 +8,9 @@
  * цветов, размеры, отступы и разметка внутри компонентов. Имена экспорта,
  * набор свойств и поведение — прежние: их читают 30 файлов.
  *
+ * ЭТАП «ДОВОДКА РАЗДЕЛОВ»: добавлены PageHeader, confirmDanger, Toggle,
+ * RevealOnce. Ничего не удалено, свойства прежних компонентов не тронуты.
+ *
  * Три правила этого файла, каждое стоило нам поломки в бою:
  *   1. localStorage — только внутри useEffect (иначе падает подготовка страниц);
  *   2. Select принимает options=[{value,label}], а не вложенные <option>;
@@ -43,8 +46,16 @@ const TONE: Record<string, [string, string]> = {
   dim: ['#F1F1EA', C.dim],
 };
 
-const FONT = "'IBM Plex Sans', -apple-system, 'Segoe UI', system-ui, sans-serif";
-const MONO = "'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace";
+/**
+ * Шрифты берутся из переменных, которые заводит next/font/local в layout.tsx
+ * (--font-sans, --font-mono). Писать здесь «'IBM Plex Sans'» нельзя: локальный
+ * шрифт регистрируется под сгенерированным именем, и по человеческому имени
+ * он не найдётся — подставится системный, а мы этого не заметим.
+ */
+const FONT = "var(--font-sans), -apple-system, 'Segoe UI', system-ui, sans-serif";
+/** Моноширинный — для кодов, номеров и сумм в чеке. Экспортируется, чтобы
+ *  страницы не писали 'monospace' руками и не теряли загруженный IBM Plex Mono. */
+export const MONO = "var(--font-mono), ui-monospace, 'Cascadia Mono', monospace";
 
 export const money = (v: any) =>
   (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₸';
@@ -112,6 +123,140 @@ export function BaseStyles() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   ЕДИНАЯ ШАПКА РАЗДЕЛА (этап «доводка»)
+
+   Замер показал 0 из 21: шапку каждый раздел рисовал по-своему. Один
+   компонент вместо двадцати одной вёрстки — и заодно правило становится
+   физически исполнимым: `fact` обязателен, пустую строку туда незаметно
+   не напишешь.
+
+   fact — ФАКТ из уже загруженных данных: «348 позиций · 3 закончились».
+   Не описание раздела: «Управление товарами вашего магазина» — вода.
+   Новых обращений к серверу ради факта не добавлять: если числа нет на
+   экране, значит и в факте ему взяться неоткуда.
+   ═══════════════════════════════════════════════════════════════════ */
+export function PageHeader({ title, fact, actions, note }: {
+  title: string;
+  /** факт из уже загруженных данных, не описание раздела */
+  fact: string;
+  /** главное действие справа; их не больше трёх */
+  actions?: any;
+  /** абзац под шапкой, когда раздел требует объяснения смысла */
+  note?: string;
+}) {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+        gap: 20, flexWrap: 'wrap', marginBottom: note ? 6 : 20 }}>
+        <div>
+          <h1 style={{ fontSize: 27, fontWeight: 600, letterSpacing: '-.015em', margin: 0 }}>{title}</h1>
+          <div style={{ fontSize: 13.5, color: C.dim, marginTop: 5, lineHeight: 1.5 }}>{fact}</div>
+        </div>
+        {actions && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{actions}</div>}
+      </div>
+      {note && (
+        <p style={{ fontSize: 14.5, color: C.prose, lineHeight: 1.55, margin: '12px 0 22px',
+          maxWidth: '82ch' }}>{note}</p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Подтверждение необратимого действия.
+ *
+ * Спрашивать «Вы уверены?» бесполезно: человек уверен, он же нажал.
+ * Полезно назвать ПОСЛЕДСТВИЕ — что произойдёт с данными и деньгами.
+ * Поэтому здесь два обязательных довода, а не один вопрос.
+ *
+ *   if (!confirmDanger('Удалить приёмку №148?',
+ *                      'Движения по складу будут отменены, остатки уменьшатся на 42 позиции.')) return;
+ */
+export function confirmDanger(what: string, consequence: string) {
+  return window.confirm(`${what}\n\n${consequence}`);
+}
+
+/** Включено/выключено. Разными должны быть и цвет, и положение, и подпись:
+ *  одну лишь галочку владелец на бегу не читает. */
+export function Toggle({ checked, onChange, on = 'Включено', off = 'Выключено' }: {
+  checked: boolean; onChange: (v: boolean) => void; on?: string; off?: string;
+}) {
+  return (
+    <button onClick={() => onChange(!checked)} role="switch" aria-checked={checked}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 9, minHeight: 34, padding: '0 12px 0 6px',
+        border: `1px solid ${checked ? C.accent : C.line}`, borderRadius: 999, cursor: 'pointer',
+        background: checked ? '#E8F1EC' : C.card, color: checked ? C.accentDark : C.dim,
+        fontSize: 13.5, fontWeight: checked ? 500 : 400, fontFamily: 'inherit' }}>
+      <span style={{ width: 30, height: 18, borderRadius: 999, position: 'relative', flex: '0 0 30px',
+        background: checked ? C.accent : '#D3D3C9', transition: 'background .12s' }}>
+        <span style={{ position: 'absolute', top: 2, left: checked ? 14 : 2, width: 14, height: 14,
+          borderRadius: '50%', background: '#fff', transition: 'left .12s' }} />
+      </span>
+      {checked ? on : off}
+    </button>
+  );
+}
+
+/**
+ * Секрет, который показывают один раз: ключ API, PIN кассира, код привязки.
+ *
+ * Мы храним отпечаток, а не сам ключ, — подсмотреть его потом не может
+ * никто, включая нас. Значит человеку надо сказать это ДО того, как он
+ * закроет окно, а не после. Отсюда: крупный моноширинный текст, кнопка
+ * «Скопировать» и объяснение рядом, а не мелким шрифтом внизу.
+ *
+ * ttl — сколько секунд живёт код (у кода привязки это 10 минут). Обратный
+ * отсчёт нужен, чтобы человек не диктовал на планшет уже мёртвый код.
+ */
+export function RevealOnce({ value, title, note, ttl, onExpire }: {
+  value: string; title: string; note: string; ttl?: number; onExpire?: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [left, setLeft] = useState(ttl ?? 0);
+
+  useEffect(() => {
+    if (!ttl) return;
+    setLeft(ttl);
+    const id = setInterval(() => {
+      setLeft((s) => {
+        if (s <= 1) { clearInterval(id); onExpire?.(); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+    // value в зависимостях: новый код — новый отсчёт
+  }, [ttl, value]);
+
+  const mmss = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  const dead = !!ttl && left === 0;
+
+  return (
+    <div data-card="" style={{ border: `1.5px solid ${dead ? C.line : C.accent}`,
+      background: dead ? C.sunken : '#F4F9F6', borderRadius: 12, padding: '18px 20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: dead ? C.dim : C.accentDark }}>{title}</div>
+        {!!ttl && (
+          <div style={{ fontSize: 13.5, color: dead ? C.red : C.dim, fontVariantNumeric: 'tabular-nums' }}>
+            {dead ? 'срок истёк — выпишите новый' : `действует ещё ${mmss}`}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '12px 0' }}>
+        <code style={{ flex: 1, minWidth: 240, fontFamily: MONO, fontSize: 26, letterSpacing: '.16em',
+          fontWeight: 500, background: C.card, border: `1px solid ${C.line}`, borderRadius: 8,
+          padding: '12px 14px', wordBreak: 'break-all', lineHeight: 1.4,
+          color: dead ? C.faint : C.text, textDecoration: dead ? 'line-through' : 'none' }}>{value}</code>
+        <Btn kind="ghost" disabled={dead}
+          onClick={() => { navigator.clipboard?.writeText(value); setCopied(true); }}>
+          {copied ? 'Скопировано' : 'Скопировать'}
+        </Btn>
+      </div>
+      <div style={{ fontSize: 13.5, color: C.prose, lineHeight: 1.6 }}>{note}</div>
+    </div>
+  );
+}
+
 export function Card({ title, right, children, style }: any) {
   return (
     <section data-card="" style={{ background: C.card, borderRadius: 12, padding: '20px 22px', border: `1px solid ${C.line}`, ...style }}>
@@ -148,16 +293,20 @@ export function Btn({ children, kind = 'primary', ...p }: any) {
 }
 
 /** Поле ввода. Шрифт 16 px везде, включая компьютер: меньше — и iOS сам
- *  увеличивает страницу при касании, вёрстка разъезжается. */
-export function Input(p: any) {
+ *  увеличивает страницу при касании, вёрстка разъезжается.
+ *
+ *  forwardRef нужен разделам со сканером (маркировка, акциз): туда возвращают
+ *  курсор после каждой проверки, иначе следующий код придётся ловить мышью.
+ *  Без forwardRef ref на функциональный компонент молча не работает. */
+export const Input = React.forwardRef(function Input(p: any, ref: any) {
   const { w, ...rest } = p;
   return (
-    <input {...rest} style={{
+    <input ref={ref} {...rest} style={{
       height: 38, padding: '0 12px', border: `1px solid #D8D8CF`, borderRadius: 8, fontSize: 16,
       background: C.card, color: C.text, width: w ?? 180, outline: 'none', ...p.style,
     }} />
   );
-}
+});
 
 /** ВАЖНО: options=[{value,label}]. Передача вложенных <option> детьми
  *  роняет сборку — так уже было на этом проекте. */
@@ -423,7 +572,7 @@ export function DataTable({
 }
 
 /** Пустое состояние говорит, что сделать, а не «нет данных». */
-function EmptyState({ text }: { text: string }) {
+export function EmptyState({ text }: { text: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '44px 20px', textAlign: 'center' }}>
       <div style={{ width: 34, height: 34, border: `1.5px dashed #C9C9BE`, borderRadius: 9 }} />
@@ -477,12 +626,42 @@ const STATUS: Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim'
   completed:   { text: 'Завершён',    tone: 'ok'   },
   cancelled:   { text: 'Отменён',     tone: 'dim'  },
   archive:     { text: 'В архиве',    tone: 'dim'  },
+  // декларации: выгруженная в КНП против оставшейся черновиком.
+  // Перевод жил тернаркой в taxes/page.tsx — пятый второй перевод.
+  exported:    { text: 'Выгружена',   tone: 'ok'   },
+};
+
+/**
+ * Уточнения по видам сущностей: одно и то же слово в базе местами значит
+ * разное. У аккаунта active — «Работает», у подарочного сертификата так
+ * сказать нельзя, он «Активен». Раньше из-за этого сертификаты завели свой
+ * перевод прямо на странице — второй перевод, ровно то, от чего защищает
+ * Status. Поэтому уточнения живут ЗДЕСЬ, а не в разделах.
+ */
+const STATUS_BY_KIND: Record<string, Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim' }>> = {
+  cert: {
+    active:  { text: 'Активен',      tone: 'ok'  },
+    used:    { text: 'Использован',  tone: 'dim' },
+    expired: { text: 'Просрочен',    tone: 'bad' },
+    void:    { text: 'Аннулирован',  tone: 'bad' },
+  },
+  // Состояния заказа Kaspi. Раньше жили таблицей STATE_LABEL прямо в
+  // marketplace/page.tsx — третий перевод статусов. Тут же видно, что
+  // archive у заказа значит «Завершён», а не «В архиве».
+  mp: {
+    new:           { text: 'Новый',         tone: 'warn' },
+    sign_required: { text: 'Ждёт подписи',  tone: 'warn' },
+    pickup:        { text: 'Самовывоз',     tone: 'warn' },
+    delivery:      { text: 'Доставка',      tone: 'warn' },
+    archive:       { text: 'Завершён',      tone: 'ok'   },
+  },
 };
 
 /** Статус одинаково во всех разделах. Неизвестный показывается как есть —
- *  лучше увидеть незнакомое слово, чем спрятать состояние документа. */
-export function Status({ value }: { value?: string | null }) {
+ *  лучше увидеть незнакомое слово, чем спрятать состояние документа.
+ *  kind — необязательное уточнение вида сущности (например, 'cert'). */
+export function Status({ value, kind }: { value?: string | null; kind?: string }) {
   if (!value) return null;
-  const s = STATUS[value];
+  const s = (kind && STATUS_BY_KIND[kind]?.[value]) ?? STATUS[value];
   return <Badge tone={s?.tone ?? 'dim'}>{s?.text ?? value}</Badge>;
 }

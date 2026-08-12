@@ -1,13 +1,17 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Card, Table, DataTable, Btn, Input, dt, C, ErrLine, Badge } from '../../../lib/ui';
+import { Card, Table, DataTable, PageHeader, RevealOnce, Btn, Input, dt, MONO, C, ErrLine, Badge } from '../../../lib/ui';
 
 /**
  * Точки и кассы (часть 17): создать кассу, выписать код привязки, следить
  * за синхронизацией. Модель UMAG «Управление кассами»: одноразовый ключ
  * авторизации, платформа и время последней синхронизации в таблице.
  * У нас код живёт 10 минут — светить его дольше незачем.
+ *
+ * Код привязки показывается через RevealOnce: его переписывают на планшет
+ * руками, глядя в экран, и он умирает через 10 минут. Поэтому крупно, с
+ * разрядкой и обратным отсчётом — чтобы человек не диктовал мёртвый код.
  */
 export default function StoresPage() {
   const [stores, setStores] = useState<any[]>([]);
@@ -42,21 +46,31 @@ export default function StoresPage() {
     } catch (e: any) { setErr(e.message); }
   };
 
+  const registers = stores.reduce((s: number, x: any) => s + (x.registers?.length ?? 0), 0);
+  const devices = stores.reduce((s: number, x: any) =>
+    s + (x.registers ?? []).reduce((d: number, r: any) => d + Number(r.devices ?? 0), 0), 0);
+
   return (
     <>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Точки и кассы</h1>
+      <PageHeader
+        title="Точки и кассы"
+        fact={`${stores.length} точек · ${registers} касс · ${devices} устройств`}
+      />
       <ErrLine err={err} />
 
       {code && (
-        <Card title={`Код привязки — ${code.registerName}`} style={{ marginTop: 14 }}
-              right={<Btn kind="ghost" onClick={() => setCode(null)}>Закрыть</Btn>}>
-          <div style={{ fontSize: 40, letterSpacing: 8, fontWeight: 700, textAlign: 'center', padding: '8px 0' }}>
-            {code.code}
+        <div style={{ marginTop: 14 }}>
+          <RevealOnce
+            title={`Код привязки — ${code.registerName}`}
+            value={code.code}
+            ttl={600}
+            onExpire={() => {}}
+            note="Введите этот код на кассе в окне привязки устройства. Код одноразовый: после привязки он больше не действует, а через 10 минут сгорает сам — тогда просто выпишите новый."
+          />
+          <div style={{ marginTop: 10 }}>
+            <Btn kind="ghost" onClick={() => setCode(null)}>Закрыть</Btn>
           </div>
-          <p style={{ fontSize: 13, color: C.dim, textAlign: 'center', margin: 0 }}>
-            Введите на кассе. Код одноразовый и действует 10 минут.
-          </p>
-        </Card>
+        </div>
       )}
 
       {stores.map((s: any) => (
@@ -68,7 +82,9 @@ export default function StoresPage() {
               <Btn onClick={createRegister}>Создать кассу</Btn>
             </div>
           }>
-          <DataTable storageKey="stores" exportName="stores" empty="Касс пока нет — создайте первую и привяжите устройство"
+          <DataTable storageKey="stores" exportName="stores" search={false}
+            hint="Касса — это рабочее место, устройство — планшет или компьютер за прилавком. Чтобы устройство заработало, выпишите код привязки и введите его на кассе."
+            empty="Касс пока нет — создайте первую и привяжите устройство"
             cols={[
               { h: 'Касса', k: 'name' },
               { h: 'Устройств', right: true, k: 'devices' },
@@ -85,12 +101,17 @@ export default function StoresPage() {
         {ready ? (
           ready.ready
             ? <Badge tone="ok">Все кассы отдали данные — отчётам и инвентаризации можно верить</Badge>
-            : <div>
-                <Badge tone="warn">Есть непереданные данные</Badge>
-                <p style={{ fontSize: 13, color: C.dim, marginBottom: 0 }}>
-                  Перед инвентаризацией дождитесь синхронизации: иначе остатки будут врать
-                  (об этом же предупреждает и UMAG).
-                </p>
+            : <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start',
+                background: '#FFFBFA', border: `1px solid #E6C7C0`, borderRadius: 10, padding: '13px 15px' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.red, flex: '0 0 7px', marginTop: 7 }} />
+                <div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: C.red }}>Есть непереданные данные</div>
+                  <p style={{ fontSize: 13.5, color: C.prose, margin: '6px 0 0', lineHeight: 1.55, maxWidth: '76ch' }}>
+                    Не начинайте инвентаризацию сейчас: часть продаж ещё не доехала до сервера,
+                    расхождение получится вымышленным — и вы спишете товар, который на самом деле продан.
+                    Дождитесь, пока кассы отдадут данные.
+                  </p>
+                </div>
               </div>
         ) : 'Загрузка…'}
       </Card>

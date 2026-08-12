@@ -3,10 +3,14 @@
  * Подарочные сертификаты (часть 25). Свои, без внешних систем — обгоняем
  * МойСклад, у которого они «в разработке» и требуют Бонус Плюс / Teyca.
  * Продажа, частичное гашение, срок действия — всё наше.
+ *
+ * Перевод статусов сертификата раньше жил прямо здесь — второй перевод,
+ * ровно то, от чего защищает Status. Теперь он в ui.tsx под kind="cert":
+ * у аккаунта active — «Работает», у сертификата — «Активен».
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Card, Table, DataTable, Btn, Field, Input, money, dt, C, ErrLine, Badge } from '../../../lib/ui';
+import { Card, Table, DataTable, PageHeader, RevealOnce, Status, Btn, Field, Input, money, dt, C, ErrLine, Badge } from '../../../lib/ui';
 
 export default function CertificatesPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -14,8 +18,8 @@ export default function CertificatesPage() {
   const [validDays, setValidDays] = useState('365');
   const [checkCode, setCheckCode] = useState('');
   const [checked, setChecked] = useState<any>(null);
+  const [sold, setSold] = useState<any>(null);
   const [err, setErr] = useState('');
-  const [msg, setMsg] = useState('');
 
   const load = async () => {
     setErr('');
@@ -24,12 +28,12 @@ export default function CertificatesPage() {
   useEffect(() => { load(); }, []);
 
   const sell = async () => {
-    setErr(''); setMsg('');
+    setErr(''); setSold(null);
     if (!(+nominal > 0)) { setErr('Укажите номинал'); return; }
     try {
       const r = await api('/cash/certificate/sell', { method: 'POST',
         body: JSON.stringify({ nominal: +nominal, validDays: validDays ? +validDays : undefined }) });
-      setMsg(`Сертификат продан. Код для покупателя: ${r.code} (номинал ${money(r.nominal)})`);
+      setSold(r);
       setNominal(''); load();
     } catch (e: any) { setErr(e.message); }
   };
@@ -40,29 +44,48 @@ export default function CertificatesPage() {
     catch (e: any) { setErr(e.message); }
   };
 
+  // Непогашенные сертификаты — это долг магазина перед покупателем,
+  // а не выручка. Поэтому факт в шапке считает именно остаток.
+  const active = rows.filter((r: any) => r.status === 'active');
+  const owed = active.reduce((s: number, r: any) => s + Number(r.balance ?? 0), 0);
+
   return (
     <>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Подарочные сертификаты</h1>
+      <PageHeader
+        title="Подарочные сертификаты"
+        fact={rows.length
+          ? `${active.length} активных на ${money(owed)} · всего выпущено ${rows.length}`
+          : 'Сертификаты ещё не выпускались'}
+      />
       <ErrLine err={err} />
-      {msg && <p style={{ color: C.accentDark, fontSize: 14, fontWeight: 600 }}>{msg}</p>}
+
+      {sold && (
+        <div style={{ marginTop: 14 }}>
+          <RevealOnce
+            title={`Сертификат на ${money(sold.nominal)} продан`}
+            value={sold.code}
+            note="Выдайте этот код покупателю: по нему сертификат гасится на кассе, в том числе частями. Код есть в списке ниже, но лучше записать его сейчас."
+          />
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginTop: 14 }}>
         <Card title="Продать сертификат">
-          <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>
+          <p style={{ fontSize: 13.5, color: C.dim, marginTop: 0, lineHeight: 1.55 }}>
             Свой сертификат — без подключения внешних систем лояльности.
             Код выдаётся покупателю, гасить можно частями.
           </p>
           <Field label="Номинал, ₸">
-            <Input type="number" value={nominal} onChange={(e: any) => setNominal(e.target.value)} placeholder="5000" />
+            <Input type="number" value={nominal} onChange={(e: any) => setNominal(e.target.value)} placeholder="5000" style={{ textAlign: 'right' }} />
           </Field>
           <Field label="Срок действия, дней (пусто — бессрочно)">
-            <Input type="number" value={validDays} onChange={(e: any) => setValidDays(e.target.value)} />
+            <Input type="number" value={validDays} onChange={(e: any) => setValidDays(e.target.value)} style={{ textAlign: 'right' }} />
           </Field>
-          <Btn onClick={sell}>Продать</Btn>
+          <Btn onClick={sell} style={{ marginTop: 12 }}>Продать</Btn>
         </Card>
 
         <Card title="Проверить сертификат">
-          <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>
+          <p style={{ fontSize: 13.5, color: C.dim, marginTop: 0, lineHeight: 1.55 }}>
             Введите код с карты покупателя — увидите остаток и годность.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -70,12 +93,15 @@ export default function CertificatesPage() {
             <Btn kind="ghost" onClick={check}>Проверить</Btn>
           </div>
           {checked && (
-            <div style={{ marginTop: 12, fontSize: 14 }}>
-              <div>Остаток: <b>{money(checked.balance)}</b> из {money(checked.nominal)}</div>
-              <div style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 14, fontSize: 14 }}>
+              <div style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {money(checked.balance)}
+              </div>
+              <div style={{ fontSize: 13, color: C.dim, marginTop: 3 }}>остаток из {money(checked.nominal)}</div>
+              <div style={{ marginTop: 10 }}>
                 {checked.usable
                   ? <Badge tone="ok">можно использовать</Badge>
-                  : <Badge tone="bad">{checked.status === 'expired' ? 'просрочен' : checked.status === 'used' ? 'использован' : 'недоступен'}</Badge>}
+                  : <Status value={checked.status} kind="cert" />}
               </div>
             </div>
           )}
@@ -83,17 +109,19 @@ export default function CertificatesPage() {
       </div>
 
       <Card title="Все сертификаты" style={{ marginTop: 14 }}>
-        <DataTable storageKey="certificates" exportName="certificates" empty="Сертификатов пока нет" cols={[
+        <DataTable storageKey="certificates" exportName="certificates"
+          hint="Сертификат — деньги, полученные вперёд. Пока он не погашен, это ваш долг перед покупателем, а не выручка."
+          empty="Сертификатов пока нет — выпустите первый на любую сумму" cols={[
           { h: 'Код', k: 'code' },
           { h: 'Номинал', right: true, r: (r: any) => money(r.nominal) },
-          { h: 'Остаток', right: true, r: (r: any) => money(r.balance) },
+          { h: 'Остаток', right: true, r: (r: any) => (
+              <span style={{ fontWeight: Number(r.balance) > 0 ? 600 : 400, color: Number(r.balance) > 0 ? C.text : C.faint }}>
+                {money(r.balance)}
+              </span>
+            ) },
           { h: 'Действует до', r: (r: any) => r.validUntil ?? 'бессрочно' },
           { h: 'Кому', r: (r: any) => r.customerName ?? 'на предъявителя' },
-          { h: 'Статус', r: (r: any) => {
-              const t: any = { active: ['ok', 'активен'], used: ['dim', 'использован'], expired: ['bad', 'просрочен'], void: ['bad', 'аннулирован'] };
-              const [tone, label] = t[r.status] ?? ['dim', r.status];
-              return <Badge tone={tone}>{label}</Badge>;
-            } },
+          { h: 'Статус', r: (r: any) => <Status value={r.status} kind="cert" /> },
         ]} rows={rows} />
       </Card>
     </>
