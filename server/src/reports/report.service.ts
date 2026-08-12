@@ -155,6 +155,39 @@ export class ReportService {
     };
   }
 
+  /**
+   * Короткий список заканчивающихся товаров — для мобильного.
+   *
+   * Пять самых острых, а не все: у магазина таких позиций бывает
+   * тридцать-сорок, и на телефоне это простыня, которую не читают.
+   * Порядок — по тому, насколько остаток провалился ниже порога:
+   * товар, которого нет совсем, важнее того, которого мало.
+   */
+  async lowStockShort(accountId: string) {
+    return this.db.withTenant(accountId, async (c) => {
+      const rows = (await c.query(
+        `SELECT p.id, p.name, p.min_stock, coalesce(sum(b.qty), 0) AS qty
+           FROM product p
+           LEFT JOIN stock_balance b ON b.product_id = p.id
+          WHERE p.account_id = $1 AND p.deleted_at IS NULL AND p.archived_at IS NULL
+            AND p.track_stock AND p.min_stock IS NOT NULL AND p.min_stock > 0
+          GROUP BY p.id, p.name, p.min_stock
+         HAVING coalesce(sum(b.qty), 0) < p.min_stock
+          ORDER BY (coalesce(sum(b.qty),0) / nullif(p.min_stock,0)) ASC`, [accountId])).rows;
+
+      const items = rows.map((r: any) => {
+        const qty = Number(r.qty), min = Number(r.min_stock);
+        return { id: r.id, name: r.name, qty, minStock: min,
+                 need: Math.max(0, min - qty), out: qty <= 0 };
+      });
+      return {
+        items: items.slice(0, 5),
+        total: items.length,
+        outCount: items.filter((i) => i.out).length,
+      };
+    });
+  }
+
   /** График выручки: «сумма выручки за каждый отдельный день» (UMAG). */
   async revenueChart(accountId: string, p: Period, storeIds?: string[]) {
     const { rows } = await this.db.raw(`SELECT * FROM revenue_chart($1,$2::timestamptz,$3::timestamptz,$4::uuid[])`,
@@ -572,13 +605,17 @@ export class ReportService {
     const yesterday = this.day(-1);
     const week = this.quickPeriod('week');
 
-    const [d, y, chart, accounts, sync, top] = await Promise.all([
+    const [d, y, chart, accounts, sync, top, low] = await Promise.all([
       this.dashboardDay(accountId, today, storeIds),
       this.dashboardDay(accountId, yesterday, storeIds),
       this.revenueChart(accountId, week, storeIds),
       this.accountsBoard(accountId),
       this.syncBoard(accountId),
       this.salesByProduct(accountId, today, { limit: 5 }),
+      // «Что заканчивается» — единственное, чего не хватало мобильному.
+      // Идёт СЕДЬМЫМ в том же наборе, а не отдельным запросом: в областях
+      // связь медленная, и два ожидания вместо одного заметны на телефоне.
+      this.lowStockShort(accountId),
     ]);
 
     const delta = y.revenue > 0 ? Math.round(((d.revenue - y.revenue) / y.revenue) * 100) : null;
@@ -597,6 +634,9 @@ export class ReportService {
       money: { total: accounts.reduce((s: number, a: any) => s + a.balance, 0), accounts },
       problems,                                  // если пусто — всё спокойно
       topProducts: top.map((t) => ({ name: t.name, qty: t.qtySold, revenue: t.revenue, profit: t.profit })),
+      // Пять самых острых позиций и общее число: владельцу с телефона
+      // нужен не полный список из сорока, а «что везти сегодня».
+      lowStock: low,
     };
   }
 

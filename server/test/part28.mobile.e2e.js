@@ -82,6 +82,25 @@ const wait = async () => { for (let i = 0; i < 50; i++) { try { await fetch(API 
   ok(!!shift.store && !!shift.register, `Точка и касса названы: ${shift.store} / ${shift.register}`);
   ok(!!shift.openedAt, 'Время открытия смены есть');
 
+  // ---------- МОБИЛЬНЫЙ ЭКРАН ВЛАДЕЛЬЦА: всё одним запросом ----------
+  // Дизайнер заметил, что ownerMobile уже отдаёт почти всё нужное, и был
+  // прав. Не хватало «что закончилось» — добавлено в ТОТ ЖЕ ответ, а не
+  // вторым запросом: в областях связь медленная, два ожидания на телефоне
+  // заметны.
+  r = await j('GET', '/reports/mobile');
+  const mob = r.d;
+  ok(!!mob?.today, '★ Мобильный экран: показатели за сегодня');
+  ok(mob?.vsYesterday && 'deltaPercent' in mob.vsYesterday,
+     `★ Сравнение со вчера: ${mob?.vsYesterday?.deltaPercent}% — цифра без сравнения не говорит ничего`);
+  ok(Array.isArray(mob?.week), 'График недели');
+  ok(Array.isArray(mob?.topProducts), 'Топ товаров');
+  ok(!!mob?.lowStock && Array.isArray(mob.lowStock.items),
+     '★ «Что заканчивается» пришло ТЕМ ЖЕ запросом');
+  ok(typeof mob?.lowStock?.total === 'number' && typeof mob?.lowStock?.outCount === 'number',
+     '★ Видно общее число и сколько закончилось совсем — «что везти сегодня»');
+  ok(mob.lowStock.items.length <= 5,
+     `На телефоне не больше пяти позиций (пришло ${mob.lowStock.items.length}) — список из сорока не читают`);
+
   console.log(`\n=== ИТОГ: пройдено ${pass}, провалено ${fail} ===`);
   srv.kill();
   process.exit(fail ? 1 : 0);
