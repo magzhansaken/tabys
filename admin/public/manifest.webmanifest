@@ -1,0 +1,14 @@
+{
+  "name": "Табыс — кабинет магазина",
+  "short_name": "Табыс",
+  "description": "Мобильный кабинет владельца: выручка, прибыль, открытые точки",
+  "start_url": "/m",
+  "display": "standalone",
+  "background_color": "#0a7b5f",
+  "theme_color": "#0a7b5f",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

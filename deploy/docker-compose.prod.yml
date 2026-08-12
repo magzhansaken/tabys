@@ -1,0 +1,154 @@
+# =====================================================================
+# ТАБЫС — боевой стенд на общем сервере (рядом с рестораном Dastarhan).
+#
+# ГЛАВНЫЕ ОТЛИЧИЯ ОТ ЛОКАЛЬНОГО ЗАПУСКА (deploy/docker-compose.yml):
+#
+# 1. НИ ОДНОГО ПОРТА НАРУЖУ. Только expose (внутри докера). Всё наружу —
+#    через общий Caddy ресторана. Иначе наш API торчал бы в интернет без
+#    шифрования.
+#
+# 2. ДВЕ СЕТИ, и это принципиально:
+#    - internal (своя, закрытая): база, миграции, бэкапы, сервер, кабинет.
+#    - edge (общая с рестораном, dastarhan2_default): ТОЛЬКО сервер и кабинет.
+#    Почему: у ресторана службы называются db, api, web, backup. У нас тоже
+#    есть db и backup. Если пустить их в общую сеть, докеровский DNS выдаст
+#    ресторанному api ДВА адреса на имя "db" — и он может подключиться к
+#    НАШЕЙ базе. Это авария у живого клиента. Поэтому база наружу своей сети
+#    не выходит вообще.
+#
+# 3. ИМЕНА КОНТЕЙНЕРОВ shop-server / shop-admin — по ним Caddy их находит.
+#
+# 4. Адрес API вшивается в кабинет ПРИ СБОРКЕ (Next.js подставляет
+#    NEXT_PUBLIC_* в момент build, а не запуска) — передаём как build arg.
+#
+# Запуск: docker compose -p tabys -f docker-compose.prod.yml up -d --build
+# =====================================================================
+services:
+  db:
+    image: postgres:16
+    container_name: tabys-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_SUPER_PASSWORD:?задайте в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db:/db:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shop"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]          # наружу своей сети НЕ выходит
+
+  migrate:
+    image: postgres:16
+    container_name: tabys-migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../db:/db:ro
+      - ./migrate.sh:/migrate.sh:ro
+    working_dir: /
+    environment:
+      PGPASSWORD: ${DB_SUPER_PASSWORD}
+      PGHOST: tabys-db          # только уникальное имя, см. пояснение у сервера
+      PGUSER: postgres
+      PGDATABASE: shop
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?задайте в .env}
+    # Команда — в отдельном файле, а не строкой здесь: экранирование кавычек
+    # в YAML однажды уже подставило не тот пароль, и сервер не смог войти
+    # в собственную базу. Файл этой проблемы лишён.
+    entrypoint: ["bash", "/migrate.sh"]
+    restart: "no"
+    networks: [internal]
+
+  server:
+    build: ../server
+    container_name: tabys-server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # ИМЯ ТОЛЬКО УНИКАЛЬНОЕ. Сервер состоит в двух сетях: нашей и общей
+      # с рестораном (иначе Caddy до него не дотянется). А в общей сети имя
+      # "db" занято — так называется база РЕСТОРАНА. По имени "db" наш сервер
+      # уходил в чужую базу и получал «неверный пароль». Имя контейнера
+      # tabys-db уникально на всём сервере, спутать не с чем.
+      PGHOST: tabys-db
+      PGDATABASE: shop
+      PGUSER: shop_app
+      PGPASSWORD: ${DB_APP_PASSWORD:?задайте в .env}
+      JWT_SECRET: ${JWT_SECRET:?задайте в .env}
+      PORT: "3000"
+      NODE_ENV: production
+      # Пока СМС-шлюз не подключён: код подтверждения пишется в лог сервера.
+      # Смотреть:  docker logs --tail 20 tabys-server
+      # ВЫКЛЮЧИТЬ (OTP_LOG=0), как только заработает отправка СМС.
+      OTP_LOG: "${OTP_LOG:-1}"
+      # Заявки на регистрацию подтверждает оператор (вместо СМС-кода).
+      # Клиент регистрируется по телефону и паролю, вы звоните и активируете.
+      MODERATE_SIGNUP: "${MODERATE_SIGNUP:-1}"
+      # Ключ операторской админки (/operator). Если не задан — админка
+      # закрыта полностью, это безопасное умолчание. Создаётся скриптом
+      # 09_operator_key.sh и хранится только в .env на сервере.
+      OPERATOR_KEY: "${OPERATOR_KEY:-}"
+      # Когда подключим СМС-шлюз: REQUIRE_OTP=1 вернёт код при регистрации.
+      REQUIRE_OTP: "${REQUIRE_OTP:-0}"
+    expose:
+      - "3000"                    # виден только внутри докера
+    volumes:
+      # Установщики кассы: сервер их раздаёт, касса скачивает сама.
+      # Только чтение — сервер ничего сюда не пишет.
+      - ./updates:/updates:ro
+    networks: [internal, edge]
+
+  admin:
+    build:
+      context: ../admin
+      args:
+        # адрес API для браузера: домен + /api (Caddy срежет /api и отдаст серверу)
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?задайте в .env}
+    container_name: tabys-admin
+    restart: unless-stopped
+    depends_on:
+      - server
+    expose:
+      - "3001"
+    networks: [internal, edge]
+
+  backup:
+    image: postgres:16
+    container_name: tabys-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_SUPER_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    # раз в сутки, храним 14 последних. Восстановление: gunzip -c файл | psql
+    entrypoint: >
+      bash -c 'while true; do
+        pg_dump -h db -U postgres shop | gzip > /backups/tabys_$$(date +%F_%H%M).sql.gz;
+        ls -1t /backups/*.sql.gz | tail -n +15 | xargs -r rm;
+        sleep 86400;
+      done'
+    networks: [internal]
+
+volumes:
+  pgdata:
+    name: tabys-pg-data
+
+networks:
+  internal:
+    name: tabys-internal
+  edge:
+    external: true
+    name: dastarhan2_default     # общая дверь: только сервер и кабинет

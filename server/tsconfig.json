@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "commonjs", "target": "ES2022", "moduleResolution": "bundler",
+    "experimentalDecorators": true, "emitDecoratorMetadata": true,
+    "outDir": "./dist", "rootDir": "./src", "esModuleInterop": true,
+    "skipLibCheck": true, "strictNullChecks": false, "declaration": false
+  },
+  "include": ["src/**/*"]
+}

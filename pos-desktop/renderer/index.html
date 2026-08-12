@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Табыс Касса</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!--
+  Экраны кассы. Один файл разметки, экраны переключаются показом/скрытием —
+  без загрузчиков и сборщиков. Это сознательно: у соседнего проекта белый
+  экран после установки стоил часов, и причиной был именно сборщик,
+  который просил файлы по неверному пути. Тут просить нечего.
+-->
+
+<!-- ЭКРАН 1: настройка и привязка кассы -->
+<section id="scr-setup" class="screen">
+  <div class="card">
+    <h1>Табыс <span class="ver" id="ver"></span></h1>
+    <p class="muted">Первый запуск: подключим кассу к вашему магазину.</p>
+    <label>Адрес сервера</label>
+    <input id="apiUrl" value="https://tabys.duckdns.org/api">
+    <label>Код привязки <span class="muted">(кабинет → Точки и кассы)</span></label>
+    <input id="pairCode" placeholder="напр. 4821" inputmode="numeric">
+    <button id="btnPair" class="primary big">Привязать кассу</button>
+    <div id="setupErr" class="err"></div>
+    <details>
+      <summary>Настройки печати</summary>
+      <label>Принтер</label>
+      <select id="printerSel"><option value="">По умолчанию в Windows</option></select>
+      <label>Ширина ленты</label>
+      <select id="printWidth">
+        <option value="48">80 мм (48 знаков)</option>
+        <option value="32">58 мм (32 знака)</option>
+      </select>
+      <button id="btnTestPrint">Пробная печать</button>
+    </details>
+  </div>
+</section>
+
+<!-- ЭКРАН 2: вход кассира -->
+<section id="scr-pin" class="screen hidden">
+  <div class="card narrow">
+    <h1>Введите PIN</h1>
+    <div class="muted" id="pinStore"></div>
+    <div class="dots" id="pinDots"></div>
+    <div class="err" id="pinErr"></div>
+    <div class="keypad" id="keypad"></div>
+    <div class="ver" id="ver2"></div>
+  </div>
+</section>
+
+<!-- ЭКРАН 3: продажа -->
+<section id="scr-sale" class="screen hidden">
+  <header class="topbar">
+    <div>
+      <b id="shiftLabel">Смена не открыта</b>
+      <span class="muted" id="cashierLabel"></span>
+    </div>
+    <div class="right">
+      <span id="syncDot" class="dot" title="Связь с сервером"></span>
+      <span class="muted" id="pendingLabel"></span>
+      <button id="btnShift">Смена</button>
+      <button id="btnRefund">Возврат</button>
+      <button id="btnLogout">Выход</button>
+    </div>
+  </header>
+
+  <div class="sale">
+    <div class="left">
+      <input id="search" placeholder="Поиск товара или сканируйте штрихкод" autofocus>
+      <div id="goods" class="goods"></div>
+    </div>
+    <div class="rightpane">
+      <div id="cart" class="cart"></div>
+      <div class="totals">
+        <div class="row"><span>Позиций</span><b id="cartCount">0</b></div>
+        <div class="row total"><span>ИТОГО</span><b id="cartTotal">0 ₸</b></div>
+      </div>
+      <button id="btnPay" class="primary big" disabled>ОПЛАТА</button>
+      <div class="cart-actions">
+        <button id="btnPark">Отложить</button>
+        <button id="btnParked">Отложенные</button>
+        <button id="btnClear">Очистить</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Всплывающее окно оплаты -->
+<div id="modal" class="modal hidden">
+  <div class="modal-card" id="modalBody"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

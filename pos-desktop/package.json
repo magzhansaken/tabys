@@ -1,0 +1,55 @@
+{
+  "name": "tabys-kassa",
+  "version": "1.2.0",
+  "description": "Табыс — касса для Windows",
+  "author": "Tabys",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win nsis --x64 --publish never -c.win.signAndEditExecutable=false -c.compression=store"
+  },
+  "devDependencies": {
+    "electron": "33.2.0",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "kz.tabys.kassa",
+    "productName": "Tabys Kassa",
+    "artifactName": "Tabys-Kassa-${version}-setup.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "differentialPackage": false,
+      "shortcutName": "Табыс Касса"
+    }
+  }
+}

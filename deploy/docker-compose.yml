@@ -1,0 +1,98 @@
+# =====================================================================
+# Боевой стенд одной командой: docker compose up -d
+#
+# Решения:
+# - Postgres 16 с healthcheck: сервер не стартует раньше базы.
+# - Миграции накатывает одноразовый контейнер migrate (idempotent: каждый
+#   файл написан с IF NOT EXISTS / OR REPLACE — повторный прогон безопасен).
+# - Бэкапы: pg_dump каждые сутки в ./backups, храним 14 штук. У Wipon в
+#   документации прямо написано, что непереданные локальные данные теряются —
+#   у нас и сервер обязан быть восстановим за минуты.
+# - Секреты — в .env рядом (см. .env.example). В git не коммитить.
+# =====================================================================
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_SUPER_PASSWORD:?задайте в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db:/db:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shop"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: postgres:16
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../db:/db:ro
+    working_dir: /
+    environment:
+      PGPASSWORD: ${DB_SUPER_PASSWORD}
+      PGHOST: db
+      PGUSER: postgres
+      PGDATABASE: shop
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    # setup_prod (роль, идемпотентно) + apply.sh (только новые миграции)
+    entrypoint: >
+      bash -c "psql -v ON_ERROR_STOP=1 -f /db/setup_prod.sql &&
+               bash /db/apply.sh &&
+               psql -c \"ALTER ROLE shop_app PASSWORD '$${DB_APP_PASSWORD}'\""
+    restart: "no"
+
+  server:
+    build: ../server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: db
+      PGDATABASE: shop
+      PGUSER: shop_app
+      PGPASSWORD: ${DB_APP_PASSWORD:?задайте в .env}
+      JWT_SECRET: ${JWT_SECRET:?задайте в .env}
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+
+  admin:
+    build: ../admin
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000}
+    ports:
+      - "3001:3001"
+
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_SUPER_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    # раз в сутки, храним 14 последних — восстановление: psql < файл
+    entrypoint: >
+      bash -c 'while true; do
+        pg_dump -h db -U postgres shop | gzip > /backups/shop_$$(date +%F_%H%M).sql.gz;
+        ls -1t /backups/*.sql.gz | tail -n +15 | xargs -r rm;
+        sleep 86400;
+      done'
+
+volumes:
+  pgdata:
