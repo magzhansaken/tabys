@@ -3,10 +3,13 @@
  * Техкарты (часть 35) — для кофейни/выпечки при магазине. Готовое блюдо
  * (латте, булочка) списывает ИНГРЕДИЕНТЫ при продаже. Себестоимость считается
  * из сырья. Не полное производство МоегоСклада — ровно под магазин у дома.
+ *
+ * Единственный раздел, у которого не было пустого состояния вовсе. А он же
+ * самый неочевидный: человек, зашедший впервые, должен понять, зачем он тут.
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Card, Table, DataTable, Btn, Input, Select, Field, Badge, money, num, C, ErrLine } from '../../../lib/ui';
+import { Card, Table, DataTable, PageHeader, EmptyState, Btn, Input, Select, Field, Badge, money, num, C, ErrLine } from '../../../lib/ui';
 
 export default function TechcardsPage() {
   const [products, setProducts] = useState<any[]>([]);
@@ -44,14 +47,15 @@ export default function TechcardsPage() {
     } catch (e: any) { setErr(e.message); }
   };
 
+  const filled = rows.filter((r) => r.productId && r.qty).length;
+
   return (
     <>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Техкарты</h1>
-      <p style={{ fontSize: 13, color: C.dim, marginTop: 4 }}>
-        Для кофейни или выпечки при магазине. Готовое блюдо списывает ингредиенты
-        при продаже, себестоимость считается из сырья. Например: латте = зёрна +
-        молоко + стакан.
-      </p>
+      <PageHeader
+        title="Техкарты"
+        fact={`${products.length} товаров доступны как ингредиенты${filled ? ` · в рецепте ${filled}` : ''}`}
+        note="Для кофейни или выпечки при магазине. Готовое блюдо списывает ингредиенты при продаже, а себестоимость считается из сырья. Например: латте — это зёрна, молоко и стакан."
+      />
       <ErrLine err={err} />
       {msg && <p style={{ color: C.accentDark, fontSize: 13 }}>{msg}</p>}
 
@@ -71,26 +75,36 @@ export default function TechcardsPage() {
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
             <Select value={row.productId} onChange={(e: any) => setRow(i, 'productId', e.target.value)}
               options={[{ value: '', label: '— ингредиент —' }, ...products.filter((p: any) => p.id !== dish).map((p: any) => ({ value: p.id, label: p.name }))]} />
-            <Input type="number" placeholder="Кол-во" value={row.qty} onChange={(e: any) => setRow(i, 'qty', e.target.value)} />
+            <Input type="number" placeholder="Кол-во" value={row.qty} onChange={(e: any) => setRow(i, 'qty', e.target.value)} style={{ textAlign: 'right' }} />
             <Input placeholder="ед. (г/мл/шт)" value={row.unit} onChange={(e: any) => setRow(i, 'unit', e.target.value)} />
           </div>
         ))}
         <Btn onClick={save} style={{ marginTop: 6 }}>Сохранить техкарту</Btn>
       </Card>
 
-      {cost && (
-        <Card title="Себестоимость блюда" style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-            <Badge tone="ok">{money(cost.cost)} за порцию</Badge>
-            <span style={{ fontSize: 13, color: C.dim }}>выход: {num(cost.yield)}</span>
-          </div>
-          <DataTable hint="Для кофейни или выпечки при магазине: готовое блюдо списывает ингредиенты, а не себя. Начните с добавления блюда и его состава." storageKey="techcards" exportName="techcards" cols={[
-            { h: 'Ингредиент', k: 'name' },
-            { h: 'На рецепт', right: true, r: (r: any) => `${num(r.qty)} ${r.unit ?? ''}` },
-            { h: 'Закупка', right: true, r: (r: any) => r.purchasePrice != null ? money(r.purchasePrice) : '—' },
-          ]} rows={cost.components} />
-        </Card>
-      )}
+      <Card title="Себестоимость блюда" style={{ marginTop: 14 }}>
+        {cost ? (
+          <>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+              <Badge tone="ok">{money(cost.cost)} за порцию</Badge>
+              <span style={{ fontSize: 13, color: C.dim }}>выход: {num(cost.yield)}</span>
+            </div>
+            <DataTable
+              hint="Смотрите на столбец «Закупка»: в латте дорогое обычно не молоко, а зерно — и цену держать нужно там."
+              storageKey="techcards" exportName="techcards" search={false}
+              empty="В рецепте нет ингредиентов"
+              cols={[
+                { h: 'Ингредиент', k: 'name' },
+                { h: 'На рецепт', right: true, r: (r: any) => `${num(r.qty)} ${r.unit ?? ''}` },
+                { h: 'Закупка', right: true, r: (r: any) => r.purchasePrice != null ? money(r.purchasePrice) : '—' },
+              ]} rows={cost.components} />
+          </>
+        ) : (
+          // Пустого состояния тут не было вовсе — а раздел самый неочевидный
+          // в кабинете. Говорим, что нажать, а не «нет данных».
+          <EmptyState text="Себестоимость появится после сохранения первой техкарты. Выберите готовое блюдо, добавьте ингредиенты и нажмите «Сохранить техкарту»." />
+        )}
+      </Card>
     </>
   );
 }

@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Card, Table, DataTable, Btn, Input, Field, Stat, money, num, today, monthAgo, C, ErrLine, Badge } from '../../../lib/ui';
+import { Card, Table, DataTable, PageHeader, Btn, Input, Field, Stat, money, num, today, monthAgo, C, ErrLine, Badge } from '../../../lib/ui';
 
 export default function LoyaltyPage() {
   const [programs, setPrograms] = useState<any[]>([]);
@@ -34,17 +34,24 @@ export default function LoyaltyPage() {
     } catch (e: any) { setErr(e.message); }
   };
 
+  const live = programs.filter((p: any) => p.is_active !== false).length;
+
   return (
     <>
-      <h1 style={{ fontSize: 22, margin: 0 }}>Лояльность</h1>
+      <PageHeader
+        title="Лояльность"
+        fact={programs.length
+          ? `${live} программ работает из ${programs.length}${an ? ` · начислено ${money(an.earned)} за 30 дней` : ''}`
+          : 'Программ пока нет'}
+      />
       <ErrLine err={err} />
       {msg && <div style={{ color: C.accentDark, fontSize: 13, margin: '8px 0' }}>{msg}</div>}
 
       {an && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
           <Stat label="Участников" value={num(an.members ?? an.customers ?? 0)} />
-          <Stat label="Начислено бонусов" value={money(an.earned)} sub="за 30 дней" />
-          <Stat label="Потрачено бонусов" value={money(an.spent)} sub="за 30 дней" />
+          <Stat label="Начислено бонусов" value={money(an.earned)} sub="за 30 дней · это ваш долг перед покупателями" />
+          <Stat label="Потрачено бонусов" value={money(an.spent)} sub="за 30 дней · вернулись покупками" />
           <Stat label="Выручка участников" value={money(an.memberRevenue ?? an.revenue)} />
         </div>
       )}
@@ -52,15 +59,22 @@ export default function LoyaltyPage() {
       <Card title="Новая бонусная программа" style={{ marginTop: 14 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Field label="Название"><Input value={form.name ?? ''} w={200} placeholder="Например: Базовый кешбэк" onChange={(e: any) => setForm({ ...form, name: e.target.value })} /></Field>
-          <Field label="Начисление, %"><Input type="number" value={form.earnPercent} w={90} onChange={(e: any) => setForm({ ...form, earnPercent: e.target.value })} /></Field>
-          <Field label="Оплата бонусами до, %"><Input type="number" value={form.maxSpendPercent ?? ''} w={90} placeholder="50" onChange={(e: any) => setForm({ ...form, maxSpendPercent: e.target.value })} /></Field>
-          <Field label="Сгорают через, дней"><Input type="number" value={form.expiryDays ?? ''} w={90} placeholder="180" onChange={(e: any) => setForm({ ...form, expiryDays: e.target.value })} /></Field>
+          <Field label="Начисление, %"><Input type="number" value={form.earnPercent} w={90} style={{ textAlign: 'right' }} onChange={(e: any) => setForm({ ...form, earnPercent: e.target.value })} /></Field>
+          <Field label="Оплата бонусами до, %"><Input type="number" value={form.maxSpendPercent ?? ''} w={90} placeholder="50" style={{ textAlign: 'right' }} onChange={(e: any) => setForm({ ...form, maxSpendPercent: e.target.value })} /></Field>
+          <Field label="Сгорают через, дней"><Input type="number" value={form.expiryDays ?? ''} w={90} placeholder="180" style={{ textAlign: 'right' }} onChange={(e: any) => setForm({ ...form, expiryDays: e.target.value })} /></Field>
           <Btn onClick={create} disabled={!form.name}>Запустить</Btn>
         </div>
+        <p style={{ fontSize: 13, color: C.dim, margin: '14px 0 0', lineHeight: 1.55 }}>
+          Начисление 3% — обычная величина для магазина у дома. Срок сгорания
+          возвращает людей: бессрочные бонусы копятся годами и однажды приходят
+          все сразу.
+        </p>
       </Card>
 
       <Card title="Программы" style={{ marginTop: 14 }}>
-        <DataTable storageKey="loyalty" exportName="loyalty" empty="Программ пока нет — запустите первую, касса подхватит её сама"
+        <DataTable storageKey="loyalty" exportName="loyalty"
+          hint="Бонус — обещание скидки в будущем. Начисленные и не потраченные бонусы — ваш долг, и он печатается на чеке, чтобы покупателю не приходилось верить на слово."
+          empty="Программ пока нет — запустите первую, касса подхватит её сама"
           cols={[
             { h: 'Название', k: 'name' },
             { h: 'Начисление', right: true, r: (r) => `${num(r.earn_percent ?? r.earnPercent)}%` },
