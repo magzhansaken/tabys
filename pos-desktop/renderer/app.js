@@ -150,9 +150,26 @@ async function tryPin() {
 function openSale() {
   show('scr-sale');
   $('cashierLabel').textContent = S.employee?.name ? ' · ' + S.employee.name : '';
-  $('shiftLabel').textContent = S.shift ? 'Смена открыта' : 'Смена не открыта';
+  drawTop();
   K.saveState({ lastEmployee: S.employee });
   drawGoods(''); drawCart(); updatePending(); updateParkedCount();
+}
+
+/**
+ * Шапка: смена, наличные в кассе, неотправленные чеки, счётчик отмен.
+ *
+ * Наличные показываем прямо здесь: кассир должен видеть остаток, не
+ * открывая ящик и не считая в уме. При закрытии смены он сверяет эту
+ * цифру с тем, что насчитал руками — расхождение видно сразу, а не
+ * через неделю в отчёте у владельца.
+ */
+function drawTop() {
+  $('shiftLabel').textContent = S.shift ? 'Смена открыта' : 'Смена не открыта';
+  const el = $('cashLabel');
+  if (el) {
+    el.textContent = S.shift ? 'в кассе ' + money(S.cashInDrawer || 0) : '';
+    el.className = S.shift ? 'cash-badge' : '';
+  }
 }
 
 $('search').oninput = (e) => drawGoods(e.target.value);
@@ -252,11 +269,15 @@ function drawCart() {
     const sum = l.price * l.qty - (l.discount || 0);
     return `
     <div class="line">
-      <div class="nm">${escapeHtml(l.name)}${l.discount ? `<span class="disc">−${money(l.discount)}</span>` : ''}</div>
+      <div class="nm">${escapeHtml(l.name)}${
+        l.discount ? `<span class="disc">−${money(l.discount)}</span>` : ''}${
+        l.free ? '<span class="free-mark">без карточки</span>' : ''}${
+        l.priceChanged ? '<span class="price-mark">цена изменена</span>' : ''}</div>
       <div class="qty">
         <button data-m="${i}">−</button><span>${l.qty}</span><button data-p="${i}">+</button>
       </div>
       <div class="sum">${money(sum)}</div>
+      <button class="del" data-pr="${i}" title="Изменить цену">₸</button>
       <button class="del" data-s="${i}" title="Скидка на позицию">%</button>
       <button class="del" data-d="${i}" title="Убрать позицию">✕</button>
     </div>`; }).join('') || '<p class="muted">Чек пуст. Выберите товар слева.</p>';
@@ -275,6 +296,21 @@ function drawCart() {
         }
         cart.splice(b.dataset.d, 1);
         voids += 1; drawVoids();
+      }
+      if (b.dataset.pr != null) {
+        // ИЗМЕНЕНИЕ ЦЕНЫ. Разрешено только вверх, если владелец включил
+        // запрет на снижение: снижение цены на кассе — самый тихий способ
+        // отдать товар «своим» дешевле, и в отчётах это выглядит как
+        // обычная продажа.
+        const l = cart[b.dataset.pr];
+        const base = catalog.find((g) => g.id === l.productId)?.price ?? l.price;
+        const v = prompt(`Цена «${l.name}»${SET.noPriceDown ? ' (снижать нельзя)' : ''}:`, String(l.price));
+        if (v !== null) {
+          const np = Number(v) || 0;
+          if (np <= 0) return;
+          if (SET.noPriceDown && np < base) { alert(`Снижать цену нельзя. В карточке ${money(base)}`); return; }
+          l.price = np; l.priceChanged = np !== base;
+        }
       }
       if (b.dataset.s != null) {
         // Скидка на позицию действует только в этом чеке — как у UMAG.
@@ -311,6 +347,13 @@ $('btnPark').onclick = async () => {
   parked.push({ id: uuid(), at: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
                 items: cart, total: cart.reduce((s, l) => s + l.price * l.qty - (l.discount || 0), 0) });
   S = (await K.saveState({ parked })).data;
+  // Наличные в кассе: пришли деньги — прибавилось, дали сдачу — убавилось.
+  // Считаем на месте, чтобы кассир видел остаток сразу, без связи.
+  if (receipt.hasCash) {
+    const got = (way === 'cash' ? cash : cash) - (receipt.change || 0);
+    S = (await K.saveState({ cashInDrawer: (S.cashInDrawer || 0) + got })).data;
+  }
+  drawTop();
   cart = []; drawCart(); updateParkedCount();
 };
 
@@ -320,7 +363,47 @@ $('btnParked').onclick = async () => {
     <div class="reclist">${parked.map((p) => `
       <button data-id="${p.id}">${p.at} · ${p.items.length} поз. · <b>${money(p.total)}</b></button>`).join('')
       || '<p class="muted">Отложенных чеков нет.</p>'}</div>
-    <div class="modal-actions"><button id="c">Закрыть</button></div>`);
+    <div class="modal-actions">
+      <button id="noReceipt">Возврат без чека</button>
+      <button id="c">Закрыть</button>
+    </div>`);
+
+  // ВОЗВРАТ БЕЗ ЧЕКА. Покупатель потерял чек — обычное дело, и отказывать
+  // ему нельзя. Но это же и способ вынуть деньги из кассы «на возврат»
+  // несуществующей покупки, поэтому: причина обязательна, и операция
+  // попадает в счётчик отмен, который видят сменщик и владелец.
+  $('noReceipt').onclick = () => {
+    openModal(`
+      <h2>Возврат без чека</h2>
+      <p class="muted">Покупатель не может показать чек. Операция попадёт в отчёт владельцу.</p>
+      <label>Что возвращают</label>
+      <input id="nrName" placeholder="напр. Молоко Айран 1л">
+      <label>Сумма к возврату</label>
+      <input id="nrSum" inputmode="numeric" value="">
+      <label>Причина</label>
+      <input id="nrNote" placeholder="напр. брак, покупатель потерял чек">
+      <div class="err" id="nrErr"></div>
+      <div class="modal-actions">
+        <button id="nrCancel">Отмена</button>
+        <button id="nrOk" class="primary big">Вернуть деньги</button>
+      </div>`);
+    $('nrCancel').onclick = closeModal;
+    $('nrOk').onclick = async () => {
+      const name = $('nrName').value.trim(), sum = Number($('nrSum').value || 0), note = $('nrNote').value.trim();
+      if (!name || sum <= 0 || !note) { $('nrErr').textContent = 'Заполните всё: без причины возврат не проводим'; return; }
+      const ref = { id: uuid(), number: (S.lastNumber || 0) + 1, date: new Date().toLocaleString('ru-RU'),
+        store: S.store?.name || 'Магазин', cashier: S.employee?.name || '',
+        items: [{ productId: null, name, qty: 1, price: sum, total: sum, free: true }],
+        total: sum, isRefund: true, noReceipt: true, comment: note,
+        payments: [{ label: 'Наличные', sum }], hasCash: true };
+      await K.receiptAdd(ref);
+      await K.outboxAdd({ id: ref.id, entity: 'sale', entityId: ref.id, op: 'insert', payload: ref });
+      voids++;                                  // в счётчик отмен — это след
+      S = (await K.saveState({ lastNumber: ref.number, cashInDrawer: (S.cashInDrawer || 0) - sum })).data;
+      await K.print(ref);
+      closeModal(); updatePending(); drawTop(); trySync();
+    };
+  };
   $('c').onclick = closeModal;
   document.querySelectorAll('.reclist button').forEach((b) => b.onclick = async () => {
     const p = parked.find((x) => x.id === b.dataset.id);
@@ -345,6 +428,7 @@ $('btnPay').onclick = () => {
       <button data-w="cash" class="on">Наличные</button>
       <button data-w="card">Карта</button>
       <button data-w="mixed">Смешанно</button>
+      <button data-w="credit">В долг</button>
     </div>
     <div id="payBody"></div>
     <div class="err" id="payErr"></div>
@@ -358,8 +442,19 @@ $('btnPay').onclick = () => {
     if (way === 'cash') body.innerHTML = `<label>Получено наличными</label>
       <input id="pCash" inputmode="numeric" value="${total}"><div id="change" class="change"></div>`;
     else if (way === 'card') body.innerHTML = `<p class="muted">Проведите картой на терминале, затем нажмите «Пробить чек».</p>`;
-    else body.innerHTML = `<label>Наличными</label><input id="pCash" inputmode="numeric" value="0">
+    else if (way === 'mixed') body.innerHTML = `<label>Наличными</label><input id="pCash" inputmode="numeric" value="0">
       <label>Картой</label><input id="pCard" inputmode="numeric" value="${total}">`;
+    else {
+      // В ДОЛГ. Отпустить под запись можно только известному покупателю:
+      // «долг Марату» без карточки клиента — это потерянные деньги, их
+      // некому предъявить. Поэтому выбор обязателен.
+      body.innerHTML = `<label>Кому в долг</label>
+        <select id="pDebtor"><option value="">— выберите покупателя —</option>${
+          (S.customers || []).map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${
+            c.debt ? ` · уже должен ${money(c.debt)}` : ''}</option>`).join('')
+        }</select>
+        <p class="muted">Долг попадёт в карточку покупателя. Владелец увидит его в разделе «Контрагенты».</p>`;
+    }
     const c = $('pCash');
     if (c) c.oninput = () => {
       const got = Number(c.value || 0);
@@ -378,8 +473,17 @@ $('btnPay').onclick = () => {
 async function finishSale(way, total) {
   const cash = Number($('pCash')?.value || 0);
   const card = way === 'card' ? total : Number($('pCard')?.value || 0);
-  const paid = (way === 'cash' ? cash : way === 'card' ? total : cash + card);
-  if (paid < total) { $('payErr').textContent = 'Оплачено меньше суммы чека'; return; }
+
+  // В долг: деньги сейчас не приходят, приходит обязательство.
+  let debtorId = null, debtorName = '';
+  if (way === 'credit') {
+    debtorId = $('pDebtor')?.value || '';
+    if (!debtorId) { $('payErr').textContent = 'Выберите покупателя — долг должен быть на кого-то записан'; return; }
+    debtorName = $('pDebtor').selectedOptions[0]?.textContent?.split(' · ')[0] ?? '';
+  } else {
+    const paid = (way === 'cash' ? cash : way === 'card' ? total : cash + card);
+    if (paid < total) { $('payErr').textContent = 'Оплачено меньше суммы чека'; return; }
+  }
 
   const receipt = {
     id: uuid(),
@@ -392,9 +496,15 @@ async function finishSale(way, total) {
     total,
     payments: way === 'cash' ? [{ label: 'Наличные', sum: cash }]
       : way === 'card' ? [{ label: 'Карта', sum: total }]
+      : way === 'credit' ? [{ label: 'В долг: ' + debtorName, sum: total }]
       : [{ label: 'Наличные', sum: cash }, { label: 'Карта', sum: card }],
-    change: way === 'card' ? 0 : Math.max(0, paid - total),
-    hasCash: way !== 'card',
+    customerId: debtorId || undefined,
+    payment: way === 'credit' ? { credit: total } : undefined,
+    change: (way === 'card' || way === 'credit') ? 0
+      : Math.max(0, (way === 'cash' ? cash : cash + card) - total),
+    // Ящик открываем только когда пришли наличные: при карте и долге
+    // денег в кассе не прибавилось, и открывать его незачем.
+    hasCash: way === 'cash' || way === 'mixed',
   };
 
   // 1) Сначала сохраняем на диск — чек не должен зависеть от сети и печати.
@@ -424,25 +534,165 @@ $('btnShift').onclick = () => {
     $('ok').onclick = async () => {
       const shift = { id: uuid(), openedAt: new Date().toISOString(), openingFloat: Number($('float').value || 0) };
       await K.outboxAdd({ id: shift.id, entity: 'shift', entityId: shift.id, op: 'insert', payload: shift });
-      S = (await K.saveState({ shift })).data;
-      $('shiftLabel').textContent = 'Смена открыта';
+      // Размен — это стартовые наличные в ящике, а не «просто число».
+      S = (await K.saveState({ shift, cashInDrawer: shift.openingFloat })).data;
+      drawTop();
       closeModal(); updatePending(); trySync();
     };
   } else {
     openModal(`<h2>Закрыть смену</h2>
-      <p class="muted">Пересчитайте наличные в ящике и впишите фактическую сумму.</p>
-      <label>Фактически в кассе</label><input id="fact" inputmode="numeric" value="0">
+      <p class="muted">Пересчитайте наличные в ящике и впишите, сколько насчитали.</p>
+      <div class="expected">По расчёту должно быть: <b>${money(S.cashInDrawer || 0)}</b></div>
+      <label>Фактически насчитал</label><input id="fact" inputmode="numeric" value="">
+      <div id="diff" class="diff"></div>
       <div class="modal-actions"><button id="c">Отмена</button>
       <button id="ok" class="primary big">Закрыть смену</button></div>`);
     $('c').onclick = closeModal;
+    // Расхождение показываем ДО подтверждения: кассир пересчитает сейчас,
+    // а не будет объясняться завтра. Это ради него, а не против него.
+    $('fact').oninput = () => {
+      const fact = Number($('fact').value || 0);
+      const must = S.cashInDrawer || 0;
+      const d = fact - must;
+      $('diff').innerHTML = !$('fact').value ? ''
+        : d === 0 ? '<span class="ok">Сходится</span>'
+        : d > 0 ? `<span class="warn">Излишек ${money(d)}</span>`
+        : `<span class="bad">Не хватает ${money(-d)}</span>`;
+    };
     $('ok').onclick = async () => {
       const close = { id: uuid(), shiftId: S.shift.id, closedAt: new Date().toISOString(), factCash: Number($('fact').value || 0) };
       await K.outboxAdd({ id: close.id, entity: 'shift_close', entityId: S.shift.id, op: 'update', payload: close });
-      S = (await K.saveState({ shift: null })).data;
-      $('shiftLabel').textContent = 'Смена не открыта';
+      S = (await K.saveState({ shift: null, cashInDrawer: 0 })).data;
+      voids = 0;                       // счётчик отмен — на каждую смену свой
+      drawTop();
       closeModal(); updatePending(); trySync();
     };
   }
+};
+
+/**
+ * ДЕНЬГИ В КАССЕ: внести, изъять, сдать выручку.
+ *
+ * Без этого касса не сходится физически. Утром разменяли — деньги
+ * пришли не от продажи. Вечером сдали выручку — ушли не покупателю.
+ * Если этого нет, расчётный остаток и настоящий расходятся с первого
+ * дня, и владелец видит недостачу там, где её нет.
+ *
+ * Три вида: внести, изъять, сдать выручку (инкассация). Разделены не
+ * ради красоты — в отчёте по смене они считаются по-разному: изъятие
+ * это расход, инкассация это передача денег дальше.
+ */
+/**
+ * ТОВАР БЕЗ КАРТОЧКИ — пробить по цене.
+ *
+ * Каждый день: привезли что-то новое, товар ещё не заведён, а покупатель
+ * стоит. Без этого кассир либо не продаёт, либо пробивает под чужим
+ * товаром — и остатки разъезжаются молча. Второе хуже.
+ *
+ * Помечаем такую позицию отдельно: владелец увидит в отчёте, что
+ * продавали без карточки, и заведёт товар.
+ */
+$('btnFree').onclick = () => {
+  openModal(`
+    <h2>Товар без карточки</h2>
+    <p class="muted">Для товара, который ещё не заведён. Владелец увидит это в отчёте.</p>
+    <label>Название</label>
+    <input id="freeName" placeholder="напр. Арбуз весовой">
+    <label>Цена</label>
+    <input id="freeSum" inputmode="numeric" value="">
+    <div class="err" id="freeErr"></div>
+    <div class="modal-actions">
+      <button id="freeCancel">Отмена</button>
+      <button id="freeOk" class="primary big">Добавить в чек</button>
+    </div>`);
+  $('freeCancel').onclick = closeModal;
+  $('freeOk').onclick = () => {
+    const name = $('freeName').value.trim();
+    const price = Number($('freeSum').value || 0);
+    if (!name) { $('freeErr').textContent = 'Напишите название — иначе в отчёте будет непонятно, что продали'; return; }
+    if (price <= 0) { $('freeErr').textContent = 'Введите цену'; return; }
+    cart.push({ productId: null, name, price, qty: 1, free: true });
+    closeModal(); drawCart();
+  };
+};
+
+/**
+ * ПРОВЕРКА ЦЕНЫ без продажи.
+ *
+ * Покупатель спрашивает «сколько стоит» — кассир не должен для этого
+ * начинать чек и потом его отменять. Отменённый чек это след, который
+ * потом объясняй.
+ */
+$('btnPrice').onclick = () => {
+  openModal(`
+    <h2>Проверка цены</h2>
+    <p class="muted">Отсканируйте товар или введите штрихкод. Чек не начинается.</p>
+    <input id="priceCode" inputmode="numeric" placeholder="Штрихкод" autofocus>
+    <div id="priceResult" class="price-result"></div>
+    <div class="modal-actions"><button id="priceClose" class="primary big">Закрыть</button></div>`);
+  $('priceClose').onclick = closeModal;
+  const check = () => {
+    const q = $('priceCode').value.trim();
+    if (!q) return;
+    const g = catalog.find((x) => (x.barcodes || []).includes(q))
+      ?? catalog.find((x) => x.name.toLowerCase().includes(q.toLowerCase()));
+    $('priceResult').innerHTML = g
+      ? `<div class="pr-name">${escapeHtml(g.name)}</div><div class="pr-price">${money(g.price)}</div>`
+      : `<div class="pr-none">Товар не найден</div>`;
+  };
+  $('priceCode').oninput = check;
+  $('priceCode').onkeydown = (e) => { if (e.key === 'Enter') { check(); e.target.select(); } };
+  setTimeout(() => $('priceCode')?.focus(), 50);
+};
+
+$('btnCash').onclick = () => {
+  if (!S.shift) { alert('Сначала откройте смену'); return; }
+  openModal(`
+    <h2>Деньги в кассе</h2>
+    <div class="cash-kinds">
+      <button data-k="deposit" class="on">Внести</button>
+      <button data-k="withdrawal">Изъять</button>
+      <button data-k="collection">Сдать выручку</button>
+    </div>
+    <label>Сумма</label>
+    <input id="cashSum" inputmode="numeric" value="">
+    <label>Причина <span class="muted">(увидит владелец в отчёте)</span></label>
+    <input id="cashNote" placeholder="напр. размен, оплата поставщику">
+    <div class="err" id="cashErr"></div>
+    <div class="modal-actions">
+      <button id="cashCancel">Отмена</button>
+      <button id="cashOk" class="primary big">Провести</button>
+    </div>`);
+
+  let kind = 'deposit';
+  const hints = {
+    deposit: 'напр. размен, доложили из сейфа',
+    withdrawal: 'напр. оплата поставщику, хозрасходы',
+    collection: 'напр. сдал старшему смены',
+  };
+  document.querySelectorAll('.cash-kinds button').forEach((b) => b.onclick = () => {
+    document.querySelectorAll('.cash-kinds button').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on'); kind = b.dataset.k;
+    $('cashNote').placeholder = hints[kind];
+  });
+
+  $('cashCancel').onclick = closeModal;
+  $('cashOk').onclick = async () => {
+    const sum = Number($('cashSum').value || 0);
+    if (sum <= 0) { $('cashErr').textContent = 'Введите сумму больше нуля'; return; }
+    // Причину требуем у изъятия и инкассации: деньги уходят из кассы, и
+    // владелец должен видеть, куда. У внесения не требуем — там очевидно.
+    const note = $('cashNote').value.trim();
+    if (kind !== 'deposit' && !note) { $('cashErr').textContent = 'Напишите причину — её увидит владелец'; return; }
+
+    const op = { id: uuid(), shiftId: S.shift.id, kind, amount: sum, comment: note || null };
+    await K.outboxAdd({ id: op.id, entity: 'cash_operation', entityId: op.id, op: 'insert', payload: op });
+    // Считаем наличные в кассе прямо здесь: кассир должен видеть остаток
+    // сразу, а не после связи с сервером.
+    const delta = kind === 'deposit' ? sum : -sum;
+    S = (await K.saveState({ cashInDrawer: (S.cashInDrawer || 0) + delta })).data;
+    closeModal(); updatePending(); drawTop(); trySync();
+  };
 };
 
 $('btnLogout').onclick = async () => { S = (await K.saveState({ employee: null })).data; openPin(); };

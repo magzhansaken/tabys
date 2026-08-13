@@ -268,7 +268,7 @@ summary { font-size: 17px; color: var(--dim); cursor: pointer; min-height: 44px;
 .cart { flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 10px; }
 .cart .muted { font-size: 17px; line-height: 1.5; padding: 12px 4px; }
 .line {
-  display: grid; grid-template-columns: 1fr auto auto auto auto;
+  display: grid; grid-template-columns: 1fr auto auto auto auto auto;
   align-items: center; gap: 10px;
   padding: 10px 6px; border-bottom: 1px solid var(--line);
 }
@@ -381,3 +381,42 @@ summary { font-size: 17px; color: var(--dim); cursor: pointer; min-height: 44px;
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ═══ Кассовые операции, товар без карточки, проверка цены ═══
+   Размеры те же, что у остальных кнопок кассы: кассир не должен
+   переучиваться под новые элементы. */
+.cash-kinds { display: flex; gap: 8px; margin: 12px 0 4px; }
+.cash-kinds button { flex: 1; min-height: 56px; font-size: 17px; }
+.cash-kinds button.on {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+}
+
+/* Проверка цены: ответ должен читаться с метра, не наклоняясь */
+.price-result { min-height: 96px; display: grid; place-items: center; margin: 14px 0; }
+.pr-name { font-size: 20px; text-align: center; margin-bottom: 6px; }
+.pr-price {
+  font-size: 48px; font-weight: 600; color: var(--accent-soft);
+  font-variant-numeric: tabular-nums;
+}
+.pr-none { font-size: 20px; color: var(--dim); }
+
+/* Позиция без карточки и с изменённой ценой — видны в чеке.
+   Владелец должен понимать, откуда взялась строка, которой нет в каталоге. */
+.line .free-mark { color: var(--gold); font-size: 12px; margin-left: 8px; }
+.line .price-mark { color: var(--gold); font-size: 12px; margin-left: 8px; }
+
+/* Наличные в кассе — в шапке рядом со сменой.
+   Кассир видит остаток, не открывая ящик и не считая. */
+.cash-badge {
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(255,255,255,.06); font-size: 15px;
+}
+
+/* Закрытие смены: расхождение видно ДО подтверждения */
+.expected { font-size: 17px; color: var(--dim); margin: 10px 0; }
+.expected b { color: var(--text); font-variant-numeric: tabular-nums; }
+.diff { min-height: 30px; font-size: 20px; font-weight: 600; margin-top: 4px; }
+.diff .ok { color: var(--accent-soft); }
+.diff .warn { color: var(--gold); }
+.diff .bad { color: var(--red); }

@@ -64,6 +64,7 @@
   <header class="topbar">
     <div>
       <b id="shiftLabel">Смена не открыта</b>
+      <span id="cashLabel"></span>
       <span class="muted" id="cashierLabel"></span>
     </div>
     <div class="right">
@@ -71,6 +72,8 @@
       <span id="voidLabel" class="hidden" title="Отмены и скидки за смену"></span>
       <span id="syncDot" class="dot" title="Связь с сервером"></span>
       <span class="muted" id="pendingLabel"></span>
+      <button id="btnPrice" title="Узнать цену, не начиная чек">Цена</button>
+      <button id="btnCash" title="Внести, изъять, сдать выручку">Касса</button>
       <button id="btnShift">Смена</button>
       <button id="btnRefund">Возврат</button>
       <button id="btnLogout">Выход</button>
@@ -100,6 +103,7 @@
       </div>
       <button id="btnPay" class="primary big" disabled>ОПЛАТА</button>
       <div class="cart-actions">
+        <button id="btnFree" title="Пробить товар, которого нет в каталоге">Без карточки</button>
         <button id="btnPark">Отложить</button>
         <button id="btnParked">Отложенные</button>
         <button id="btnClear">Очистить</button>
