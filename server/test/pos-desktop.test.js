@@ -163,7 +163,7 @@ const appJs = fs.readFileSync(path.join(ROOT, 'renderer', 'app.js'), 'utf8');
 const html = fs.readFileSync(path.join(ROOT, 'renderer', 'index.html'), 'utf8');
 
 ok(appJs.includes("K.receiptAdd(receipt)") &&
-   appJs.indexOf('K.receiptAdd(receipt)') < appJs.indexOf('const p = await K.print(receipt)'),
+   appJs.indexOf('K.receiptAdd(receipt)') < appJs.indexOf('let p = { ok: true }'),
    '★ Чек сохраняется на диск ДО печати: продажа не зависит от принтера');
 
 ok(/l\.price \* l\.qty - \(l\.discount \|\| 0\)/.test(appJs),
@@ -352,6 +352,21 @@ ok(preLines.some((l) => l.includes('ЭТО НЕ ЧЕК')),
 ok(preLines.some((l) => l.includes('ПРЕДВАРИТЕЛЬНЫЙ')), 'Шапка отличается от чека');
 ok(!preLines.some((l) => l.includes('Спасибо за покупку')),
    'Прощального текста нет — покупатель ещё ничего не купил');
+
+// ── УДВОЕНИЕ И ПЕЧАТЬ ────────────────────────────────────────────────
+console.log('\n── Удвоение позиции и режим печати');
+ok(appJs.includes('data-dup=') && appJs.includes('l.qty *= 2'),
+   '★ Удвоение позиции: «ещё столько же» одним касанием');
+ok(css.includes('qty-dup'), 'Кнопка тише основных — действие редкое, внимание не перетягивает');
+
+ok(appJs.includes("SET.printMode") && appJs.includes("mode === 'never' ? false"),
+   '★ Режим печати: всегда / спрашивать / не печатать');
+ok(appJs.includes("wantPrint"),
+   'В режиме «спрашивать» кассир решает галочкой при оплате');
+ok(appJs.includes('if (wantPaper) p = await K.print(receipt)'),
+   '★ Чек всё равно СОХРАНЯЕТСЯ и уходит в очередь — не печатается только бумага');
+ok(appJs.indexOf('K.receiptAdd(receipt)') < appJs.indexOf('const mode = SET.printMode'),
+   '★ Сохранение по-прежнему ДО печати: продажа не зависит от бумаги');
 
 // ── ИТОГ ─────────────────────────────────────────────────────────────
 fs.rmSync(DIR, { recursive: true, force: true });

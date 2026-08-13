@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [fiscal, setFiscal] = useState<any>(null);
   const [readiness, setReadiness] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
+  const [pos, setPos] = useState<any>(null);
   const [keys, setKeys] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [dayHour, setDayHour] = useState('0');
@@ -35,7 +36,10 @@ export default function SettingsPage() {
     try {
       if (tab === 'onboarding') setOnb(await api('/onboarding'));
       if (tab === 'fiscal') { setFiscal(await api('/fiscal/health')); setKeys(await api('/documents/keys/health')); setReadiness(await api('/fiscal/readiness')); }
-      if (tab === 'equipment') setEquipment(await api('/equipment'));
+      if (tab === 'equipment') {
+        setEquipment(await api('/equipment'));
+        setPos(await api('/pos-settings'));
+      }
       if (tab === 'access') {
         const c = await api('/company/settings');
         setCompany(c); setDayHour(String(c.dayStartHour ?? 0));
@@ -205,6 +209,42 @@ export default function SettingsPage() {
               ) : 'Загрузка…'}
             </Card>
           </>
+        )}
+
+        {tab === 'equipment' && pos && (
+          <Card title="Чек и печать" style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>
+              Что печатается на бумаге и что на ней написано. Фискализация от этих настроек
+              не зависит — чек уходит в налоговую в любом случае.
+            </p>
+            <div style={{ display: 'grid', gap: 14, maxWidth: 520 }}>
+              <Field label="Бумажный чек">
+                <Select
+                  value={pos.receipt_print_mode ?? 'always'}
+                  onChange={async (e: any) => {
+                    const v = e.target.value;
+                    setPos({ ...pos, receipt_print_mode: v });
+                    await api('/pos-settings', { method: 'PATCH',
+                      body: JSON.stringify({ ...pos, receipt_print_mode: v }) });
+                  }}
+                  options={[
+                    { value: 'always', label: 'Печатать всегда' },
+                    { value: 'ask', label: 'Спрашивать кассира при оплате' },
+                    { value: 'never', label: 'Не печатать (лента экономится)' },
+                  ]} />
+              </Field>
+              <Field label="Шапка чека">
+                <Input defaultValue={pos.receipt_header ?? ''} placeholder="Адрес, телефон магазина"
+                  onBlur={async (e: any) => { await api('/pos-settings', { method: 'PATCH',
+                    body: JSON.stringify({ ...pos, receipt_header: e.target.value || null }) }); }} />
+              </Field>
+              <Field label="Подвал чека">
+                <Input defaultValue={pos.receipt_footer ?? ''} placeholder="Спасибо за покупку!"
+                  onBlur={async (e: any) => { await api('/pos-settings', { method: 'PATCH',
+                    body: JSON.stringify({ ...pos, receipt_footer: e.target.value || null }) }); }} />
+              </Field>
+            </div>
+          </Card>
         )}
 
         {tab === 'equipment' && (

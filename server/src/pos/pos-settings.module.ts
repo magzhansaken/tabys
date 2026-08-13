@@ -33,6 +33,9 @@ const DEFAULTS = {
   act_cash_out: 'admin_only',
   discount_allowed: true, discount_max_pct: 100, no_price_down: false,
   receipt_header: null as string | null, receipt_footer: 'Спасибо за покупку!' as string | null,
+  // Бумажный чек: always / ask / never. Фискализацию не отключает —
+  // в налоговую чек уходит в любом случае, не печатается только бумага.
+  receipt_print_mode: 'always',
 };
 
 /** Что именно ограничиваем — с человеческими названиями для кабинета. */
@@ -75,17 +78,19 @@ export class PosSettingsService {
       await c.query(
         `INSERT INTO pos_settings (account_id, act_refund, act_refund_free, act_remove_item,
                 act_reduce_qty, act_discount, act_price_change, act_cash_out,
-                discount_allowed, discount_max_pct, no_price_down, receipt_header, receipt_footer, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
+                discount_allowed, discount_max_pct, no_price_down, receipt_header, receipt_footer,
+                receipt_print_mode, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now())
          ON CONFLICT (account_id) DO UPDATE SET
            act_refund=$2, act_refund_free=$3, act_remove_item=$4, act_reduce_qty=$5,
            act_discount=$6, act_price_change=$7, act_cash_out=$8,
            discount_allowed=$9, discount_max_pct=$10, no_price_down=$11,
-           receipt_header=$12, receipt_footer=$13, updated_at=now()`,
+           receipt_header=$12, receipt_footer=$13, receipt_print_mode=$14, updated_at=now()`,
         [accountId, v.act_refund, v.act_refund_free, v.act_remove_item, v.act_reduce_qty,
          v.act_discount, v.act_price_change, v.act_cash_out,
          v.discount_allowed, v.discount_max_pct, v.no_price_down,
-         v.receipt_header ?? null, v.receipt_footer ?? null]);
+         v.receipt_header ?? null, v.receipt_footer ?? null,
+         ['always','ask','never'].includes(v.receipt_print_mode) ? v.receipt_print_mode : 'always']);
       return this.get(accountId);
     });
   }

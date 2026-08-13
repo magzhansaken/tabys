@@ -70,6 +70,7 @@ async function api(path, { method = 'GET', body, device = true } = {}) {
       SET.noPriceDown = p.no_price_down;
       SET.receiptHeader = p.receipt_header;
       SET.receiptFooter = p.receipt_footer;
+      SET.printMode = p.receipt_print_mode || 'always';
       await K.saveSettings(SET);
     }
   } catch { /* нет связи — работаем по сохранённым */ }
@@ -294,7 +295,7 @@ function drawCart() {
         l.free ? '<span class="free-mark">без карточки</span>' : ''}${
         l.priceChanged ? '<span class="price-mark">цена изменена</span>' : ''}</div>
       <div class="qty">
-        <button data-m="${i}">−</button><button class="qty-num" data-q="${i}">${l.qty}</button><button data-p="${i}">+</button>
+        <button data-m="${i}">−</button><button class="qty-num" data-q="${i}">${l.qty}</button><button data-p="${i}">+</button><button class="qty-dup" data-dup="${i}" title="Удвоить количество">×2</button>
       </div>
       <div class="sum">${money(sum)}</div>
       <button class="del" data-pr="${i}" title="Изменить цену">₸</button>
@@ -327,6 +328,14 @@ function drawCart() {
         }
         cart.splice(b.dataset.d, 1);
         voids += 1; drawVoids();
+      }
+      if (b.dataset.dup != null) {
+        // УДВОЕНИЕ ПОЗИЦИИ (модель МоегоСклада). Покупатель берёт «ещё
+        // столько же» — частый случай на кассе: две упаковки воды, ещё
+        // три пачки сигарет. Быстрее, чем вводить число, и понятнее, чем
+        // жать «плюс» столько же раз, сколько уже набрано.
+        const l = cart[b.dataset.dup];
+        l.qty *= 2;
       }
       if (b.dataset.q != null) {
         // БЫСТРЫЙ ВВОД КОЛИЧЕСТВА. «12 бутылок воды» — это двенадцать
@@ -600,6 +609,11 @@ $('btnPay').onclick = () => {
     </div>
     <div id="payBody"></div>
     <div class="err" id="payErr"></div>
+    ${SET.printMode === 'ask' ? `
+    <label class="print-toggle">
+      <input type="checkbox" id="wantPrint" checked>
+      Печатать бумажный чек
+    </label>` : ''}
     <div class="modal-actions">
       <button id="payCancel">Отмена</button>
       <button id="payDo" class="primary big">ПРОБИТЬ ЧЕК</button>
@@ -727,11 +741,22 @@ async function finishSale(way, total) {
   await K.outboxAdd({ id: receipt.id, entity: 'sale', entityId: receipt.id, op: 'insert', payload: receipt });
   S = (await K.saveState({ lastNumber: receipt.number })).data;
 
-  // 2) Печатаем. Ошибка печати не отменяет продажу — деньги уже приняты.
-  const p = await K.print(receipt);
+  // 2) Печатаем — если владелец не отключил бумагу.
+  //
+  // Фискализация от этого НЕ зависит: чек ушёл в налоговую в любом
+  // случае, не печатается только бумага. Половина покупателей у
+  // прилавка говорит «чек не надо», а лента стоит денег и кончается
+  // в самый неподходящий момент — посреди очереди.
+  const mode = SET.printMode || 'always';
+  const wantPaper = mode === 'always' ? true
+    : mode === 'never' ? false
+    : ($('wantPrint')?.checked ?? true);
+
+  let p = { ok: true };
+  if (wantPaper) p = await K.print(receipt);
   closeModal();
-  cart = []; drawCart(); updatePending();
-  if (!p.ok) alert('Чек сохранён, но не напечатался:\n' + p.error);
+  cart = []; cartDiscount = 0; drawCart(); updatePending();
+  if (wantPaper && !p.ok) alert('Чек сохранён, но не напечатался:\n' + p.error);
   trySync();
 }
 

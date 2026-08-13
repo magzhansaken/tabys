@@ -461,3 +461,24 @@ summary { font-size: 17px; color: var(--dim); cursor: pointer; min-height: 44px;
   font-variant-numeric: tabular-nums;
 }
 .qty .qty-num:hover { border-color: var(--line); background: var(--raised); }
+
+/* Удвоение количества: рядом с «плюсом», но заметно тише его.
+   Действие редкое — не должно перетягивать внимание с основных кнопок,
+   которые кассир жмёт не глядя. */
+.qty .qty-dup {
+  min-height: 52px; width: 44px; padding: 0;
+  font-size: 15px; font-weight: 600; color: var(--dim);
+  background: transparent; border: 1px solid var(--line);
+}
+.qty .qty-dup:hover { color: var(--text); background: var(--raised); }
+
+/* Печатать ли чек — галочка в окне оплаты.
+   Крупная: её жмут пальцем в спешке, и промах означает либо потерянную
+   ленту, либо покупателя без чека. */
+.print-toggle {
+  display: flex; align-items: center; gap: 12px;
+  margin: 14px 0 4px; padding: 12px 14px;
+  background: var(--raised); border: 1px solid var(--line); border-radius: 12px;
+  font-size: 17px; cursor: pointer; min-height: 56px;
+}
+.print-toggle input { width: 26px; height: 26px; margin: 0; }

@@ -114,8 +114,11 @@
 \echo '--- 049 единые статусы листа отбора ---'
 \i db/migrations/049_picking_status.sql
 
-\echo '--- 049 права на кассе и настройки скидок ---'
-\i db/migrations/049_pos_permissions.sql
+\echo '--- 050 права на кассе и настройки скидок ---'
+\i db/migrations/050_pos_permissions.sql
+
+\echo '--- 051 режим печати бумажного чека ---'
+\i db/migrations/051_receipt_print_mode.sql
 
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
