@@ -53,6 +53,26 @@ async function api(path, { method = 'GET', body, device = true } = {}) {
   loadPrinters();
 
   if (!S.deviceToken) { show('scr-setup'); return; }
+
+  // Права и настройки скидок приходят с сервера. Если связи нет —
+  // работаем по последним известным: касса не должна вставать из-за
+  // того, что не смогла спросить разрешения.
+  try {
+    const r = await K.posSettings();
+    if (r.ok && r.data) {
+      const p = r.data;
+      SET.actions = { act_refund: p.act_refund, act_refund_free: p.act_refund_free,
+        act_remove_item: p.act_remove_item, act_reduce_qty: p.act_reduce_qty,
+        act_discount: p.act_discount, act_price_change: p.act_price_change,
+        act_cash_out: p.act_cash_out };
+      SET.discountAllowed = p.discount_allowed;
+      SET.discountMaxPct = Number(p.discount_max_pct ?? 100);
+      SET.noPriceDown = p.no_price_down;
+      SET.receiptHeader = p.receipt_header;
+      SET.receiptFooter = p.receipt_footer;
+      await K.saveSettings(SET);
+    }
+  } catch { /* нет связи — работаем по сохранённым */ }
   if (!S.employee) { openPin(); return; }
   openSale();
   syncLoop();
@@ -274,7 +294,7 @@ function drawCart() {
         l.free ? '<span class="free-mark">без карточки</span>' : ''}${
         l.priceChanged ? '<span class="price-mark">цена изменена</span>' : ''}</div>
       <div class="qty">
-        <button data-m="${i}">−</button><span>${l.qty}</span><button data-p="${i}">+</button>
+        <button data-m="${i}">−</button><button class="qty-num" data-q="${i}">${l.qty}</button><button data-p="${i}">+</button>
       </div>
       <div class="sum">${money(sum)}</div>
       <button class="del" data-pr="${i}" title="Изменить цену">₸</button>
@@ -282,9 +302,20 @@ function drawCart() {
       <button class="del" data-d="${i}" title="Убрать позицию">✕</button>
     </div>`; }).join('') || '<p class="muted">Чек пуст. Выберите товар слева.</p>';
   $('cart').querySelectorAll('button').forEach((b) => {
-    b.onclick = () => {
+    b.onclick = async () => {
       if (b.dataset.p != null) cart[b.dataset.p].qty += 1;
-      if (b.dataset.m != null) { const l = cart[b.dataset.m]; l.qty -= 1; if (l.qty <= 0) cart.splice(b.dataset.m, 1); }
+      if (b.dataset.m != null) {
+        const l = cart[b.dataset.m];
+        // Уменьшение количества и удаление — те самые действия, которыми
+        // выносят деньги: пробил три, убрал одно, разницу забрал.
+        const code = l.qty <= 1 ? 'act_remove_item' : 'act_reduce_qty';
+        const ok = await allowAction(code, l.qty <= 1 ? 'Удаление позиции' : 'Уменьшение количества');
+        if (!ok) return;
+        l.qty -= 1;
+        if (l.qty <= 0) cart.splice(b.dataset.m, 1);
+        voids++;
+        logAction(code, { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+      }
       if (b.dataset.d != null) {
         // Первое касание взводит, второе убирает. Окна нет — очередь ждёт, —
         // но случайно смахнуть позицию локтем уже нельзя.
@@ -297,12 +328,32 @@ function drawCart() {
         cart.splice(b.dataset.d, 1);
         voids += 1; drawVoids();
       }
+      if (b.dataset.q != null) {
+        // БЫСТРЫЙ ВВОД КОЛИЧЕСТВА. «12 бутылок воды» — это двенадцать
+        // нажатий «плюс» или одно нажатие на цифру. Для весового товара
+        // иначе никак: 0,850 кг плюсами не наберёшь.
+        const l = cart[b.dataset.q];
+        const v = prompt(`Количество «${l.name}»:`, String(l.qty));
+        if (v !== null) {
+          const n = Number(String(v).replace(',', '.')) || 0;
+          if (n <= 0) { cart.splice(b.dataset.q, 1); }
+          else if (n < l.qty) {
+            // Уменьшение — то же действие, что «минус»: спрашиваем право.
+            const ok = await allowAction('act_reduce_qty', 'Уменьшение количества');
+            if (!ok) return;
+            l.qty = n;
+            logAction('act_reduce_qty', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+          } else l.qty = n;
+        }
+      }
       if (b.dataset.pr != null) {
         // ИЗМЕНЕНИЕ ЦЕНЫ. Разрешено только вверх, если владелец включил
         // запрет на снижение: снижение цены на кассе — самый тихий способ
         // отдать товар «своим» дешевле, и в отчётах это выглядит как
         // обычная продажа.
         const l = cart[b.dataset.pr];
+        const okp = await allowAction('act_price_change', 'Изменение цены');
+        if (!okp) return;
         const base = catalog.find((g) => g.id === l.productId)?.price ?? l.price;
         const v = prompt(`Цена «${l.name}»${SET.noPriceDown ? ' (снижать нельзя)' : ''}:`, String(l.price));
         if (v !== null) {
@@ -310,26 +361,44 @@ function drawCart() {
           if (np <= 0) return;
           if (SET.noPriceDown && np < base) { alert(`Снижать цену нельзя. В карточке ${money(base)}`); return; }
           l.price = np; l.priceChanged = np !== base;
+          if (np !== base) logAction('price_change', { productName: l.name, amount: np - base, approvedBy: okp.approvedBy });
         }
       }
       if (b.dataset.s != null) {
-        // Скидка на позицию действует только в этом чеке — как у UMAG.
         const l = cart[b.dataset.s];
-        const max = l.price * l.qty;
-        const v = prompt(`Скидка на «${l.name}» в тенге (не больше ${max}):`, String(l.discount || 0));
+        if (SET.discountAllowed === false) { alert('Владелец запретил скидки на кассе'); return; }
+        const ok = await allowAction('act_discount', 'Скидка');
+        if (!ok) return;
+        // Потолок скидки: запретить совсем — плохо, продавцу иногда нужно
+        // уступить сто тенге, чтобы не потерять покупателя. «До 15% можно,
+        // дальше зови администратора» — честнее и работает.
+        const base = l.price * l.qty;
+        const cap = Math.floor(base * (SET.discountMaxPct ?? 100) / 100);
+        const v = prompt(`Скидка на «${l.name}» в тенге (не больше ${cap}${
+          (SET.discountMaxPct ?? 100) < 100 ? `, это ${SET.discountMaxPct}% от цены` : ''}):`,
+          String(l.discount || 0));
         if (v !== null) {
-          const d = Math.max(0, Math.min(Number(v) || 0, max));
-          if (d > 0 && d !== (l.discount || 0)) { discounts += 1; drawVoids(); }
+          const d = Math.max(0, Math.min(Number(v) || 0, cap));
+          if (d > 0 && d !== (l.discount || 0)) {
+            discounts += 1; drawVoids();
+            logAction('discount', { productName: l.name, amount: d, approvedBy: ok.approvedBy });
+          }
           l.discount = d;
         }
       }
       drawCart();
     };
   });
-  const total = cart.reduce((s, l) => s + l.price * l.qty - (l.discount || 0), 0);
+  const total = cart.reduce((s, l) => s + l.price * l.qty - (l.discount || 0), 0) - cartDiscount;
   $('cartCount').textContent = cart.reduce((s, l) => s + l.qty, 0);
   $('cartTotal').textContent = money(total);
   $('btnPay').disabled = cart.length === 0;
+  $('btnDiscount').disabled = cart.length === 0;
+  // Скидка на чек видна прямо в итоге: продавец называет покупателю
+  // конечную сумму, и она должна совпадать с тем, что он видит.
+  const dEl = $('cartDiscountLine');
+  if (dEl) dEl.innerHTML = cartDiscount
+    ? `<span>Скидка на чек</span><b>−${money(cartDiscount)}</b>` : '';
 }
 $('btnClear').onclick = () => { cart = []; drawCart(); };
 
@@ -341,6 +410,37 @@ $('btnClear').onclick = () => { cart = []; drawCart(); };
  * Откладываем на диск, а не в память: касса может закрыться или
  * зависнуть, а покупатель вернётся.
  */
+/**
+ * ПРЕЧЕК (модель МоегоСклада) — список с суммой ДО оплаты.
+ *
+ * Покупатель набрал полную корзину и хочет посмотреть, что получилось,
+ * прежде чем платить. Без пречека кассир либо диктует вслух, либо
+ * пробивает чек и потом делает возврат — а возврат это след, который
+ * потом объясняй, и деньги, которые уже прошли через кассу.
+ *
+ * Не фискальный документ: печатается пометка, чтобы покупатель не принял
+ * его за чек и не ушёл без настоящего.
+ */
+$('btnPreReceipt').onclick = async () => {
+  if (!cart.length) return;
+  const items = cart.map((l) => ({
+    name: l.name, qty: l.qty, price: l.price,
+    total: l.price * l.qty - (l.discount || 0),
+  }));
+  const sub = items.reduce((a, b) => a + b.total, 0);
+  const disc = cartDiscount || 0;
+  const r = await K.print({
+    store: S.store?.name || 'Магазин',
+    address: SET.receiptHeader || undefined,
+    number: '—', date: new Date().toLocaleString('ru-RU'),
+    cashier: S.employee?.name || '',
+    items, discount: disc, total: sub - disc,
+    payments: [], isPreReceipt: true,
+    footer: 'ЭТО НЕ ЧЕК. Предварительный расчёт',
+  });
+  if (!r.ok) alert('Не удалось напечатать: ' + r.error);
+};
+
 $('btnPark').onclick = async () => {
   if (!cart.length) return;
   const parked = (await K.getState()).data.parked || [];
@@ -354,7 +454,7 @@ $('btnPark').onclick = async () => {
     S = (await K.saveState({ cashInDrawer: (S.cashInDrawer || 0) + got })).data;
   }
   drawTop();
-  cart = []; drawCart(); updateParkedCount();
+  cart = []; cartDiscount = 0; drawCart(); updateParkedCount();
 };
 
 $('btnParked').onclick = async () => {
@@ -420,8 +520,75 @@ async function updateParkedCount() {
 }
 
 // ── Оплата ───────────────────────────────────────────────────────────
+/**
+ * СКИДКА НА ВЕСЬ ЧЕК.
+ *
+ * Есть у всех троих конкурентов, у нас была только на позицию — и
+ * «скидка 10% постоянному покупателю» приходилось ставить построчно,
+ * по десять раз на чек.
+ *
+ * В тенге ИЛИ в процентах, как у МоегоСклада: продавец думает то так,
+ * то эдак — «уступлю пятьсот» и «скину десять процентов» это разные
+ * мысли, и заставлять пересчитывать в уме неправильно.
+ */
+let cartDiscount = 0;
+
+$('btnDiscount').onclick = async () => {
+  if (!cart.length) return;
+  if (SET.discountAllowed === false) { alert('Владелец запретил скидки на кассе'); return; }
+  const ok = await allowAction('act_discount', 'Скидка на чек');
+  if (!ok) return;
+
+  const base = cart.reduce((a, l) => a + l.price * l.qty - (l.discount || 0), 0);
+  const capPct = SET.discountMaxPct ?? 100;
+  const cap = Math.floor(base * capPct / 100);
+
+  openModal(`
+    <h2>Скидка на чек</h2>
+    <div class="muted">Сумма чека ${money(base)}${capPct < 100 ? ` · больше ${capPct}% нельзя` : ''}</div>
+    <div class="disc-tabs">
+      <button data-m="pct" class="on">Процентом</button>
+      <button data-m="sum">Суммой</button>
+    </div>
+    <input id="discVal" inputmode="numeric" value="" placeholder="0">
+    <div id="discPreview" class="disc-preview"></div>
+    <div class="err" id="discErr"></div>
+    <div class="modal-actions">
+      <button id="discOff">Убрать скидку</button>
+      <button id="discOk" class="primary big">Применить</button>
+    </div>`);
+
+  let mode = 'pct';
+  const calc = () => {
+    const v = Number($('discVal').value || 0);
+    const sum = mode === 'pct' ? Math.floor(base * v / 100) : v;
+    const capped = Math.min(sum, cap);
+    // Показываем и сумму скидки, и что останется заплатить: продавец
+    // называет покупателю итог, а не размер скидки.
+    $('discPreview').innerHTML = !v ? '' :
+      `<div>Скидка <b>${money(capped)}</b>${capped < sum ? ' <span class="warn">(больше нельзя)</span>' : ''}</div>
+       <div class="disc-total">К оплате ${money(base - capped)}</div>`;
+    return capped;
+  };
+  $('discVal').oninput = calc;
+  document.querySelectorAll('.disc-tabs button').forEach((b) => b.onclick = () => {
+    document.querySelectorAll('.disc-tabs button').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on'); mode = b.dataset.m; calc();
+  });
+  $('discOff').onclick = () => { cartDiscount = 0; closeModal(); drawCart(); };
+  $('discOk').onclick = () => {
+    const d = calc();
+    if (d <= 0) { $('discErr').textContent = 'Введите скидку'; return; }
+    cartDiscount = d;
+    discounts += 1; drawVoids();
+    logAction('discount', { productName: 'Скидка на чек', amount: d, approvedBy: ok.approvedBy });
+    closeModal(); drawCart();
+  };
+  setTimeout(() => $('discVal')?.focus(), 50);
+};
+
 $('btnPay').onclick = () => {
-  const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
+  const total = cart.reduce((s, l) => s + l.price * l.qty - (l.discount || 0), 0) - cartDiscount;
   openModal(`
     <h2>К оплате<span class="amount">${money(total)}</span></h2>
     <div class="pay-tabs">
@@ -429,6 +596,7 @@ $('btnPay').onclick = () => {
       <button data-w="card">Карта</button>
       <button data-w="mixed">Смешанно</button>
       <button data-w="credit">В долг</button>
+      <button data-w="bonus">Бонусы</button>
     </div>
     <div id="payBody"></div>
     <div class="err" id="payErr"></div>
@@ -444,6 +612,39 @@ $('btnPay').onclick = () => {
     else if (way === 'card') body.innerHTML = `<p class="muted">Проведите картой на терминале, затем нажмите «Пробить чек».</p>`;
     else if (way === 'mixed') body.innerHTML = `<label>Наличными</label><input id="pCash" inputmode="numeric" value="0">
       <label>Картой</label><input id="pCard" inputmode="numeric" value="${total}">`;
+    else if (way === 'bonus') {
+      // ОПЛАТА БОНУСАМИ. Программа лояльности у нас работает и клиенты
+      // копят — а потратить на кассе было нельзя. Это не отставание от
+      // конкурентов, а незаконченность: обещали и не дали.
+      //
+      // Сколько можно списать, решает сервер: у программы есть потолок
+      // (обычно половина чека), и считать его на кассе — значит завести
+      // второе место, где живёт то же правило.
+      body.innerHTML = `<label>Кто платит бонусами</label>
+        <select id="pBonusCust"><option value="">— выберите покупателя —</option>${
+          (S.customers || []).map((c) => `<option value="${c.id}" data-bal="${c.bonus || 0}">${
+            escapeHtml(c.name)}${c.bonus ? ` · ${money(c.bonus)} бонусов` : ' · нет бонусов'}</option>`).join('')
+        }</select>
+        <div id="bonusInfo" class="bonus-info"></div>`;
+      $('pBonusCust').onchange = async () => {
+        const id = $('pBonusCust').value;
+        if (!id) { $('bonusInfo').innerHTML = ''; return; }
+        $('bonusInfo').innerHTML = '<span class="muted">Считаю…</span>';
+        const r = await K.bonusSpendable(id, total);
+        const can = r.ok ? Number(r.data?.canSpend ?? 0) : 0;
+        $('bonusInfo').innerHTML = can > 0
+          ? `<div class="bonus-can">Можно списать <b>${money(can)}</b></div>
+             <label>Сколько списать</label>
+             <input id="pBonusSum" inputmode="numeric" value="${can}">
+             <div id="bonusRest" class="bonus-rest">Доплатить наличными: ${money(total - can)}</div>`
+          : `<div class="muted">${r.data?.reason || 'Списать нечего'}</div>`;
+        const inp = $('pBonusSum');
+        if (inp) inp.oninput = () => {
+          const v = Math.max(0, Math.min(Number(inp.value || 0), can));
+          $('bonusRest').textContent = 'Доплатить наличными: ' + money(total - v);
+        };
+      };
+    }
     else {
       // В ДОЛГ. Отпустить под запись можно только известному покупателю:
       // «долг Марату» без карточки клиента — это потерянные деньги, их
@@ -474,6 +675,15 @@ async function finishSale(way, total) {
   const cash = Number($('pCash')?.value || 0);
   const card = way === 'card' ? total : Number($('pCard')?.value || 0);
 
+  // Бонусы: списываем ровно столько, сколько разрешил сервер.
+  let bonusUsed = 0, bonusCustomer = null;
+  if (way === 'bonus') {
+    bonusCustomer = $('pBonusCust')?.value || '';
+    if (!bonusCustomer) { $('payErr').textContent = 'Выберите покупателя — бонусы лежат на его карточке'; return; }
+    bonusUsed = Number($('pBonusSum')?.value || 0);
+    if (bonusUsed <= 0) { $('payErr').textContent = 'Укажите, сколько бонусов списать'; return; }
+  }
+
   // В долг: деньги сейчас не приходят, приходит обязательство.
   let debtorId = null, debtorName = '';
   if (way === 'credit') {
@@ -492,19 +702,24 @@ async function finishSale(way, total) {
     store: S.store?.name || 'Магазин',
     cashier: S.employee?.name || '',
     items: cart.map((l) => ({ ...l, discount: l.discount || 0, total: l.price * l.qty - (l.discount || 0) })),
-    discount: cart.reduce((a, l) => a + (l.discount || 0), 0),
+    discount: cart.reduce((a, l) => a + (l.discount || 0), 0) + cartDiscount,
+    cartDiscount, bonusUsed,
     total,
     payments: way === 'cash' ? [{ label: 'Наличные', sum: cash }]
       : way === 'card' ? [{ label: 'Карта', sum: total }]
       : way === 'credit' ? [{ label: 'В долг: ' + debtorName, sum: total }]
+      : way === 'bonus' ? [{ label: 'Бонусами', sum: bonusUsed },
+                           ...(total - bonusUsed > 0 ? [{ label: 'Наличные', sum: total - bonusUsed }] : [])]
       : [{ label: 'Наличные', sum: cash }, { label: 'Карта', sum: card }],
-    customerId: debtorId || undefined,
+    customerId: debtorId || bonusCustomer || undefined,
     payment: way === 'credit' ? { credit: total } : undefined,
     change: (way === 'card' || way === 'credit') ? 0
       : Math.max(0, (way === 'cash' ? cash : cash + card) - total),
     // Ящик открываем только когда пришли наличные: при карте и долге
     // денег в кассе не прибавилось, и открывать его незачем.
-    hasCash: way === 'cash' || way === 'mixed',
+    // Ящик открываем, когда пришли наличные. При бонусах — только если
+    // была доплата: если бонусы покрыли всё, денег в ящике не прибавилось.
+    hasCash: way === 'cash' || way === 'mixed' || (way === 'bonus' && total - bonusUsed > 0),
   };
 
   // 1) Сначала сохраняем на диск — чек не должен зависеть от сети и печати.
@@ -582,6 +797,65 @@ $('btnShift').onclick = () => {
  * ради красоты — в отчёте по смене они считаются по-разному: изъятие
  * это расход, инкассация это передача денег дальше.
  */
+/**
+ * РАЗРЕШЕНИЕ ДЕЙСТВИЯ (модель UMAG, доведённая).
+ *
+ * Владелец задаёт для каждого опасного действия: доступно всем, только
+ * администратору или никому. Если кассиру нельзя — касса не отказывает,
+ * а просит PIN администратора ПРЯМО ЗДЕСЬ, не прерывая работу.
+ *
+ * Почему это лучше запрета: кассир не заблокирован и очередь не стоит,
+ * но действие сделано с чужого ведома и попало в журнал с двумя именами
+ * — кто сделал и кто разрешил.
+ *
+ * Возвращает: null — нельзя вовсе; { approvedBy } — можно (пусто, если
+ * разрешено всем).
+ */
+async function allowAction(code, title) {
+  const level = (SET.actions || {})[code] || 'everyone';
+  if (level === 'everyone') return { approvedBy: null };
+  if (level === 'nobody') { alert(`${title}: владелец запретил это действие`); return null; }
+
+  // admin_only — спрашиваем PIN
+  return new Promise((resolve) => {
+    openModal(`
+      <h2>Нужно разрешение</h2>
+      <p class="muted">«${title}» — только с разрешения администратора.<br>
+      Позовите его: он введёт свой PIN, и вы продолжите.</p>
+      <div class="dots" id="apDots"></div>
+      <div class="err" id="apErr"></div>
+      <div class="keypad" id="apPad"></div>
+      <div class="modal-actions"><button id="apCancel">Отмена</button></div>`);
+
+    let pin = '';
+    const draw = () => $('apDots').innerHTML = [0,1,2,3].map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
+    draw();
+    const pad = $('apPad'); pad.innerHTML = '';
+    for (const d of ['1','2','3','4','5','6','7','8','9','C','0','←']) {
+      const b = document.createElement('button');
+      b.textContent = d;
+      b.onclick = async () => {
+        if (d === 'C') pin = '';
+        else if (d === '←') pin = pin.slice(0, -1);
+        else if (pin.length < 4) pin += d;
+        draw();
+        if (pin.length === 4) {
+          const r = await K.approve(pin);
+          if (r.ok && r.data?.ok) { closeModal(); resolve({ approvedBy: r.data.employeeId, approvedName: r.data.name }); }
+          else { $('apErr').textContent = r.data?.reason || 'PIN не подошёл'; pin = ''; draw(); }
+        }
+      };
+      pad.appendChild(b);
+    }
+    $('apCancel').onclick = () => { closeModal(); resolve(null); };
+  });
+}
+
+/** Запись значимого действия в журнал: кто сделал, кто разрешил. */
+async function logAction(action, extra = {}) {
+  await K.logAction({ action, shiftId: S.shift?.id, employeeId: S.employee?.id, ...extra });
+}
+
 /**
  * ТОВАР БЕЗ КАРТОЧКИ — пробить по цене.
  *

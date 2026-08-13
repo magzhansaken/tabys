@@ -149,7 +149,8 @@ function buildReceipt(d, width) {
   if (d.address) center(d.address);
   if (d.bin) center('БИН/ИИН: ' + d.bin);
   line('-'.repeat(width));
-  line(pad(d.isRefund ? 'ВОЗВРАТ' : 'ЧЕК № ' + (d.number ?? '—'), d.date || '', width));
+  line(pad(d.isPreReceipt ? 'ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ'
+    : d.isRefund ? 'ВОЗВРАТ' : 'ЧЕК № ' + (d.number ?? '—'), d.date || '', width));
   if (d.cashier) line('Кассир: ' + d.cashier);
   line('-'.repeat(width));
 
@@ -171,8 +172,19 @@ function buildReceipt(d, width) {
   if (d.change) line(pad('Сдача', money(d.change), width));
 
   line('-'.repeat(width));
+  if (d.isPreReceipt) {
+    // Крупно и по центру: покупатель не должен принять пречек за чек и
+    // уйти без настоящего — а магазин остаться без фискального документа.
+    b.push(ESC, 0x45, 1);
+    center('ЭТО НЕ ЧЕК');
+    b.push(ESC, 0x45, 0);
+    center('Предварительный расчёт');
+  }
   if (d.offline) center('Чек сохранён, отправка при связи');
-  center('Спасибо за покупку!');
+  // На пречеке прощального текста нет: покупатель ещё ничего не купил,
+  // и «спасибо за покупку» на предварительном расчёте сбивает с толку —
+  // человек решает, что чек уже пробит.
+  if (!d.isPreReceipt) center(d.footer ?? 'Спасибо за покупку!');
   center('Табыс');
   line(); line(); line();
   b.push(GS, 0x56, 0x00);       // отрез ленты

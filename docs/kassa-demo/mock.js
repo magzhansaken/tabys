@@ -46,4 +46,17 @@ window.kassa = {
   updateDownload: () => wrap({}),
   updateInstall: () => wrap(true),
   onUpdateProgress: () => {},
+  // права на кассе, журнал, бонусы
+  approve: (pin) => wrap(pin === '3333'
+    ? { ok: true, employeeId: 'a1', name: 'Динара' }
+    : { ok: false, reason: 'PIN не подошёл. Нужен PIN администратора' }),
+  logAction: () => wrap({ ok: true }),
+  posSettings: () => wrap({
+    act_refund: 'everyone', act_refund_free: 'admin_only',
+    act_remove_item: 'everyone', act_reduce_qty: 'everyone',
+    act_discount: 'everyone', act_price_change: 'admin_only', act_cash_out: 'admin_only',
+    discount_allowed: true, discount_max_pct: 15, no_price_down: true,
+    receipt_header: 'Магазин Береке · ул. Абая 15', receipt_footer: 'Спасибо за покупку!',
+  }),
+  bonusSpendable: (id, total) => wrap({ canSpend: Math.floor(total * 0.5), reason: null }),
 };

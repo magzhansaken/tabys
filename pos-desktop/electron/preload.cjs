@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('kassa', {
 
   version: () => call('app:version'),
 
+  // права на кассе, журнал действий, бонусы
+  approve: (pin) => call('pos:approve', pin),
+  logAction: (d) => call('pos:log', d),
+  bonusSpendable: (customerId, total) => call('pos:bonus-spendable', { customerId, total }),
+  posSettings: () => call('pos:settings'),
+
   // обновление кассы
   updateCheck: () => call('update:check'),
   updateDownload: () => call('update:download'),

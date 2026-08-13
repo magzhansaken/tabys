@@ -99,11 +99,14 @@
       <div id="cart" class="cart"></div>
       <div class="totals">
         <div class="row"><span>Позиций</span><b id="cartCount">0</b></div>
+        <div class="row" id="cartDiscountLine"></div>
         <div class="row total"><span>ИТОГО</span><b id="cartTotal">0 ₸</b></div>
       </div>
+      <button id="btnDiscount" class="wide-action" disabled>Скидка на чек</button>
       <button id="btnPay" class="primary big" disabled>ОПЛАТА</button>
       <div class="cart-actions">
         <button id="btnFree" title="Пробить товар, которого нет в каталоге">Без карточки</button>
+        <button id="btnPreReceipt" title="Показать покупателю сумму до оплаты">Пречек</button>
         <button id="btnPark">Отложить</button>
         <button id="btnParked">Отложенные</button>
         <button id="btnClear">Очистить</button>

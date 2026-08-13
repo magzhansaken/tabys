@@ -114,5 +114,8 @@
 \echo '--- 049 единые статусы листа отбора ---'
 \i db/migrations/049_picking_status.sql
 
+\echo '--- 049 права на кассе и настройки скидок ---'
+\i db/migrations/049_pos_permissions.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

@@ -420,3 +420,44 @@ summary { font-size: 17px; color: var(--dim); cursor: pointer; min-height: 44px;
 .diff .ok { color: var(--accent-soft); }
 .diff .warn { color: var(--gold); }
 .diff .bad { color: var(--red); }
+
+/* ═══ Скидка на чек, бонусы, подтверждение администратора ═══ */
+.wide-action {
+  width: 100%; min-height: 56px; font-size: 17px; margin-bottom: 8px;
+  border-style: dashed;
+}
+.disc-tabs { display: flex; gap: 8px; margin: 12px 0 8px; }
+.disc-tabs button { flex: 1; min-height: 52px; font-size: 17px; }
+.disc-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.disc-preview { min-height: 72px; margin: 10px 0; font-size: 17px; }
+.disc-preview b { font-variant-numeric: tabular-nums; }
+.disc-preview .warn { color: var(--gold); font-size: 14px; }
+.disc-total {
+  font-size: 30px; font-weight: 600; color: var(--accent-soft);
+  font-variant-numeric: tabular-nums; margin-top: 6px;
+}
+
+/* Бонусы: сколько можно списать и сколько доплатить */
+.bonus-info { margin-top: 12px; }
+.bonus-can { font-size: 19px; margin-bottom: 10px; }
+.bonus-can b { color: var(--gold); font-variant-numeric: tabular-nums; }
+.bonus-rest {
+  font-size: 22px; font-weight: 600; margin-top: 8px;
+  color: var(--accent-soft); font-variant-numeric: tabular-nums;
+}
+
+/* Скидка на чек в итоге — видна рядом с суммой */
+#cartDiscountLine:not(:empty) { color: var(--gold); }
+#cartDiscountLine b { font-variant-numeric: tabular-nums; }
+
+/* Количество нажимается — открывается ввод числа.
+   Выглядит как число, а не как кнопка: кассир и так поймёт, что на него
+   можно нажать, а лишняя рамка между «минусом» и «плюсом» сбивает
+   прицел — а промах здесь самая дорогая опечатка. */
+.qty .qty-num {
+  min-width: 52px; min-height: 52px; padding: 0;
+  background: transparent; border: 1px solid transparent;
+  font-size: 22px; font-weight: 600; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.qty .qty-num:hover { border-color: var(--line); background: var(--raised); }

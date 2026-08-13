@@ -101,6 +101,25 @@ ipcMain.handle('print:diagnostic', safe(async () => printDiagnostic()));
 
 ipcMain.handle('app:version', safe(async () => app.getVersion()));
 
+// Обращения к серверу, которым нужен токен устройства. Идут из главного
+// процесса, а не со страницы: токен не должен попадать в код экранов.
+const srv = async (path, opts = {}) => {
+  const s = store.readSettings(), st = store.readState();
+  const r = await fetch(s.apiUrl.replace(/\/$/, '') + path, {
+    method: opts.method ?? 'GET',
+    headers: { 'Content-Type': 'application/json', 'X-Device-Token': st.deviceToken ?? '' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(12000),
+  });
+  return r.json();
+};
+
+ipcMain.handle('pos:approve', safe(async (_e, pin) => srv('/pos/settings/approve', { method: 'POST', body: { pin } })));
+ipcMain.handle('pos:log', safe(async (_e, d) => srv('/pos/settings/log', { method: 'POST', body: d })));
+ipcMain.handle('pos:settings', safe(async () => srv('/pos/settings')));
+ipcMain.handle('pos:bonus-spendable', safe(async (_e, d) =>
+  srv(`/pos/bonus/spendable?customerId=${encodeURIComponent(d.customerId)}&total=${d.total}`)));
+
 // Обновление. Ход скачивания шлём на страницу, чтобы полоса двигалась:
 // молчащая полоса на файле в сотни мегабайт выглядит как зависание.
 ipcMain.handle('update:check', safe(async () => updater.check()));
