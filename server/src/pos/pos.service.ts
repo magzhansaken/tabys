@@ -4,7 +4,6 @@ import { DbService } from '../db/db.service';
 import { SyncService } from '../sync/sync.service';
 import { GoodsService } from '../goods/goods.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { MarkingService } from '../marking/marking.module';
 
 /**
  * КАССА.
@@ -28,7 +27,7 @@ export interface PaymentInput { method: PayMethod; amount: number; received?: nu
 @Injectable()
 export class PosService {
   constructor(private db: DbService, private goods: GoodsService, private sync?: SyncService,
-              private loyalty?: LoyaltyService, private marking?: MarkingService) {
+              private loyalty?: LoyaltyService) {
     // Регистрируем обработчики офлайн-событий кассы. В 1.3 карта сущностей была
     // заготовкой с пометкой «Части 2–4 дописывают сюда sale» — вот это дописывание.
     if (sync) {
