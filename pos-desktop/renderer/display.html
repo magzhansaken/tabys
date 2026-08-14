@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Табыс · дисплей покупателя</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/*
+  ДИСПЛЕЙ ПОКУПАТЕЛЯ — отдельная страница той же кассы.
+
+  Почему отдельной страницей, а не частью экрана продажи: в программе
+  второго окна нет, поддержка второго монитора не написана. Отдельная
+  страница открывается кнопкой и переносится на второй монитор
+  средствами Windows — работает без доработок в electron/.
+
+  Читает то, что касса кладёт рядом (сообщение окну и localStorage), сама
+  ничего не считает и никуда не пишет: если дисплей закрыть или уронить,
+  на продаже это не отражается никак.
+
+  Смотрят на него из-за прилавка, с полутора-двух метров: цифры здесь
+  крупнее кассовых.
+*/
+body { user-select: none; }
+.disp { height: 100vh; display: flex; flex-direction: column; padding: 28px 32px; gap: 14px; background: #0E1310; }
+.shop { font-size: 20px; color: var(--faint); }
+.lines { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+.dl { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; font-size: 24px; }
+.dl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl small { color: var(--dim); font-size: 19px; margin-left: 8px; }
+.dl b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.idle { flex: 1; display: grid; place-items: center; font-size: 30px; color: var(--faint); text-align: center; line-height: 1.4; }
+.foot { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.big { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.big span { font-size: 24px; color: var(--dim); letter-spacing: .02em; }
+.big b { font-size: 92px; font-weight: 600; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.chg { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.chg span { font-size: 22px; color: var(--dim); letter-spacing: .02em; }
+.chg b { font-size: 58px; font-weight: 600; line-height: 1.05; color: var(--accent); font-variant-numeric: tabular-nums; }
+.note { font-size: 19px; color: var(--gold); min-height: 24px; }
+</style>
+</head>
+<body>
+<div class="disp">
+  <div class="shop" id="dShop">Табыс</div>
+  <div class="lines" id="dLines"></div>
+  <div class="idle" id="dIdle">Добро пожаловать</div>
+  <div class="foot">
+    <div class="big"><span>К ОПЛАТЕ</span><b id="dTotal">0 ₸</b></div>
+    <div class="chg hidden" id="dChangeRow"><span id="dChangeLabel">СДАЧА</span><b id="dChange">0 ₸</b></div>
+    <div class="note" id="dNote"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (n) => {
+  const v = Number(n || 0);
+  const s = Number.isInteger(v) ? String(v) : v.toFixed(2);
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',') + ' ₸';
+};
+const qtyStr = (q) => (Number(q) % 1 ? Number(q).toFixed(3).replace('.', ',') : String(q));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+let last = '';
+function draw(d) {
+  if (!d) return;
+  $('dShop').textContent = d.shop || 'Табыс';
+  const items = d.items || [];
+  $('dLines').innerHTML = items.slice(-7).map((l) => `
+    <div class="dl">
+      <span>${esc(l.name)}<small>${qtyStr(l.qty)} × ${money(l.price)}</small></span>
+      <b>${money(l.total)}</b>
+    </div>`).join('');
+  $('dLines').classList.toggle('hidden', items.length === 0);
+  $('dIdle').classList.toggle('hidden', items.length > 0);
+  $('dTotal').textContent = money(d.total || 0);
+  const showChange = !!d.paying && d.change != null;
+  $('dChangeRow').classList.toggle('hidden', !showChange);
+  $('dChangeLabel').textContent = d.changeLabel || 'СДАЧА';
+  $('dChange').textContent = money(d.change || 0);
+  $('dNote').textContent = d.note || '';
+}
+
+// Касса присылает состояние прямо в это окно; localStorage — запасной
+// путь, если окно открыли отдельно.
+window.addEventListener('message', (e) => { if (e.data && e.data.tabysDisplay) draw(e.data.tabysDisplay); });
+setInterval(() => {
+  try {
+    const raw = localStorage.getItem('tabys.display');
+    if (raw && raw !== last) { last = raw; draw(JSON.parse(raw)); }
+  } catch { /* localStorage может быть недоступен — тогда работает сообщение окну */ }
+}, 300);
+</script>
+</body>
+</html>

@@ -7,12 +7,27 @@
 </head>
 <body>
 <!--
-  Экраны кассы. Один файл разметки, экраны переключаются показом/скрытием —
-  без загрузчиков и сборщиков. Это сознательно: у соседнего проекта белый
-  экран после установки стоил часов, и причиной был именно сборщик,
-  который просил файлы по неверному пути. Тут просить нечего.
+  Касса «Табыс», раскладка v2 — «цифровая полоса».
 
-  Шрифт лежит рядом, в fonts/ — касса работает без интернета, и внешних
+  Один файл разметки, экраны переключаются показом/скрытием — без
+  загрузчиков и сборщиков. Это сознательно: у соседнего проекта белый экран
+  после установки стоил часов, и причиной был сборщик, просивший файлы по
+  неверному пути. Тут просить нечего.
+
+  Три решения раскладки, из которых следует всё остальное:
+
+  1. ЦИФРЫ ВСЕГДА НА ОДНОМ МЕСТЕ — правая колонка. Одна клавиатура на
+     количество, на сумму без товара и на оплату. Не выезжает и не
+     прячется: кассир не ищет её заново каждый раз.
+
+  2. ОПЛАТА БЕЗ ОКНА. Каталог слева превращается в способы оплаты, чек
+     остаётся на экране, «ЧЕК ✓» встаёт точно туда, где была «ОПЛАТА».
+     Палец не переезжает — через две недели оплата идёт не глядя.
+
+  3. ВСЁ РЕДКОЕ — ЛИСТОМ СНИЗУ. Смена, деньги, возвраты, настройки
+     выезжают снизу, ближе к пальцу, и не закрывают чек целиком.
+
+  Шрифт лежит рядом, в fonts/ — касса работает без интернета, внешних
   запросов здесь нет ни одного.
 -->
 
@@ -56,69 +71,125 @@
 <!-- ЭКРАН 3: продажа -->
 <section id="scr-sale" class="screen hidden">
   <!--
-    В шапке всё, что должно быть видно всегда: открыта ли смена (без этого
-    продавать нельзя), кто за кассой (пересменка), есть ли связь и сколько
-    чеков не отправлено, номер текущего чека. Плюс счётчик отмен за смену —
-    он ничего не спрашивает и не тормозит, но лишает отмену незаметности.
+    Шапка сокращена до двух кнопок: «Цена» жмут при покупателе несколько
+    раз в день, «Меню» — всё остальное. Шесть кнопок в ряд, из которых
+    половина нужна раз в смену, стоили внимания там, где его и так мало.
+
+    Слева то, что должно быть видно всегда: открыта ли смена, сколько
+    наличных в ящике, кто за кассой. Справа — состояние связи, номер чека,
+    счётчик отмен и скидок за смену и «не отправлено: N».
   -->
   <header class="topbar">
-    <div>
-      <b id="shiftLabel">Смена не открыта</b>
-      <span id="cashLabel"></span>
-      <span class="muted" id="cashierLabel"></span>
-    </div>
-    <div class="right">
-      <span class="muted" id="receiptLabel"></span>
-      <span id="voidLabel" class="hidden" title="Отмены и скидки за смену"></span>
-      <span id="syncDot" class="dot" title="Связь с сервером"></span>
-      <span class="muted" id="pendingLabel"></span>
-      <button id="btnPrice" title="Узнать цену, не начиная чек">Цена</button>
-      <button id="btnCash" title="Внести, изъять, сдать выручку">Касса</button>
-      <button id="btnShift">Смена</button>
-      <button id="btnRefund">Возврат</button>
-      <button id="btnLogout">Выход</button>
-    </div>
+    <span id="syncDot" class="dot" title="Связь с сервером"></span>
+    <b id="shiftLabel">Смена не открыта</b>
+    <span id="cashLabel"></span>
+    <span class="muted" id="cashierLabel"></span>
+    <span class="grow"></span>
+    <span class="muted" id="receiptLabel"></span>
+    <span id="voidLabel" class="hidden" title="Отмены и скидки за смену"></span>
+    <span class="muted" id="pendingLabel" title="Чеки, которые ещё не ушли на сервер"></span>
+    <span id="offlineLabel" class="hidden" title="Автономно касса работает до трёх суток"></span>
+    <button id="btnPrice" title="Узнать цену, не начиная чек">Цена</button>
+    <button id="btnMenu">Меню</button>
   </header>
 
   <div class="sale">
-    <div class="left">
-      <!--
-        Быстрые товары — над поиском. Сигареты, пакеты, вода, жвачка идут
-        по сто раз в день, и искать их поиском каждый раз — сто лишних
-        действий за смену. Группы переключаются в одну строку; если товаров
-        больше, чем помещается, строка едет вбок, но плитки не мельчают.
-      -->
-      <div class="quick" id="quick">
-        <div class="quick-tabs" id="quickTabs"></div>
-        <div class="quick-grid" id="quickGrid"></div>
+
+    <!-- ЛЕВО: каталог, а во время оплаты — способы оплаты и номиналы -->
+    <div class="col col-left">
+      <div id="catalogPane" class="pane">
+        <div class="searchrow">
+          <input id="search" placeholder="Поиск или штрихкод" autofocus>
+        </div>
+        <!--
+          Категории плитками, слитые с каталогом: один список вместо двух.
+          Кассир не должен помнить, в «быстрых товарах» лежит вода или в
+          «поиске по каталогу». Первая вкладка — ходовое, дальше категории
+          из кабинета.
+        -->
+        <div id="catTabs" class="tabs"></div>
+        <div id="goods" class="goods"></div>
       </div>
-      <input id="search" placeholder="Поиск товара или сканируйте штрихкод" autofocus>
-      <div id="goods" class="goods"></div>
+      <div id="payPane" class="pane hidden"></div>
     </div>
-    <div class="rightpane">
+
+    <!-- ЦЕНТР: чек. Не закрывается ничем, в том числе во время оплаты -->
+    <div class="col col-cart">
       <div id="cart" class="cart"></div>
+      <!--
+        Маркировка. С 1 февраля 2026 пиво, а табак уже давно, продаются только с
+        отсканированным кодом Data Matrix, и код должен уйти в чеке в ОФД.
+        Код уникален на каждую штуку: две бутылки — два кода.
+
+        Здесь полоса говорит, сколько марок ещё ждёт чек — на том же месте, где
+        кассир смотрит итог. Закрыть чек без марок нельзя: штраф выпишут
+        без жалобы покупателя — все чеки и так в КГД.
+      -->
+      <div class="markbar hidden" id="markBar"></div>
       <div class="totals">
-        <div class="row"><span>Позиций</span><b id="cartCount">0</b></div>
         <div class="row" id="cartDiscountLine"></div>
-        <div class="row total"><span>ИТОГО</span><b id="cartTotal">0 ₸</b></div>
+        <!--
+          Подпись над числом, а не рядом: шестизначный итог (128 811,60 ₸)
+          вместе с подписью в 384 px не встаёт, а уменьшать сумму нельзя —
+          её читают под углом и произносят вслух.
+        -->
+        <div class="total-box">
+          <div class="lbl">ИТОГО · <span id="cartCount">0</span> поз.</div>
+          <div class="val" id="cartTotal">0 ₸</div>
+        </div>
+        <!--
+          Сдача подписана словом: под углом с метра голое число читается
+          как сумма к оплате, и кассир отдаёт не то.
+        -->
+        <div class="change-box hidden" id="changeRow">
+          <div class="lbl" id="changeLabel">СДАЧА</div>
+          <div class="val" id="change">0 ₸</div>
+        </div>
       </div>
-      <button id="btnDiscount" class="wide-action" disabled>Скидка на чек</button>
-      <button id="btnPay" class="primary big" disabled>ОПЛАТА</button>
       <div class="cart-actions">
-        <button id="btnFree" title="Пробить товар, которого нет в каталоге">Без карточки</button>
         <button id="btnPreReceipt" title="Показать покупателю сумму до оплаты">Пречек</button>
-        <button id="btnPark">Отложить</button>
-        <button id="btnParked">Отложенные</button>
-        <button id="btnClear">Очистить</button>
+        <button id="btnMore">Ещё</button>
       </div>
     </div>
+
+    <!-- ПРАВО: цифры. Никогда не меняют места -->
+    <div class="col col-pad">
+      <div class="ctx">
+        <div class="ctx-label" id="padLabel">Количество</div>
+        <div class="ctx-value" id="padValue">—</div>
+      </div>
+      <div class="modes" id="padModes"></div>
+      <div class="pad" id="pad"></div>
+      <button id="btnPay" class="primary pay" disabled>ОПЛАТА</button>
+      <div class="pad-hint hidden" id="padHint"></div>
+    </div>
+
+  </div>
+
+  <!--
+    Действия, у которых своя логика в app.js, но нет своего места в шапке:
+    их открывают листы «Меню» и «Ещё». Кнопки остаются здесь, чтобы
+    обработчики и права работали в точности как раньше.
+  -->
+  <div class="hidden-actions" hidden>
+    <button id="btnShift"></button>
+    <button id="btnCash"></button>
+    <button id="btnRefund"></button>
+    <button id="btnFree"></button>
+    <button id="btnPark"></button>
+    <button id="btnParked"></button>
+    <button id="btnClear"></button>
+    <button id="btnDiscount"></button>
+    <button id="btnLogout"></button>
   </div>
 </section>
 
-<!-- Всплывающее окно оплаты -->
+<!-- Лист снизу: смена, деньги, возвраты, настройки, подтверждение админа -->
 <div id="modal" class="modal hidden">
   <div class="modal-card" id="modalBody"></div>
 </div>
+
+<div id="toast" class="toast hidden"></div>
 
 <script src="app.js"></script>
 </body>
