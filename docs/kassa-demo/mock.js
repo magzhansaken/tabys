@@ -45,6 +45,17 @@ window.kassa = {
   updateCheck: () => wrap({ available:false }),
   updateDownload: () => wrap({}),
   updateInstall: () => wrap(true),
+  // Журнал действий за смену — для показа при пересменке.
+  logRead: () => wrap([
+    { action: 'act_remove_item', product: 'Молоко Айран 1л', amount: 480,
+      at: new Date(Date.now() - 40 * 60000).toISOString(), employee: 'Асель', approvedBy: 'Ерлан' },
+    { action: 'act_discount', product: 'Кофе Латте', amount: 200,
+      at: new Date(Date.now() - 95 * 60000).toISOString(), employee: 'Асель', approvedBy: null },
+  ]),
+  // Отправка чека на телефон: в рабочей кассе идёт через СМС-шлюз.
+  // В заглушке отвечаем отказом — так видно, как касса ведёт себя,
+  // когда шлюз не подключён у клиента.
+  receiptSend: () => Promise.resolve({ ok: false, error: 'СМС-шлюз не подключён' }),
   onUpdateProgress: () => {},
   // права на кассе, журнал, бонусы
   approve: (pin) => wrap(pin === '3333'

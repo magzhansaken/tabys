@@ -1,79 +1,56 @@
 /*
-  Касса «Табыс».
+  Касса «Табыс», раскладка v2 — «цифровая полоса».
 
   Это НЕ кабинет. Кабинет открывает владелец — сидя, чтобы разобраться.
   Кассу открывает продавец — стоя, десять часов, с очередью за спиной.
   Отсюда все решения ниже.
 
-  1. ТЁМНЫЙ ФОН ОСТАВЛЕН. Свет в магазине бывает любой: то солнце в экран,
-     то полумрак. Тёмный экран меньше слепит и меньше бликует. Но цвета —
-     из семьи кабинета: тот же изумруд и золото, только осветлённые под
+  1. ТЁМНЫЙ ФОН. Свет в магазине бывает любой: то солнце в экран, то
+     полумрак. Тёмный экран меньше слепит и меньше бликует. Цвета — из
+     семьи кабинета: тот же изумруд и золото, только осветлённые под
      тёмный фон, иначе на нём они превращаются в грязь.
 
   2. РАССТОЯНИЕ ДО ЭКРАНА 80–100 СМ, вдвое больше, чем до телефона, и
-     придвинуть нельзя — на прилавке нет места. Поэтому размеры здесь
-     крупнее кабинетных примерно вдвое, а не «как на планшете».
+     придвинуть нельзя — на прилавке нет места. Размеры здесь крупнее
+     кабинетных примерно вдвое, а не «как на планшете».
 
   3. НИЧЕГО НЕ ДВИГАЕТСЯ И НЕ ПЛЫВЁТ. Через две-три недели работа идёт на
      автомате, палец сам идёт в нужное место. Переходы, тени при наведении
-     и смещения кнопок ломают эту привычку, поэтому их тут нет. Единственная
-     анимация — мгновенная подсветка нажатия, она нужна как подтверждение.
+     и смещения кнопок ломают эту привычку, поэтому их тут нет.
+     Единственная анимация — мгновенная подсветка нажатия и выезд листа
+     снизу, чтобы было видно, откуда он взялся.
 
   4. ЭКРАН 1092×614 (1366×768 при масштабе 125%). Вся раскладка считает
-     высоту от него, а не от ноутбучной.
+     высоту от него: шапка 52, остальное 562. Три колонки — 372 каталог,
+     384 чек, 336 цифры.
 
   Шрифт лежит рядом: касса работает без интернета, внешних запросов нет.
 */
 
-@font-face {
-  font-family: 'Plex';
-  src: url('fonts/IBMPlexSans-Regular.woff2') format('woff2');
-  font-weight: 400; font-display: block;
-}
-@font-face {
-  font-family: 'Plex';
-  src: url('fonts/IBMPlexSans-Medium.woff2') format('woff2');
-  font-weight: 500; font-display: block;
-}
-@font-face {
-  font-family: 'Plex';
-  src: url('fonts/IBMPlexSans-SemiBold.woff2') format('woff2');
-  font-weight: 600; font-display: block;
-}
-@font-face {
-  font-family: 'PlexMono';
-  src: url('fonts/IBMPlexMono-Medium.woff2') format('woff2');
-  font-weight: 500; font-display: block;
-}
+@font-face { font-family:'Plex'; src:url('fonts/IBMPlexSans-Regular.woff2') format('woff2'); font-weight:400; font-display:block; }
+@font-face { font-family:'Plex'; src:url('fonts/IBMPlexSans-Medium.woff2') format('woff2'); font-weight:500; font-display:block; }
+@font-face { font-family:'Plex'; src:url('fonts/IBMPlexSans-SemiBold.woff2') format('woff2'); font-weight:600; font-display:block; }
+@font-face { font-family:'PlexMono'; src:url('fonts/IBMPlexMono-Medium.woff2') format('woff2'); font-weight:500; font-display:block; }
 
 :root {
-  /* Фон и поверхности: тёплый почти-чёрный, из той же семьи, что тёплый
-     почти-белый кабинета. Холодный серый рядом с изумрудом выглядит грязно. */
   --bg:      #121714;
   --surface: #1A211D;
   --raised:  #232C27;
   --line:    #2F3A34;
   --line-2:  #3D4A43;
 
-  /* Текст. Три уровня, не больше: четвёртый оттенок серого в полумраке
-     пропадает совсем. */
-  --text:    #F1F4F1;
-  --dim:     #A3AFA8;
-  --faint:   #77837C;
+  --text:  #F1F4F1;
+  --dim:   #A3AFA8;
+  --faint: #77837C;
 
-  /* Изумруд кабинета (#0B6B4F) на тёмном не читается — осветлён.
-     Заливка кнопок остаётся насыщенной, текст и рамки светлее. */
   --accent:      #12A06A;
   --accent-fill: #0E7D5B;
   --accent-soft: #16281F;
 
-  /* Золото — только быстрые товары и предупреждения. Как в кабинете:
-     заливки и рамки, текстом — светлый оттенок. */
   --gold:      #D9A441;
   --gold-fill: #B8863B;
   --gold-soft: #2A2418;
 
-  /* Красный — деньги, которых нет: отмена, возврат, недостача. */
   --red:      #F0776A;
   --red-fill: #A32C1E;
   --red-soft: #2A1815;
@@ -87,20 +64,21 @@ html, body {
   font-family: 'Plex', system-ui, sans-serif;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;                 /* касса не прокручивается целиком */
-  user-select: none;                /* случайное выделение при быстрых нажатиях */
+  overflow: hidden;              /* касса не прокручивается целиком */
+  user-select: none;             /* случайное выделение при быстрых нажатиях */
 }
 
 .screen { height: 100vh; display: flex; flex-direction: column; }
-.hidden { display: none !important; }
+.hidden, .hidden-actions { display: none !important; }
 .muted  { color: var(--dim); }
-.err    { color: var(--red); font-size: 17px; line-height: 1.45; min-height: 22px; margin: 8px 0 0; }
+.grow   { flex: 1; }
+.err    { color: var(--red); font-size: 17px; line-height: 1.4; min-height: 22px; margin: 6px 0 0; }
 b, strong { font-weight: 600; }
 
 /* ─── Кнопки ──────────────────────────────────────────────────────────
    Высота 56 — минимум для быстрых нажатий стоя. Активное состояние
-   меняет цвет мгновенно, без перехода: задержка читается как «не нажалось»
-   и человек жмёт второй раз. */
+   меняет цвет мгновенно, без перехода: задержка читается как «не
+   нажалось», и человек жмёт второй раз. */
 button {
   font-family: inherit; font-size: 18px; font-weight: 500;
   min-height: 56px; padding: 0 20px;
@@ -110,18 +88,12 @@ button {
 }
 button:active { background: var(--line); }
 button:disabled { opacity: .38; cursor: default; }
-
-button.primary {
-  background: var(--accent-fill); border-color: var(--accent-fill); color: #fff;
-}
+button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
 button.primary:active { background: var(--accent); }
 button.big { min-height: 72px; font-size: 22px; font-weight: 600; }
 button.danger { color: var(--red); border-color: #5A2A24; }
 button.danger:active { background: var(--red-soft); }
 
-/* ─── Поля ────────────────────────────────────────────────────────────
-   Крупнее кабинетных: в поиск попадают штрихкодом со сканера, но
-   набирают и руками, глядя на клавиатуру, а не на экран. */
 input, select {
   font-family: inherit; font-size: 20px;
   height: 60px; width: 100%; padding: 0 16px;
@@ -131,354 +103,402 @@ input, select {
 }
 input:focus, select:focus { border-color: var(--accent); }
 input::placeholder { color: var(--faint); }
-label {
-  display: block; font-size: 15px; color: var(--dim);
-  margin: 14px 0 6px;
-}
+label { display: block; font-size: 15px; color: var(--dim); margin: 14px 0 6px; }
 
-/* ─── Экран 1: настройка ─────────────────────────────────────────────── */
+/* ─── Экраны привязки и PIN ──────────────────────────────────────────── */
 #scr-setup, #scr-pin { align-items: center; justify-content: center; }
 .card {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 16px; padding: 32px 34px; width: 560px; max-height: 92vh; overflow: auto;
+  border-radius: 16px; padding: 30px 32px; width: 560px; max-height: 96vh; overflow: auto;
 }
 .card.narrow { width: 420px; text-align: center; }
 .card h1 { font-size: 30px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
 .card p  { font-size: 17px; line-height: 1.5; margin: 0 0 8px; }
 .ver { font-size: 14px; color: var(--faint); font-weight: 400; }
-details { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
+details { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 12px; }
 summary { font-size: 17px; color: var(--dim); cursor: pointer; min-height: 44px; line-height: 44px; }
-#btnPair { width: 100%; margin-top: 22px; }
-#btnTestPrint { width: 100%; margin-top: 16px; }
+#btnPair, #btnTestPrint { width: 100%; margin-top: 18px; }
 
-/* ─── Экран 2: PIN ────────────────────────────────────────────────────
-   Точки крупные: кассир вводит PIN не глядя, но должен видеть, сколько
-   цифр уже набрал, боковым зрением. */
-.dots { display: flex; gap: 16px; justify-content: center; margin: 26px 0 6px; }
-.dots i {
-  width: 20px; height: 20px; border-radius: 50%;
-  border: 2px solid var(--line-2); display: block;
-}
+/* Точки PIN крупные: кассир вводит PIN не глядя, но должен видеть боковым
+   зрением, сколько цифр набрал. */
+.dots { display: flex; gap: 16px; justify-content: center; margin: 24px 0 6px; }
+.dots i { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-2); display: block; }
 .dots i.on { background: var(--accent); border-color: var(--accent); }
-.keypad {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px;
-}
-.keypad button { min-height: 76px; font-size: 30px; font-weight: 500; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.keypad button { min-height: 72px; font-size: 30px; font-weight: 500; }
 
-/* ─── Экран 3: продажа ────────────────────────────────────────────────
-   Раскладка считает высоту от 614 px: шапка 60, дальше всё остальное. */
+/* ─── Шапка продажи ───────────────────────────────────────────────────
+   Две кнопки: «Цена» и «Меню». Всё остальное — состояние, которое
+   должно быть видно, не отвлекая. */
 .topbar {
-  flex: 0 0 60px; display: flex; align-items: center; gap: 16px;
-  padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line);
+  flex: 0 0 52px; display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.topbar b { font-size: 19px; font-weight: 600; }
-.topbar .muted { font-size: 16px; }
-.topbar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.topbar button { min-height: 44px; font-size: 16px; padding: 0 14px; }
+.topbar b { font-size: 18px; font-weight: 600; white-space: nowrap; }
+.topbar .muted { font-size: 15px; white-space: nowrap; }
+.topbar button { min-height: 40px; font-size: 16px; padding: 0 16px; }
 
 /* Связь и неотправленные чеки видны всегда: если связи нет третий час,
-   владелец должен узнать раньше, чем через неделю. */
-.dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--faint); display: inline-block; flex: 0 0 12px;
-}
+   владелец должен узнать от кассы, а не через неделю из отчёта. */
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--faint); flex: 0 0 12px; display: block; }
 .dot.ok  { background: var(--accent); }
 .dot.bad { background: var(--red); }
-#pendingLabel { font-size: 16px; }
 #pendingLabel.warn { color: var(--gold); font-weight: 500; }
+/* Автономный режим ограничен тремя сутками: если связь не вернётся,
+   чеки не уйдут в ОФД и это уже нарушение. Остаток времени — в шапке. */
+#offlineLabel { font-size: 15px; font-weight: 500; white-space: nowrap; color: var(--gold); background: var(--gold-soft); border: 1px solid #4A4028; border-radius: 999px; padding: 4px 11px; }
+#offlineLabel.bad { color: var(--red); background: var(--red-soft); border-color: #5A2A24; }
 
-/* Счётчик отмен за смену. Отмена позиции, возврат и скидка — три основных
-   способа увести деньги из кассы. Счётчик на виду не мешает работать и
-   ничего не спрашивает, но снимает главное условие кражи — незаметность:
-   его видит и сменщик, и владелец, проходя мимо. */
+/* Наличные в кассе — рядом со сменой: кассир видит остаток, не открывая
+   ящик и не считая. */
+.cash-badge {
+  font-size: 15px; font-weight: 500; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.07);
+}
+
+/* Счётчик отмен и скидок за смену. Отмена позиции, возврат и «скидка
+   своим» — три основных способа увести деньги. Счётчик не спрашивает и
+   не тормозит, но снимает главное условие кражи — незаметность: его
+   видит и сменщик, и владелец, проходя мимо. */
 #voidLabel {
-  font-size: 16px; font-weight: 500; color: var(--gold);
+  font-size: 15px; font-weight: 500; color: var(--gold);
   background: var(--gold-soft); border: 1px solid #4A4028;
-  border-radius: 999px; padding: 5px 12px;
-}
-#voidLabel.hidden { display: none !important; }
-
-.sale { flex: 1; display: grid; grid-template-columns: 1fr 430px; min-height: 0; }
-.left {
-  display: flex; flex-direction: column; min-height: 0; padding: 12px; gap: 10px;
-}
-.rightpane {
-  display: flex; flex-direction: column; min-height: 0;
-  background: var(--surface); border-left: 1px solid var(--line); padding: 12px;
+  border-radius: 999px; padding: 4px 11px; white-space: nowrap;
 }
 
-/* ─── Быстрые товары ──────────────────────────────────────────────────
-   Сигареты, пакеты, вода, жвачка. Их продают по сто раз в день, и искать
-   их поиском каждый раз — это сто лишних действий за смену.
+/* ─── Три колонки ─────────────────────────────────────────────────────── */
+.sale { flex: 1; display: flex; min-height: 0; }
+.col { display: flex; flex-direction: column; min-height: 0; flex: 0 0 auto; }
+.col-left { width: 372px; padding: 10px; gap: 8px; }
+.col-cart { width: 384px; padding: 10px; gap: 8px; background: #151B17; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+.col-pad  { width: 336px; padding: 10px; gap: 8px; background: var(--surface); }
+.pane { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
 
-   Стоят НАД поиском, а не под ним: поиск нужен для остального каталога,
-   а эти четыре плитки — то, что жмут чаще всего. Группы переключаются
-   в одну строку. Если товаров в группе больше, чем помещается, строка
-   прокручивается вбок — но плитки не уменьшаются: размер важнее полноты,
-   промах по мелкой плитке дороже второго касания. */
-.quick { flex: 0 0 auto; }
-.quick-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
-.quick-tabs button {
-  min-height: 44px; font-size: 16px; padding: 0 16px; border-radius: 999px;
+/* ─── Каталог: поиск, категории, плитки ───────────────────────────────
+   Поиск — он же приёмник сканера: сканер «печатает» код и жмёт Enter.
+   Категории строкой: если не помещаются, строка едет вбок, но плитки не
+   мельчают — промах по мелкой плитке дороже второго касания. */
+.searchrow { flex: 0 0 auto; }
+.searchrow input { height: 52px; font-size: 18px; }
+.tabs { display: flex; gap: 6px; overflow-x: auto; flex: 0 0 54px; align-items: flex-start; }
+.tabs button {
+  min-height: 44px; padding: 0 15px; flex: 0 0 auto;
+  font-size: 16px; border-radius: 999px;
   background: transparent; border-color: var(--line-2); color: var(--dim);
 }
-.quick-tabs button.on {
-  background: var(--gold-soft); border-color: var(--gold-fill); color: var(--gold); font-weight: 500;
-}
-.quick-grid {
-  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
-}
-.quick-grid .qtile {
-  flex: 0 0 150px; height: 92px;
-  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
-  padding: 12px 14px; text-align: left;
-  background: var(--raised); border: 1px solid var(--gold-fill); border-radius: 12px;
-}
-.quick-grid .qtile:active { background: var(--gold-soft); }
-.qtile .qn {
-  font-size: 16px; font-weight: 500; line-height: 1.25;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.qtile .qp { font-size: 19px; font-weight: 600; color: var(--gold); white-space: nowrap; }
-.quick-empty {
-  font-size: 15px; color: var(--faint); line-height: 1.5;
-  border: 1px dashed var(--line-2); border-radius: 12px; padding: 14px 16px;
-}
+.tabs button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tabs button.quick { color: var(--gold); border-color: var(--gold-fill); }
+.tabs button.quick.on { background: var(--gold-soft); border-color: var(--gold-fill); color: var(--gold); }
 
-/* ─── Каталог ────────────────────────────────────────────────────────── */
 .goods {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px; align-content: start;
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; align-content: start;
 }
 .goods .good {
-  min-height: 88px; padding: 12px 14px;
-  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  min-height: 84px; padding: 10px 12px;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 6px;
   text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
 }
+.goods .good.q { border-color: var(--gold-fill); background: var(--raised); }
 .goods .good span {
-  font-size: 16px; font-weight: 400; line-height: 1.3; white-space: normal;
+  font-size: 15px; font-weight: 400; line-height: 1.25; white-space: normal;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.goods .good b { font-size: 19px; font-weight: 600; }
-.goods .muted { font-size: 17px; line-height: 1.5; grid-column: 1 / -1; }
+.goods .good b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goods .good.q b { color: var(--gold); }
+.goods .empty { grid-column: 1 / -1; font-size: 16px; line-height: 1.5; color: var(--faint); padding: 8px 2px; }
 
 /* ─── Чек ─────────────────────────────────────────────────────────────
-   Название 19 px: строку чека должно быть видно, не наклоняясь. */
-.cart { flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 10px; }
-.cart .muted { font-size: 17px; line-height: 1.5; padding: 12px 4px; }
-.line {
-  display: grid; grid-template-columns: 1fr auto auto auto auto auto;
-  align-items: center; gap: 10px;
-  padding: 10px 6px; border-bottom: 1px solid var(--line);
-}
-.line .nm { font-size: 19px; line-height: 1.3; }
-.line .disc {
-  display: inline-block; margin-left: 8px; font-size: 15px; font-weight: 500;
-  color: var(--gold); background: var(--gold-soft); border-radius: 999px; padding: 2px 9px;
-}
-.line .sum { font-size: 19px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* Плюс и минус жмут подряд по многу раз. Между ними стоит счётчик —
+   Название 19 px: строку чека должно быть видно, не наклоняясь.
+   Плюс и минус жмут подряд по многу раз, и между ними стоит счётчик —
    промахнуться с «плюса» на «минус» невозможно, а это самая дорогая
    опечатка на кассе. */
-.line .qty { display: flex; align-items: center; gap: 4px; }
-.line .qty button {
-  min-height: 52px; width: 52px; padding: 0; font-size: 26px; font-weight: 500;
-  border-radius: 10px;
+.cart { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.cart .empty { font-size: 17px; line-height: 1.5; color: var(--faint); padding: 8px 2px; }
+.line {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 8px;
+  padding: 7px 6px 7px 2px; border-bottom: 1px solid var(--line);
 }
-.line .qty span {
-  min-width: 46px; text-align: center; font-size: 20px; font-weight: 600;
+.line.sel { background: rgba(18,160,106,.07); }
+/* Имя в одну строку: две строки на позицию — это 122 px, и в чек влезало
+   три строки вместо четырёх. У взятой в работу позиции имя раскрывается
+   полностью — именно её кассир сейчас сверяет. */
+.line .nm { display: flex; align-items: baseline; min-width: 0; font-size: 19px; line-height: 1.25; }
+.line .nm-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.line.sel .nm-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.line .sum { font-size: 19px; font-weight: 600; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.line .disc, .line .free-mark, .line .price-mark, .line .weigh-mark {
+  flex: 0 0 auto; margin-left: 6px; font-size: 14px; font-weight: 500;
+  color: var(--gold); background: var(--gold-soft); border-radius: 999px; padding: 2px 8px;
+}
+.line .qty { display: flex; align-items: center; gap: 4px; }
+.line .qty button { min-height: 52px; width: 50px; padding: 0; font-size: 26px; font-weight: 500; border-radius: 10px; }
+/* Счётчик выглядит как число, а не как кнопка: лишняя рамка между
+   «минусом» и «плюсом» сбивает прицел. Нажатие на него берёт позицию в
+   работу — дальше количество набирают на цифрах справа. */
+.line .qty .qty-num {
+  min-width: 54px; width: auto; background: transparent; border: 1px solid transparent;
+  font-size: 22px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums;
+}
+.line.sel .qty .qty-num { border-color: var(--accent); }
+.line .qty .qty-dup { width: 38px; font-size: 15px; font-weight: 600; color: var(--dim); background: transparent; border-color: var(--line); }
+.line .acts { display: flex; gap: 4px; justify-content: flex-end; }
+.line .acts button { min-height: 48px; width: 42px; padding: 0; font-size: 18px; border-radius: 10px; background: transparent; border-color: var(--line); color: var(--dim); }
+.line .acts .del-armed { background: var(--red-fill); border-color: var(--red-fill); color: #fff; font-size: 15px; font-weight: 600; width: auto; padding: 0 10px; }
+
+/* ─── Маркировка ──────────────────────────────────────────────────────
+   Полоса стоит над итогом: кассир смотрит туда перед оплатой, и если марок
+   не хватает, он узнаёт об этом ДО того, как покупатель достал деньги. */
+.markbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 8px 12px; border-radius: 12px;
+  font-size: 17px; line-height: 1.3;
+  background: var(--red-soft); border: 1px solid #5A2A24; color: var(--red);
+}
+.markbar.ok { background: var(--accent-soft); border-color: #1F4A38; color: var(--accent); }
+.markbar b { font-size: 20px; font-weight: 600; }
+.markbar small { display: block; font-size: 14px; color: var(--dim); }
+.line .mark-need { flex: 0 0 auto; margin-left: 6px; font-size: 14px; font-weight: 600; color: var(--red); background: var(--red-soft); border-radius: 999px; padding: 2px 8px; }
+.line .mark-ok { flex: 0 0 auto; margin-left: 6px; font-size: 14px; font-weight: 500; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
+
+/* Чек покупателю: бумага, QR на дисплей или сообщение на телефон. Три
+   кнопки в один ряд — выбор делается одним касанием, без списков. */
+.give-receipt { display: flex; gap: 6px; margin-top: 10px; flex: 0 0 auto; }
+.give-receipt button { flex: 1; min-height: 56px; padding: 0 6px; font-size: 16px; }
+.give-receipt button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.qr-note { margin-top: 8px; font-size: 16px; line-height: 1.4; color: var(--dim); }
+.qr-note b { color: var(--text); }
+
+.totals { flex: 0 0 auto; border-top: 1px solid var(--line-2); padding-top: 8px; }.totals .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 16px; color: var(--dim); white-space: nowrap; }
+.totals .row b { font-variant-numeric: tabular-nums; }
+#cartDiscountLine:not(:empty) { color: var(--gold); padding-bottom: 2px; font-size: 16px; }
+/* Сумма к оплате — крупнее всего на экране: её произносят покупателю
+   вслух и читают под углом. У миллионных сумм цифр больше, чем места,
+   и только тогда шрифт уменьшается — но остаётся самым крупным. */
+.total-box, .change-box { flex: 0 0 auto; }
+.total-box .lbl, .change-box .lbl { font-size: 16px; color: var(--dim); white-space: nowrap; }
+.total-box .val {
+  font-size: 56px; font-weight: 600; line-height: 1.02; letter-spacing: -.02em;
+  text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text);
+}
+.total-box .val.long { font-size: 44px; }
+.change-box { margin-top: 2px; }
+.change-box .lbl { font-size: 18px; letter-spacing: .02em; }
+.change-box .val {
+  font-size: 44px; font-weight: 600; line-height: 1.05; letter-spacing: -.015em;
+  text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--accent);
+}
+.change-box .val.long { font-size: 36px; }
+.change-box.short .lbl, .change-box.short .val { color: var(--red); }
+
+.cart-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+.cart-actions button { flex: 1; min-height: 48px; font-size: 16px; padding: 0 10px; }
+
+/* ─── Правая колонка: цифры ───────────────────────────────────────────
+   Клавиши от 64 px. Одна и та же клавиатура на количество, на сумму без
+   товара и на оплату: одна привычка вместо трёх, и она не выезжает и не
+   прячется — искать нечего. */
+.ctx { flex: 0 0 auto; }
+.ctx-label { font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-value {
+  font-size: 40px; font-weight: 600; line-height: 1.15; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.line .del {
-  min-height: 52px; width: 52px; padding: 0; font-size: 20px; border-radius: 10px;
-  color: var(--dim);
+.ctx-value input {
+  height: 48px; padding: 0; font-size: 40px; font-weight: 600;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line-2);
+  border-radius: 0; color: var(--text); font-variant-numeric: tabular-nums;
 }
-/* Удаление в два касания: первое взводит, второе убирает. Окна нет —
-   очередь ждёт, — но случайно смахнуть позицию уже нельзя. */
-.line .del.armed {
-  background: var(--red-fill); border-color: var(--red-fill); color: #fff; font-weight: 600;
-}
+.ctx-value input:focus { border-color: var(--accent); }
+.ctx-value.calc { color: var(--gold); }
 
-.totals { border-top: 1px solid var(--line-2); padding-top: 10px; }
-.totals .row {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 17px; color: var(--dim); padding: 3px 0;
-}
-/* Сумма к оплате — крупнее всего на экране: её произносят покупателю
-   вслух и читают под углом. */
-.totals .row.total { color: var(--text); align-items: baseline; margin-top: 2px; }
-.totals .row.total span { font-size: 17px; color: var(--dim); }
-.totals .row.total b {
-  font-size: 56px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-#btnPay { width: 100%; margin-top: 10px; }
-.cart-actions { display: flex; gap: 8px; margin-top: 8px; }
-.cart-actions button { flex: 1; min-height: 52px; font-size: 16px; padding: 0 10px; }
+.modes { flex: 0 0 auto; display: flex; gap: 6px; }
+.modes button { flex: 1; min-height: 44px; font-size: 16px; padding: 0 8px; background: transparent; border-color: var(--line-2); color: var(--dim); }
+.modes button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
-/* ─── Окна поверх ─────────────────────────────────────────────────────
-   Ширина 620: окно оплаты не должно перекрывать чек целиком, кассир
-   сверяет позиции, пока покупатель достаёт деньги. */
+.pad { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pad button { min-height: 64px; padding: 0; font-size: 26px; font-weight: 500; }
+
+/* Кнопка оплаты стоит внизу справа и никуда не уезжает: и в продаже, и в
+   оплате это одно и то же место. */
+button.pay { margin-top: auto; flex: 0 0 auto; min-height: 88px; font-size: 24px; font-weight: 600; }
+button.pay.confirm { background: var(--accent-fill); border-color: var(--accent-fill); }
+.pad-hint { flex: 0 0 auto; font-size: 14px; line-height: 1.3; color: var(--dim); text-align: center; }
+
+/* ─── Оплата на месте: левая колонка вместо каталога ──────────────────
+   Способы, номиналы купюр и поля стоят там, где был каталог. Чек виден,
+   цифры на месте, окна нет. */
+#payPane { overflow-y: auto; overflow-x: hidden; }
+/* Пустая строка ошибки не должна занимать высоту: место в колонке
+   считаное, а ошибка бывает раз на сотню чеков. */
+#payPane .err { min-height: 0; margin: 0; }
+#payPane .err:empty { display: none; }
+.pay-title { font-size: 15px; color: var(--dim); flex: 0 0 auto; }
+/* Способы оплаты в три столбца: семь способов в два столбца уводили
+   выбор «Чек покупателю» под прокрутку, а это решение каждого чека. */
+.pay-ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 0 0 auto; }
+.pay-ways button { min-height: 58px; font-size: 16px; padding: 0 6px; white-space: normal; line-height: 1.2; }
+.pay-ways button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pay-ways button:disabled { opacity: .38; }
+
+/* Номиналы: покупатель даёт 5000 за покупку на 3240 — одно нажатие
+   вместо четырёх цифр и без опечаток. Показываем только те, что не
+   меньше суммы чека. */
+.denoms { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; flex: 0 0 auto; }
+.denoms button { min-height: 56px; padding: 0; font-family: 'PlexMono', monospace; font-size: 19px; font-variant-numeric: tabular-nums; }
+
+.pay-extra { flex: 0 0 auto; }
+.pay-extra label { margin-top: 8px; }
+.pay-extra input, .pay-extra select { height: 56px; font-size: 18px; }
+
+.bonus-info { margin-top: 10px; }
+.bonus-can { font-size: 18px; margin-bottom: 6px; }
+.bonus-can b { color: var(--gold); font-variant-numeric: tabular-nums; }
+.bonus-rest { font-size: 20px; font-weight: 600; margin-top: 6px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* Печатать ли чек — крупная галочка: её жмут пальцем в спешке, и промах
+   означает либо потерянную ленту, либо покупателя без чека. */
+.print-toggle {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 10px; padding: 10px 12px; min-height: 56px;
+  background: var(--raised); border: 1px solid var(--line); border-radius: 12px;
+  font-size: 17px; cursor: pointer;
+}
+.print-toggle input { width: 26px; height: 26px; margin: 0; flex: 0 0 26px; }
+
+/* ─── Лист снизу ──────────────────────────────────────────────────────
+   Всё редкое — смена, деньги, возвраты, настройки — выезжает снизу:
+   ближе к пальцу, чем окно по центру, и не закрывает чек целиком.
+   Кнопки действий внизу листа, под пальцем. */
 .modal {
   position: fixed; inset: 0; z-index: 50;
-  background: rgba(6, 10, 8, .72);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(6, 10, 8, .68);
+  display: flex; align-items: flex-end; justify-content: center;
 }
 .modal-card {
-  background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px;
-  padding: 26px 28px; width: 620px; max-width: 100%; max-height: 92vh; overflow: auto;
+  width: 100%; max-height: 92vh; overflow-y: auto; overflow-x: hidden;
+  background: var(--surface); border-top: 1px solid var(--line-2);
+  border-radius: 20px 20px 0 0; padding: 16px 18px 16px;
+  animation: sheet-up .12s ease-out;
 }
-.modal-card h2 { font-size: 26px; font-weight: 600; margin: 0 0 16px; letter-spacing: -.01em; }
-/* Сумма к оплате в окне — самое крупное на экране. */
+/* Когда на числовом поле поднялась клавиатура, содержимое листа уходит
+   правее: иначе клавиатура закрывает подписи и кнопку «Отмена». */
+body.pad-on .modal-card { padding-left: 306px; }
+@keyframes sheet-up { from { transform: translateY(24px); } to { transform: translateY(0); } }
+.modal-card h2 { font-size: 24px; font-weight: 600; margin: 0 0 8px; letter-spacing: -.01em; }
+.modal-card .keypad { max-width: 300px; margin-top: 12px; }
+.modal-card .keypad button { min-height: 64px; font-size: 26px; }
 .modal-card h2 .amount {
-  display: block; font-size: 64px; font-weight: 600; line-height: 1.05;
-  letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 4px;
+  display: block; font-size: 56px; font-weight: 600; line-height: 1.05;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px;
 }
-.modal-actions { display: flex; gap: 10px; margin-top: 22px; }
-.modal-actions button { flex: 1; }
-.modal-actions button.primary { flex: 2; }
+.modal-card p { font-size: 17px; line-height: 1.45; margin: 0 0 6px; }
+.modal-card > .keypad { max-width: 320px; }
+.modal-card .dots { margin: 14px 0 4px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+.modal-actions button { flex: 1; min-height: 64px; font-size: 18px; }
+.modal-actions button.primary { flex: 2; font-size: 20px; font-weight: 600; }
 
-.pay-tabs { display: flex; gap: 8px; margin-bottom: 6px; }
-.pay-tabs button { flex: 1; min-height: 60px; font-size: 18px; }
-.pay-tabs button.on {
-  background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600;
+/* Меню и «Ещё»: крупные кнопки с подписью, что это делает. Подпись — для
+   первых дней; опытный по ней не читает, а бьёт по месту. */
+.sheet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sheet-grid button {
+  min-height: 88px; padding: 12px 16px; display: flex; flex-direction: column;
+  justify-content: center; align-items: flex-start; gap: 4px; text-align: left;
+}
+.sheet-grid button span { font-size: 19px; font-weight: 500; white-space: nowrap; }
+.sheet-grid button small { font-size: 15px; line-height: 1.25; color: var(--dim); white-space: normal; }
+.sheet-grid button.warn span { color: var(--gold); }
+.sheet-grid button.bad span { color: var(--red); }
+
+.reclist { max-height: 300px; overflow-y: auto; overflow-x: hidden; margin: 6px 0; }
+.reclist button {
+  width: 100%; display: flex; align-items: center; gap: 12px; justify-content: flex-start;
+  min-height: 66px; padding: 0 6px; text-align: left; font-size: 18px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+}
+.reclist button:active { background: var(--raised); }
+.reclist b { margin-left: auto; font-size: 21px; font-variant-numeric: tabular-nums; }
+
+/* Строка журнала действий: две строки текста слева, сумма всегда справа.
+   Здесь нужен свой расклад: в строке стоит имя кассира, имя подтвердившего
+   и причина — в одну строку они не встают, а сумма — главное в записи. */
+.logrow {
+  display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 12px;
+  width: 100%; padding: 9px 4px; text-align: left;
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  min-height: 66px;
+}
+.logrow .what { font-size: 18px; line-height: 1.3; white-space: normal; min-width: 0; }
+.logrow .who { grid-column: 1; font-size: 15px; line-height: 1.3; color: var(--dim); white-space: normal; min-width: 0; }
+.logrow .sum { grid-column: 2; grid-row: 1 / span 2; font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.rows { margin: 4px 0 2px; }
+.rows .r { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 18px; }
+.rows .r span { color: var(--dim); }
+.rows .r b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rows .r b.ok { color: var(--accent); }
+.rows .r b.warn { color: var(--gold); }
+.rows .r b.bad { color: var(--red); }
+
+.cash-kinds, .disc-tabs { display: flex; gap: 8px; margin: 10px 0 4px; }
+.cash-kinds button, .disc-tabs button { flex: 1; min-height: 60px; font-size: 17px; }
+.cash-kinds button.on, .disc-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+.disc-preview { min-height: 64px; margin: 8px 0; font-size: 17px; }
+.disc-preview b { font-variant-numeric: tabular-nums; }
+.disc-preview .warn { color: var(--gold); font-size: 14px; }
+.disc-total { font-size: 30px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; margin-top: 6px; }
+
+/* Закрытие смены: расхождение видно ДО подтверждения. Кассир пересчитает
+   сейчас, а не будет объясняться завтра — это ради него, а не против. */
+.expected { font-size: 17px; color: var(--dim); margin: 8px 0; }
+.expected b { color: var(--text); font-variant-numeric: tabular-nums; }
+.diff { min-height: 40px; font-size: 28px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.diff .ok { color: var(--accent); }
+.diff .warn { color: var(--gold); }
+.diff .bad { color: var(--red); }
+
+/* Проверка цены: ответ должен читаться с метра, не наклоняясь. */
+.price-result { min-height: 92px; display: grid; place-items: center; margin: 12px 0; }
+.pr-name { font-size: 20px; text-align: center; margin-bottom: 4px; }
+.pr-price { font-size: 48px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.pr-none { font-size: 20px; color: var(--dim); }
+
+.hint { font-size: 16px; line-height: 1.45; color: var(--dim); }
+.kbd {
+  display: inline-block; min-width: 34px; text-align: center;
+  font-family: 'PlexMono', monospace; font-size: 15px;
+  background: var(--raised); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 7px;
 }
 
-/* Сдача — вторая по величине цифра: её считают в уме и ошибаются. */
-.change {
-  font-size: 44px; font-weight: 600; line-height: 1.15; letter-spacing: -.015em;
-  color: var(--accent); margin-top: 14px; min-height: 52px;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-}
-
-.reclist { max-height: 320px; overflow: auto; margin: 8px 0; }
-.reclist .rec {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding: 12px 6px; border-bottom: 1px solid var(--line); font-size: 18px;
-}
-
-/* ─── Экранная клавиатура ─────────────────────────────────────────────
-   Стоит СЛЕВА снизу, а не справа: в окне оплаты справа сумма и сдача,
-   а их не должно закрывать ничем. Ради этого правило и записано в
-   задании отдельным пунктом. */
+/* ─── Экранная клавиатура на числовых полях листа ─────────────────────
+   Появляется САМА на любом числовом поле — забыть подключить её к новому
+   экрану невозможно, потому что нечего подключать. Стоит слева снизу: в
+   листах справа сумма и расхождение, и закрывать их нельзя. */
 .keypad-float {
-  position: fixed; left: 16px; bottom: 16px; z-index: 60;
-  display: grid; grid-template-columns: repeat(3, 84px); gap: 8px;
+  position: fixed; left: 14px; bottom: 14px; z-index: 60; display: none;
+  grid-template-columns: repeat(3, 84px); gap: 8px;
   background: var(--raised); border: 1px solid var(--line-2);
   border-radius: 14px; padding: 10px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
 }
+.keypad-float.on { display: grid; }
 .keypad-float button { min-height: 64px; font-size: 24px; padding: 0; }
-.keypad-float .kp-done {
-  grid-column: 1 / -1; background: var(--accent-fill); border-color: var(--accent-fill);
-  color: #fff; font-size: 19px; font-weight: 600;
-}
+.keypad-float .kp-done { grid-column: 1 / -1; background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; font-size: 19px; font-weight: 600; }
 
-/* Полосы прокрутки: на планшете мышью не целятся, но полоса должна быть
-   видна — иначе не понять, что список длиннее экрана. */
+/* ─── Сообщение о том, что произошло ─────────────────────────────────
+   Вместо системных окон, которые приходится закрывать: сообщение
+   появляется само и уходит само, очередь не ждёт. */
+.toast {
+  position: fixed; left: 50%; top: 62px; transform: translateX(-50%); z-index: 70;
+  background: var(--accent-fill); color: #fff; font-size: 18px; font-weight: 500;
+  padding: 14px 22px; border-radius: 12px; max-width: 900px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+}
+.toast.bad { background: var(--red-fill); }
+
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-
-/* ═══ Кассовые операции, товар без карточки, проверка цены ═══
-   Размеры те же, что у остальных кнопок кассы: кассир не должен
-   переучиваться под новые элементы. */
-.cash-kinds { display: flex; gap: 8px; margin: 12px 0 4px; }
-.cash-kinds button { flex: 1; min-height: 56px; font-size: 17px; }
-.cash-kinds button.on {
-  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
-}
-
-/* Проверка цены: ответ должен читаться с метра, не наклоняясь */
-.price-result { min-height: 96px; display: grid; place-items: center; margin: 14px 0; }
-.pr-name { font-size: 20px; text-align: center; margin-bottom: 6px; }
-.pr-price {
-  font-size: 48px; font-weight: 600; color: var(--accent-soft);
-  font-variant-numeric: tabular-nums;
-}
-.pr-none { font-size: 20px; color: var(--dim); }
-
-/* Позиция без карточки и с изменённой ценой — видны в чеке.
-   Владелец должен понимать, откуда взялась строка, которой нет в каталоге. */
-.line .free-mark { color: var(--gold); font-size: 12px; margin-left: 8px; }
-.line .price-mark { color: var(--gold); font-size: 12px; margin-left: 8px; }
-
-/* Наличные в кассе — в шапке рядом со сменой.
-   Кассир видит остаток, не открывая ящик и не считая. */
-.cash-badge {
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-  padding: 4px 10px; border-radius: 999px;
-  background: rgba(255,255,255,.06); font-size: 15px;
-}
-
-/* Закрытие смены: расхождение видно ДО подтверждения */
-.expected { font-size: 17px; color: var(--dim); margin: 10px 0; }
-.expected b { color: var(--text); font-variant-numeric: tabular-nums; }
-.diff { min-height: 30px; font-size: 20px; font-weight: 600; margin-top: 4px; }
-.diff .ok { color: var(--accent-soft); }
-.diff .warn { color: var(--gold); }
-.diff .bad { color: var(--red); }
-
-/* ═══ Скидка на чек, бонусы, подтверждение администратора ═══ */
-.wide-action {
-  width: 100%; min-height: 56px; font-size: 17px; margin-bottom: 8px;
-  border-style: dashed;
-}
-.disc-tabs { display: flex; gap: 8px; margin: 12px 0 8px; }
-.disc-tabs button { flex: 1; min-height: 52px; font-size: 17px; }
-.disc-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.disc-preview { min-height: 72px; margin: 10px 0; font-size: 17px; }
-.disc-preview b { font-variant-numeric: tabular-nums; }
-.disc-preview .warn { color: var(--gold); font-size: 14px; }
-.disc-total {
-  font-size: 30px; font-weight: 600; color: var(--accent-soft);
-  font-variant-numeric: tabular-nums; margin-top: 6px;
-}
-
-/* Бонусы: сколько можно списать и сколько доплатить */
-.bonus-info { margin-top: 12px; }
-.bonus-can { font-size: 19px; margin-bottom: 10px; }
-.bonus-can b { color: var(--gold); font-variant-numeric: tabular-nums; }
-.bonus-rest {
-  font-size: 22px; font-weight: 600; margin-top: 8px;
-  color: var(--accent-soft); font-variant-numeric: tabular-nums;
-}
-
-/* Скидка на чек в итоге — видна рядом с суммой */
-#cartDiscountLine:not(:empty) { color: var(--gold); }
-#cartDiscountLine b { font-variant-numeric: tabular-nums; }
-
-/* Количество нажимается — открывается ввод числа.
-   Выглядит как число, а не как кнопка: кассир и так поймёт, что на него
-   можно нажать, а лишняя рамка между «минусом» и «плюсом» сбивает
-   прицел — а промах здесь самая дорогая опечатка. */
-.qty .qty-num {
-  min-width: 52px; min-height: 52px; padding: 0;
-  background: transparent; border: 1px solid transparent;
-  font-size: 22px; font-weight: 600; color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.qty .qty-num:hover { border-color: var(--line); background: var(--raised); }
-
-/* Удвоение количества: рядом с «плюсом», но заметно тише его.
-   Действие редкое — не должно перетягивать внимание с основных кнопок,
-   которые кассир жмёт не глядя. */
-.qty .qty-dup {
-  min-height: 52px; width: 44px; padding: 0;
-  font-size: 15px; font-weight: 600; color: var(--dim);
-  background: transparent; border: 1px solid var(--line);
-}
-.qty .qty-dup:hover { color: var(--text); background: var(--raised); }
-
-/* Печатать ли чек — галочка в окне оплаты.
-   Крупная: её жмут пальцем в спешке, и промах означает либо потерянную
-   ленту, либо покупателя без чека. */
-.print-toggle {
-  display: flex; align-items: center; gap: 12px;
-  margin: 14px 0 4px; padding: 12px 14px;
-  background: var(--raised); border: 1px solid var(--line); border-radius: 12px;
-  font-size: 17px; cursor: pointer; min-height: 56px;
-}
-.print-toggle input { width: 26px; height: 26px; margin: 0; }
