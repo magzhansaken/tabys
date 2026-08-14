@@ -117,6 +117,37 @@ const wait = async () => { for (let i = 0; i < 50; i++) { try { await fetch(API 
   ok(shift?.opening_float === 5000, 'Размен на начало смены виден');
   ok('discrepancy' in shift, '★ Расхождение по смене есть — сигнал недостачи');
 
+  // ---------- КОДЫ МАРОК В ПРОДАЖЕ ----------
+  // Табак давно, пиво с 1 февраля 2026: нет кода в чеке — административка,
+  // и её выпишут без жалобы покупателя, потому что чеки и так у налоговой.
+  r = await j('POST', '/goods', { name: 'Пиво Карагандинское 0,5л',
+    salePrice: 590, purchasePrice: 380, barcode: '4870200001' });
+  const beer = r.d.id;
+  // Код Data Matrix: 01 + 14 цифр GTIN + 21 + серийный номер
+  const gtin = '04870200001215';
+  const codes = [`01${gtin}21BEER0001`, `01${gtin}21BEER0002`];
+  r = await j('POST', '/marking/receive', { productId: beer, codes });
+  ok(r.status === 200 || r.status === 201, `Коды приняты на склад (${r.status})`);
+
+  // ДВЕ бутылки — ДВА кода: считаются поштучно
+  const ev2 = [{ id: randomUUID(), entity: 'sale', entityId: randomUUID(), op: 'insert',
+    clientSeq: ++seq, clientTs: new Date().toISOString(),
+    payload: { shiftId: sh, localNumber: '900', subtotal: 1180, discountSum: 0, rounding: 0,
+      total: 1180, costTotal: 760,
+      items: [{ productId: beer, qty: 2, price: 590, discountSum: 0, total: 1180,
+                cost: 380, marks: codes }],
+      payment: { cash: 1180 } },
+    employeeId: me.d.employeeId }];
+  r = await j('POST', '/sync/push', { events: ev2 }, true);
+  ok(!(r.d.results ?? []).some((x) => x.result === 'error'), 'Продажа пива с марками прошла');
+
+  r = await j('GET', `/marking/check?code=${encodeURIComponent(codes[0])}`);
+  const st1 = r.d?.status ?? r.d?.state;
+  r = await j('GET', `/marking/check?code=${encodeURIComponent(codes[1])}`);
+  const st2 = r.d?.status ?? r.d?.state;
+  ok(st1 === 'sold' && st2 === 'sold',
+     `★ Оба кода выведены из оборота продажей: ${st1} / ${st2} — считаются поштучно`);
+
   console.log(`\n=== ИТОГ: пройдено ${pass}, провалено ${fail} ===`);
   srv.kill();
   process.exit(fail ? 1 : 0);

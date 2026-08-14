@@ -4,6 +4,7 @@ import { DbService } from '../db/db.service';
 import { SyncService } from '../sync/sync.service';
 import { GoodsService } from '../goods/goods.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { MarkingService } from '../marking/marking.module';
 
 /**
  * КАССА.
@@ -27,7 +28,7 @@ export interface PaymentInput { method: PayMethod; amount: number; received?: nu
 @Injectable()
 export class PosService {
   constructor(private db: DbService, private goods: GoodsService, private sync?: SyncService,
-              private loyalty?: LoyaltyService) {
+              private loyalty?: LoyaltyService, private marking?: MarkingService) {
     // Регистрируем обработчики офлайн-событий кассы. В 1.3 карта сущностей была
     // заготовкой с пометкой «Части 2–4 дописывают сюда sale» — вот это дописывание.
     if (sync) {
@@ -752,6 +753,47 @@ export class PosService {
         await c.query(`SELECT apply_stock_move($1,$2,$3,$4,NULL,$5,NULL,$6)`,
           [accountId, reg.warehouse_id, it.productId, isRefund ? qty : -qty,
            isRefund ? 'sale_return' : 'sale', e.employeeId ?? null]);
+    }
+
+    // ── КОДЫ МАРКИРОВКИ ───────────────────────────────────────────────
+    // Табак давно, пиво с 1 февраля 2026: нет кода в чеке — административка,
+    // и её выпишут без жалобы покупателя, потому что чеки и так у налоговой.
+    //
+    // Выводим из оборота ПОСЛЕ записи чека, а не внутри цикла позиций:
+    // код ссылается на продажу, и до её появления в базе ссылке не на что
+    // указывать. На этом я споткнулся при первой попытке — ошибка была
+    // «нарушение внешнего ключа», и она молча уходила в журнал.
+    //
+    // Коды считаются ПОШТУЧНО: две бутылки — два кода, каждый отдельно.
+    //
+    // Ошибка кода НЕ отменяет продажу: деньги приняты, чек пробит. Пишем
+    // в журнал и продолжаем — иначе касса встанет посреди очереди из-за
+    // одной нечитаемой марки, а это хуже, чем незакрытый код.
+    for (const it of p.items ?? []) {
+      for (const mark of (it.marks ?? [])) {
+        try {
+          // Работаем в ТОЙ ЖЕ транзакции, что и чек, а не через службу
+          // маркировки: она открывает свою, и чек в ней ещё не виден —
+          // ссылка на продажу упирается во внешний ключ. Это и была
+          // причина, по которой коды молча оставались в обороте.
+          const raw = String(mark).trim();
+          // Код может прийти целиком (01<GTIN>21<серийный>) или уже
+          // разобранным — ищем по обоим видам.
+          const found = (await c.query(
+            `SELECT id, status FROM marking_code
+              WHERE code = $1 OR (gtin || serial) = $1 FOR UPDATE`, [raw])).rows[0];
+          if (!found) { console.warn(`[маркировка] код не принимали на склад: ${raw}`); continue; }
+          if (found.status === 'sold') { console.warn(`[маркировка] код уже продан: ${raw}`); continue; }
+
+          await c.query(
+            `UPDATE marking_code
+                SET status='sold', sale_id=$2, sold_at=now(), withdrawal_status='pending'
+              WHERE id=$1`, [found.id, e.entityId]);
+        } catch (err: any) {
+          // Ошибка кода НЕ отменяет продажу: деньги приняты, чек пробит.
+          console.warn(`[маркировка] код не выведен из оборота: ${err.message}`);
+        }
+      }
     }
 
     for (const [method, amount] of Object.entries(pay)) {
