@@ -116,6 +116,9 @@ const srv = async (path, opts = {}) => {
 
 ipcMain.handle('pos:approve', safe(async (_e, pin) => srv('/pos/settings/approve', { method: 'POST', body: { pin } })));
 ipcMain.handle('pos:log', safe(async (_e, d) => srv('/pos/settings/log', { method: 'POST', body: d })));
+// Чтение журнала — для показа при пересменке: сменщик видит, что делали
+// до него. Это снимает главное условие кражи — незаметность.
+ipcMain.handle('pos:log-read', safe(async () => srv('/pos/settings/log')));
 ipcMain.handle('pos:settings', safe(async () => srv('/pos/settings')));
 ipcMain.handle('pos:bonus-spendable', safe(async (_e, d) =>
   srv(`/pos/bonus/spendable?customerId=${encodeURIComponent(d.customerId)}&total=${d.total}`)));

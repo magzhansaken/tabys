@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('kassa', {
   // права на кассе, журнал действий, бонусы
   approve: (pin) => call('pos:approve', pin),
   logAction: (d) => call('pos:log', d),
+  logRead: () => call('pos:log-read'),
   bonusSpendable: (customerId, total) => call('pos:bonus-spendable', { customerId, total }),
   posSettings: () => call('pos:settings'),
 

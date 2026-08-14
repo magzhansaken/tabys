@@ -119,6 +119,26 @@ export class PosSettingsService {
   }
 
   /** Журнал действий кассира — для отчёта владельцу. */
+  /** Последние действия по магазину — для показа на кассе при пересменке. */
+  async shiftLog(accountId: string) {
+    return this.db.withTenant(accountId, async (c) =>
+      (await c.query(
+        `SELECT l.action, l.product_name, l.amount, l.comment, l.at,
+                e.first_name AS employee,
+                a.first_name AS approved_by
+           FROM pos_action_log l
+           LEFT JOIN employee e ON e.id = l.employee_id
+           LEFT JOIN employee a ON a.id = l.approved_by
+          WHERE l.at > now() - interval '24 hours'
+          ORDER BY l.at DESC LIMIT 50`)).rows
+        .map((r: any) => ({
+          action: r.action, product: r.product_name,
+          amount: r.amount == null ? null : Number(r.amount),
+          at: r.at, employee: r.employee, comment: r.comment,
+          approvedBy: r.approved_by,        // кто разрешил, если действие требовало старшего
+        })));
+  }
+
   async log(accountId: string, d: {
     shiftId?: string; action: string; employeeId?: string; approvedBy?: string;
     productName?: string; amount?: number; comment?: string;
@@ -202,6 +222,20 @@ export class PosDeviceSettingsController {
 
   @Public() @Post('log')
   log(@Dev() dev: any, @Body() d: any) { return this.svc.log(dev.account_id, d); }
+
+  /**
+   * Журнал действий за текущую смену — для кассы.
+   *
+   * Отдельно от отчёта в кабинете: тот требует прав на отчёты, которых
+   * у кассира нет и быть не должно. Здесь смотрят другое и по другой
+   * причине — сменщик принимает кассу и хочет видеть, что делали до
+   * него. Это снимает главное условие кражи: незаметность.
+   *
+   * Только последние 50 записей: это взгляд перед пересменкой, а не
+   * отчёт. Полная история — у владельца в кабинете.
+   */
+  @Public() @Get('log')
+  posLog(@Dev() dev: any) { return this.svc.shiftLog(dev.account_id); }
 }
 
 /**
