@@ -269,18 +269,10 @@ export class PlatformService {
   }
 
   async payments(ctx: PlatformCtx, status?: string) {
+    // Через функцию с обходом изоляции: запрос соединяется с account,
+    // и без неё список приходит ПУСТЫМ — молча, без ошибки.
     return (await this.q(
-      `SELECT tp.id, tp.amount, tp.months, tp.method, tp.comment, tp.status,
-              tp.reject_reason, tp.created_at, tp.approved_at,
-              tp.partner_share, tp.platform_share,
-              a.name AS client, a.id AS account_id,
-              pu.full_name AS partner
-         FROM tenant_payment tp
-         JOIN account a ON a.id = tp.account_id
-         LEFT JOIN platform_user pu ON pu.id = tp.partner_id
-        WHERE ($1::text IS NULL OR tp.status::text = $1)
-          AND ($2::text = 'super' OR tp.partner_id = $3::uuid)
-        ORDER BY tp.created_at DESC LIMIT 200`,
+      `SELECT * FROM platform_payments($1, $2, $3)`,
       [status ?? null, ctx.role, ctx.userId])).rows
       .map((r: any) => ({ ...r, amount: money(r.amount),
         partnerShare: money(r.partner_share), platformShare: money(r.platform_share) }));
@@ -289,19 +281,7 @@ export class PlatformService {
   // ── ПАРТНЁРЫ ────────────────────────────────────────────────────────
   async partners(ctx: PlatformCtx) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    return (await this.q(
-      `SELECT pu.id, pu.full_name, pu.email, pu.phone, pu.commission_bp,
-              pu.is_active, pu.last_login_at, pu.created_at,
-              (SELECT count(*) FROM tenant_card tc WHERE tc.partner_id = pu.id) AS clients,
-              (SELECT count(*) FROM tenant_card tc
-                 JOIN subscription s ON s.account_id = tc.account_id
-                WHERE tc.partner_id = pu.id AND s.paid_until > now()) AS active_clients,
-              (SELECT coalesce(sum(tp.partner_share), 0) FROM tenant_payment tp
-                WHERE tp.partner_id = pu.id AND tp.status = 'approved'
-                  AND tp.approved_at > now() - interval '30 days') AS earned_30d
-         FROM platform_user pu
-        WHERE pu.role = 'partner' AND pu.deleted_at IS NULL
-        ORDER BY pu.created_at DESC`)).rows
+    return (await this.q(`SELECT * FROM platform_partners()`)).rows
       .map((r: any) => ({
         id: r.id, name: r.full_name, email: r.email, phone: r.phone,
         commissionPercent: r.commission_bp / 100,
@@ -472,15 +452,7 @@ export class PlatformService {
 
   async requests(ctx: PlatformCtx, status?: string) {
     return (await this.q(
-      `SELECT tr.id, tr.kind, tr.payload, tr.comment, tr.status, tr.decision_note,
-              tr.created_at, tr.decided_at, a.name AS client, a.id AS account_id,
-              pu.full_name AS author
-         FROM tenant_request tr
-         JOIN account a ON a.id = tr.account_id
-         LEFT JOIN platform_user pu ON pu.id = tr.created_by
-        WHERE ($1::text IS NULL OR tr.status = $1)
-          AND ($2::text = 'super' OR tr.created_by = $3::uuid)
-        ORDER BY tr.created_at DESC LIMIT 200`,
+      `SELECT * FROM platform_requests($1, $2, $3)`,
       [status ?? null, ctx.role, ctx.userId])).rows;
   }
 

@@ -335,6 +335,9 @@ const RULES = [
   { file: 'admin/app/platform/src/main.tsx', must: 'const toTheirs',
     why: 'Ответы приводятся к виду перенесённого кабинета в одном месте: его 5562 строки остаются нетронутыми, и следующее обновление ляжет без правок' },
 
+  { file: 'db/migrations/052_platform.sql', must: 'CREATE OR REPLACE FUNCTION platform_payments',
+    why: 'Любой запрос платформы к данным магазинов — функцией с обходом изоляции: пять раз ловил пустые списки без ошибки' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

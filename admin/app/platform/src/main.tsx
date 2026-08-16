@@ -141,6 +141,33 @@ const toTheirs = (path: string, data: any): any => {
     discount12: data.discount12 ?? 0,
   };
 
+  // Сводка: кабинет ждёт { today, series, partners } для графиков.
+  // Наш /metrics отдаёт список дней с оплатами — достраиваем остальное.
+  //
+  // Чего у нас нет по дням (сколько было клиентов, пробных,
+  // просроченных на каждую дату) — отдаём нулями, а не выдумываем:
+  // график с придуманными числами хуже пустого, по нему принимают
+  // решения.
+  if (path.startsWith('/metrics')) {
+    const days = Array.isArray(data) ? data : [];
+    const toDay = (d: any) => ({
+      day: d.day ?? d.date ?? new Date().toISOString(),
+      tenants: 0, paid: Number(d.payments ?? 0), trial: 0, expired: 0,
+      mrr: Math.round(Number(d.amount ?? 0) * 100),
+      revenue: Math.round(Number(d.amount ?? 0) * 100),
+    });
+    const series = days.map(toDay);
+    return {
+      today: series.length ? series[series.length - 1]
+        : { day: new Date().toISOString(), tenants: 0, paid: 0, trial: 0,
+            expired: 0, mrr: 0, revenue: 0, pending: 0 },
+      series,
+      // Список партнёров кабинет берёт отсюда же. Отдаём пустым: он
+      // показывается отдельным разделом, где данные настоящие.
+      partners: [],
+    };
+  }
+
   // Реквизиты оплаты живут там же, в прайс-листе.
   if (path.startsWith('/pay-settings')) return {
     payUrl: null, payQrUrl: data.payQr ?? null,
