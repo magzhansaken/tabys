@@ -338,6 +338,13 @@ const RULES = [
   { file: 'db/migrations/052_platform.sql', must: 'CREATE OR REPLACE FUNCTION platform_payments',
     why: 'Любой запрос платформы к данным магазинов — функцией с обходом изоляции: пять раз ловил пустые списки без ошибки' },
 
+  { file: 'db/migrations/052_platform.sql', must: 'can_login_admin, can_login_pos, is_active',
+    why: 'Владельцу заведённого магазина разрешён вход: без этого магазин создаётся, пароль верный, а войти нельзя' },
+  { file: 'server/src/platform/platform.module.ts', must: 'platform_find_by_phone',
+    why: 'Дубли ловятся по последним 10 цифрам: люди пишут номер то с +7, то с 8' },
+  { file: 'server/src/platform/platform.module.ts', must: "kind='base' AND ends_at IS NULL",
+    why: 'Смена тарифа трогает только основную строку: доплаты за устройства и скидки — отдельные договорённости с клиентом' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

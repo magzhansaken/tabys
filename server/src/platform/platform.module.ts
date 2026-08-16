@@ -703,6 +703,291 @@ export class PlatformService {
     return { ok: true };
   }
 
+  // ── КАРТОЧКА КЛИЕНТА ────────────────────────────────────────────────
+  /**
+   * Всё об одном клиенте на одном экране: контакты, подписка, состав
+   * счёта, оплаты, заявки, устройства.
+   *
+   * Одним ответом, а не пятью запросами: карточку открывают, когда
+   * звонит клиент, и ждать пять ожиданий по очереди при живом
+   * разговоре нельзя.
+   */
+  async tenantCard(ctx: PlatformCtx, accountId: string) {
+    if (ctx.role === 'partner') {
+      const own = (await this.q(
+        `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
+        [accountId, ctx.userId])).rows[0];
+      if (!own) throw new ForbiddenException('Это не ваш клиент');
+    }
+
+    const [client, lines, pays, reqs] = await Promise.all([
+      this.q(`SELECT * FROM platform_clients($1,$2,NULL) WHERE id = $3`,
+        [ctx.role, ctx.userId, accountId]),
+      this.q(`SELECT id, kind, title, qty, unit_price, ends_at FROM plan_line
+               WHERE account_id=$1 ORDER BY starts_at`, [accountId]),
+      this.q(`SELECT * FROM platform_payments(NULL,'super',NULL) WHERE account_id=$1 LIMIT 20`,
+        [accountId]),
+      this.q(`SELECT * FROM platform_requests(NULL,'super',NULL) WHERE account_id=$1 LIMIT 20`,
+        [accountId]),
+    ]);
+
+    const c = client.rows[0];
+    if (!c) throw new BadRequestException('Клиент не найден');
+
+    const days = c.paid_until
+      ? Math.ceil((new Date(c.paid_until).getTime() - Date.now()) / 86400000) : null;
+
+    return {
+      id: c.id, name: c.name, phone: c.phone, city: c.city,
+      owner: c.owner_name, ownerPhone: c.owner_phone,
+      status: c.status, isDemo: c.is_demo,
+      partner: c.partner_name, partnerId: c.partner_id,
+      dealStage: c.deal_stage, dealNote: c.deal_note, touchedAt: c.touched_at,
+      paidUntil: c.paid_until, daysLeft: days,
+      revenue30d: Math.round(Number(c.revenue_30d)),
+      stores: Number(c.stores), registers: Number(c.registers),
+      lines: lines.rows.map((r: any) => ({
+        id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
+        price: money(Number(r.unit_price)), active: !r.ends_at,
+      })),
+      monthly: lines.rows.filter((r: any) => !r.ends_at)
+        .reduce((a: number, r: any) => a + money(Number(r.unit_price) * Number(r.qty)), 0),
+      payments: pays.rows.map((r: any) => ({
+        id: r.id, amount: money(Number(r.amount)), months: r.months,
+        status: r.status, at: r.created_at,
+      })),
+      requests: reqs.rows,
+    };
+  }
+
+  // ── ЗАВЕДЕНИЕ КЛИЕНТА ───────────────────────────────────────────────
+  /**
+   * Партнёр заводит клиента сам, не дожидаясь его самозаписи.
+   *
+   * Магазин создаётся сразу с владельцем и одноразовым паролем:
+   * партнёр приезжает, ставит систему и отдаёт вход хозяину. Пароль
+   * показан ОДИН раз — его диктуют голосом, а не пишут в переписке.
+   *
+   * Дубли ловим по последним десяти цифрам телефона: люди пишут номер
+   * то с +7, то с 8. Урок донора, стоил им разбирательств.
+   */
+  async createTenant(ctx: PlatformCtx, d: {
+    name: string; ownerName: string; ownerPhone: string; city?: string; trialDays?: number;
+  }) {
+    if (!d.name?.trim()) throw new BadRequestException('Укажите название магазина');
+    if (!d.ownerPhone?.trim()) throw new BadRequestException('Укажите телефон владельца');
+
+    const dup = (await this.q(
+      `SELECT id, name FROM platform_find_by_phone($1)`, [d.ownerPhone])).rows[0];
+    if (dup) throw new BadRequestException(
+      `Такой телефон уже у магазина «${dup.name}» — проверьте, не он ли это`);
+
+    const abc = 'abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const pass = Array.from({ length: 10 }, () => abc[Math.floor(Math.random() * abc.length)]).join('');
+
+    const acc = (await this.q(
+      `SELECT platform_create_tenant($1,$2,$3,$4,$5,$6) AS id`,
+      [d.name.trim(), d.ownerPhone.trim(), d.ownerName?.trim() ?? 'Владелец',
+       await bcrypt.hash(pass, 10), Math.max(1, Math.floor(Number(d.trialDays ?? 14))),
+       ctx.role === 'partner' ? ctx.userId : null])).rows[0];
+
+    if (d.city) await this.q(
+      `UPDATE tenant_card SET city=$2 WHERE account_id=$1`, [acc.id, d.city]);
+
+    await this.audit(ctx, 'tenant_created', acc.id, { name: d.name, trialDays: d.trialDays ?? 14 });
+    return { id: acc.id, phone: d.ownerPhone, password: pass,
+      note: 'Пароль показан один раз — продиктуйте владельцу сейчас. Пробный период открыт.' };
+  }
+
+  // ── САМОЗАПИСЬ С САЙТА ──────────────────────────────────────────────
+  /** Заявки с сайта: кто оставил телефон и ждёт звонка. */
+  async leads(ctx: PlatformCtx, status?: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Заявки с сайта смотрит владелец платформы');
+    return (await this.q(
+      `SELECT id, name, phone, city, comment, status, created_at
+         FROM lead WHERE ($1::text IS NULL OR status = $1)
+        ORDER BY created_at DESC LIMIT 200`, [status ?? null])).rows;
+  }
+
+  /** Отметить, на каком этапе разговор с заявкой. */
+  async setLead(ctx: PlatformCtx, id: string, status: string, note?: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const ok = ['new', 'called', 'demo', 'won', 'lost'];
+    if (!ok.includes(status)) throw new BadRequestException('Неизвестный этап');
+    await this.q(
+      `UPDATE lead SET status=$2, comment=coalesce($3, comment) WHERE id=$1`,
+      [id, status, note ?? null]);
+    await this.audit(ctx, 'lead_updated', null, { id, status });
+    return { ok: true };
+  }
+
+  /**
+   * Одобрить самозапись: клиент зарегистрировался сам и ждёт.
+   * Одобрение открывает пробный период.
+   */
+  async approveSignup(ctx: PlatformCtx, accountId: string, trialDays = 14) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Одобряет владелец платформы');
+    const until = (await this.q(
+      `SELECT platform_approve_signup($1,$2) AS until`,
+      [accountId, Math.max(1, Math.floor(Number(trialDays)))])).rows[0]?.until;
+    if (!until) throw new BadRequestException('Магазин не найден');
+    await this.audit(ctx, 'signup_approved', accountId, { trialDays });
+    return { ok: true, trialUntil: until,
+      note: `Доступ открыт на ${trialDays} дней. Позвоните владельцу и помогите завести товары.` };
+  }
+
+  /** Отклонить самозапись. Причина обязательна — как и везде с отказами. */
+  async rejectSignup(ctx: PlatformCtx, accountId: string, reason: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    if (!reason?.trim()) throw new BadRequestException('Напишите причину отказа');
+    await this.q(`SELECT platform_soft_delete_account($1)`, [accountId]);
+    await this.audit(ctx, 'signup_rejected', accountId, { reason: reason.trim() });
+    return { ok: true };
+  }
+
+  // ── КОД АКТИВАЦИИ ───────────────────────────────────────────────────
+  /**
+   * Код для привязки кассы. Партнёр приезжает к клиенту, берёт код
+   * здесь и вводит на планшете — не заходя в кабинет магазина.
+   */
+  async activationCode(ctx: PlatformCtx, accountId: string) {
+    if (ctx.role === 'partner') {
+      const own = (await this.q(
+        `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
+        [accountId, ctx.userId])).rows[0];
+      if (!own) throw new ForbiddenException('Это не ваш клиент');
+    }
+    const r = (await this.q(`SELECT * FROM platform_pairing_code($1)`, [accountId])).rows[0];
+    if (!r?.code) throw new BadRequestException('У магазина нет кассы — сначала добавьте её');
+    await this.audit(ctx, 'activation_code_taken', accountId, {});
+    return { code: r.code, expiresAt: r.expires_at, register: r.register_name,
+      note: 'Код одноразовый и живёт недолго. Введите его на кассе сейчас.' };
+  }
+
+  // ── СОСТОЯНИЕ И ТАРИФ ───────────────────────────────────────────────
+  /** Заморозить или разморозить магазин. */
+  async setTenantStatus(ctx: PlatformCtx, accountId: string, active: boolean) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    await this.q(`SELECT platform_set_status($1,$2)`, [accountId, active ? 'active' : 'suspended']);
+    await this.audit(ctx, active ? 'tenant_enabled' : 'tenant_suspended', accountId, {});
+    return { ok: true, note: active
+      ? 'Магазин работает'
+      : 'Магазин заморожен: продажи закрыты, кабинет открыт — владелец видит свои цифры' };
+  }
+
+  /**
+   * Сменить тариф. Меняем ТОЛЬКО основную строку счёта: доплаты за
+   * устройства и персональные скидки трогать нельзя — это отдельные
+   * договорённости с клиентом. Правило донора.
+   */
+  async setTier(ctx: PlatformCtx, accountId: string, tier: 'base' | 'pro') {
+    if (ctx.role !== 'super') throw new ForbiddenException('Тариф назначает владелец платформы');
+
+    const set = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+    const price = Number(tier === 'pro' ? set.price_pro : set.price_base);
+    const title = tier === 'pro' ? 'Тариф «Стандарт»' : 'Тариф «Старт»';
+
+    await this.q(`UPDATE plan_line SET ends_at = now()
+                   WHERE account_id=$1 AND kind='base' AND ends_at IS NULL`, [accountId]);
+    await this.q(`INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+                  VALUES ($1,'base',$2,1,$3)`, [accountId, title, price]);
+
+    await this.audit(ctx, 'tier_changed', accountId, { tier, price: money(price) });
+    return { ok: true, tier, monthly: money(price),
+      note: 'Новый тариф войдёт в следующий счёт. Оплаченный период не меняется.' };
+  }
+
+  // ── ПРАВКИ ──────────────────────────────────────────────────────────
+  /** Правка строки счёта: название, количество, цена. */
+  async planLineEdit(ctx: PlatformCtx, id: string, d: {
+    title?: string; qty?: number; price?: number;
+  }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const cur = (await this.q(`SELECT * FROM plan_line WHERE id=$1`, [id])).rows[0];
+    if (!cur) throw new BadRequestException('Строка не найдена');
+    if (cur.ends_at) throw new BadRequestException('Строка закрыта — её нельзя править');
+
+    const price = d.price != null
+      ? Math.round(Number(d.price) * 100) * (cur.kind === 'discount' ? -1 : 1)
+      : Number(cur.unit_price);
+
+    await this.q(
+      `UPDATE plan_line SET title=coalesce($2,title), qty=coalesce($3,qty), unit_price=$4
+        WHERE id=$1`,
+      [id, d.title?.trim() ?? null, d.qty != null ? Math.max(1, Math.floor(Number(d.qty))) : null, price]);
+
+    await this.audit(ctx, 'plan_line_edited', cur.account_id, { id, ...d });
+    return { ok: true, note: 'Новая сумма применится со следующего счёта' };
+  }
+
+  /** Правка партнёра: имя, телефон, комиссия. */
+  async updatePartner(ctx: PlatformCtx, id: string, d: {
+    name?: string; phone?: string; commissionPercent?: number;
+  }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const bp = d.commissionPercent != null ? Math.round(Number(d.commissionPercent) * 100) : null;
+    if (bp != null && (bp < 0 || bp > 10000))
+      throw new BadRequestException('Комиссия от 0 до 100%');
+
+    await this.q(
+      `UPDATE platform_user SET full_name=coalesce($2,full_name),
+              phone=coalesce($3,phone), commission_bp=coalesce($4,commission_bp)
+        WHERE id=$1 AND role='partner'`,
+      [id, d.name?.trim() ?? null, d.phone ?? null, bp]);
+
+    await this.audit(ctx, 'partner_updated', null, { id, ...d });
+    // Прошлые выплаты не пересчитываются: доля заморожена при
+    // подтверждении оплаты.
+    return { ok: true, note: bp != null
+      ? 'Новая комиссия — для будущих оплат. Прошлые выплаты не меняются'
+      : 'Сохранено' };
+  }
+
+  /** Правка карточки клиента: контакты и заметки. */
+  async updateTenant(ctx: PlatformCtx, accountId: string, d: any) {
+    return this.updateCard(ctx, accountId, d);
+  }
+
+  // ── УЧЕБНЫЙ МАГАЗИН ─────────────────────────────────────────────────
+  /**
+   * Завести партнёру учебный магазин: показывать систему на боевом
+   * клиенте нельзя. Наполняется теми же пробными данными, что и обычный.
+   */
+  async createDemo(ctx: PlatformCtx) {
+    const who = ctx.role === 'partner' ? ctx.userId : null;
+    const name = `Учебный магазин — ${ctx.name}`;
+
+    const r = await this.createTenant(ctx, {
+      name, ownerName: ctx.name, ownerPhone: '+7700' + Math.floor(1000000 + Math.random() * 8999999),
+      trialDays: 3650,
+    });
+    await this.q(
+      `UPDATE tenant_card SET is_demo = true, partner_id = coalesce($2, partner_id)
+        WHERE account_id = $1`, [r.id, who]);
+
+    await this.audit(ctx, 'demo_created', r.id, {});
+    return { ...r, isDemo: true,
+      note: 'Учебный магазин создан. Он не участвует в деньгах, сводках и массовых действиях.' };
+  }
+
+  // ── РЕКВИЗИТЫ ОПЛАТЫ ────────────────────────────────────────────────
+  /** Куда платить: картинка QR и текст с реквизитами. */
+  async paySettings(ctx: PlatformCtx) {
+    const s = (await this.q(`SELECT pay_qr_url, pay_details FROM platform_settings WHERE id`)).rows[0] ?? {};
+    return { payQrUrl: s.pay_qr_url ?? null, payDetails: s.pay_details ?? null };
+  }
+
+  async savePaySettings(ctx: PlatformCtx, d: { payQrUrl?: string; payDetails?: string }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Реквизиты меняет владелец платформы');
+    await this.q(
+      `UPDATE platform_settings SET pay_qr_url=coalesce($1,pay_qr_url),
+              pay_details=coalesce($2,pay_details), updated_at=now() WHERE id`,
+      [d.payQrUrl ?? null, d.payDetails ?? null]);
+    await this.audit(ctx, 'pay_settings_changed', null, {});
+    // Клиент видит их в своём кабинете на странице подписки.
+    return { ok: true, note: 'Клиенты увидят новые реквизиты сразу' };
+  }
+
   // ── ЖУРНАЛ ──────────────────────────────────────────────────────────
   private async audit(ctx: PlatformCtx, action: string, accountId: string | null, details: any) {
     await this.q(
@@ -926,6 +1211,97 @@ export class PlatformController {
   assignFlat(@Req() r: any, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.assignPartner(Pl(r), d?.tenantId ?? d?.accountId, d?.partnerId ?? null);
+  }
+
+  // ── карточка клиента ──
+  @Public() @Get('clients/:id/card')
+  card(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.tenantCard(Pl(r), id);
+  }
+
+  // ── заведение клиента и учебного магазина ──
+  @Public() @Post('tenants')
+  createTenant(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.createTenant(Pl(r), d ?? {});
+  }
+
+  @Public() @Post('demo')
+  createDemo(@Req() r: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.createDemo(Pl(r));
+  }
+
+  // ── заявки с сайта ──
+  @Public() @Get('leads')
+  leads(@Req() r: any, @Query('status') st?: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.leads(Pl(r), st);
+  }
+
+  @Public() @Post('leads/:id')
+  setLead(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.setLead(Pl(r), id, d?.status, d?.note);
+  }
+
+  @Public() @Post('signups/:id/approve')
+  approveSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.approveSignup(Pl(r), id, Number(d?.trialDays ?? 14));
+  }
+
+  @Public() @Post('signups/:id/reject')
+  rejectSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.rejectSignup(Pl(r), id, d?.reason);
+  }
+
+  // ── код активации кассы ──
+  @Public() @Get('clients/:id/activation')
+  activation(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.activationCode(Pl(r), id);
+  }
+
+  // ── состояние и тариф ──
+  @Public() @Post('clients/:id/status')
+  setStatus(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.setTenantStatus(Pl(r), id, d?.active !== false);
+  }
+
+  @Public() @Post('clients/:id/tier')
+  setTier(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.setTier(Pl(r), id, d?.tier === 'pro' ? 'pro' : 'base');
+  }
+
+  // ── правки ──
+  @Public() @Patch('lines/:id')
+  editLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.planLineEdit(Pl(r), id, d ?? {});
+  }
+
+  @Public() @Post('partners/:id/update')
+  updatePartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.updatePartner(Pl(r), id, d ?? {});
+  }
+
+  // ── реквизиты оплаты ──
+  @Public() @Get('pay-settings')
+  paySettings(@Req() r: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.paySettings(Pl(r));
+  }
+
+  @Public() @Post('pay-settings')
+  savePaySettings(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.savePaySettings(Pl(r), d ?? {});
   }
 
   @Public() @Get('audit')

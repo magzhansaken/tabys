@@ -351,6 +351,89 @@ const shop = async (name, owner) => {
     ok(v.status === 403, 'Партнёр не удаляет клиентов');
   }
 
+  // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
+  // Дописано по сверке с донором: у них 39 методов, у нас было 30.
+  {
+    // ЗАВЕДЕНИЕ КЛИЕНТА. Партнёр приезжает, ставит систему и отдаёт
+    // вход хозяину. Пароль показан один раз — его диктуют голосом.
+    let v = await j('POST', '/platform/tenants',
+      { name: 'Новый магазин', ownerName: 'Асхат', ownerPhone: '+77013334455',
+        city: 'Астана' }, PARTNER);
+    ok(!!v.d?.id && typeof v.d?.password === 'string',
+       `★ Партнёр завёл клиента, пароль владельцу: ${v.d?.password}`);
+    const newId = v.d.id, newPass = v.d.password;
+
+    v = await j('POST', '/auth/login', { phone: '+77013334455', password: newPass });
+    ok(!!v.d?.access,
+       '★ Владелец ВХОДИТ этим паролем — иначе магазин заведён, а войти нельзя');
+
+    // Дубли по последним десяти цифрам: люди пишут то +7, то 8.
+    v = await j('POST', '/platform/tenants',
+      { name: 'Ещё один', ownerName: 'Кто-то', ownerPhone: '87013334455' }, PARTNER);
+    ok(v.status === 400 && /уже у магазина/.test(v.d?.message ?? ''),
+       '★ Дубль пойман по последним 10 цифрам: 8701… это тот же номер, что +7701…');
+
+    // КАРТОЧКА: всё об одном клиенте одним ответом.
+    v = await j('GET', `/platform/clients/${newId}/card`, null, SUPER);
+    ok(v.d?.name && Array.isArray(v.d?.lines) && Array.isArray(v.d?.payments),
+       `★ Карточка клиента: счёт ${v.d?.monthly} ₸/мес, строк ${v.d?.lines?.length}`);
+
+    // ТАРИФ: меняется только основная строка, доплаты не трогаются.
+    await j('POST', `/platform/clients/${newId}/lines`,
+      { kind: 'pos', title: 'Касса №2', price: 3000 }, SUPER);
+    v = await j('POST', `/platform/clients/${newId}/tier`, { tier: 'pro' }, SUPER);
+    ok(v.d?.ok && v.d?.monthly === 14900, `★ Тариф сменён: ${v.d?.monthly} ₸/мес`);
+
+    v = await j('GET', `/platform/clients/${newId}/card`, null, SUPER);
+    const live = (v.d?.lines ?? []).filter((x) => x.active);
+    ok(live.some((x) => x.kind === 'pos'),
+       '★ Доплата за кассу НЕ затронута сменой тарифа — это отдельная договорённость');
+
+    // СОСТОЯНИЕ
+    v = await j('POST', `/platform/clients/${newId}/status`, { active: false }, SUPER);
+    ok(/кабинет открыт/.test(v.d?.note ?? ''),
+       '★ Заморозка закрывает продажи, но кабинет открыт — владелец видит свои цифры');
+    await j('POST', `/platform/clients/${newId}/status`, { active: true }, SUPER);
+
+    // ПРАВКА СТРОКИ СЧЁТА
+    v = await j('GET', `/platform/clients/${newId}/lines`, null, SUPER);
+    const posLine = v.d.find((x) => x.kind === 'pos');
+    v = await j('PATCH', `/platform/lines/${posLine.id}`, { price: 3500 }, SUPER);
+    ok(v.d?.ok, 'Строка счёта правится');
+
+    // ПРАВКА ПАРТНЁРА: прошлые выплаты не пересчитываются.
+    v = await j('POST', `/platform/partners/${pid}/update`, { commissionPercent: 20 }, SUPER);
+    ok(/Прошлые выплаты не меняются/.test(v.d?.note ?? ''),
+       '★ Новая комиссия — для будущих оплат: доля заморожена при подтверждении');
+
+    // УЧЕБНЫЙ МАГАЗИН
+    v = await j('POST', '/platform/demo', {}, PARTNER);
+    ok(v.d?.isDemo && /не участвует в деньгах/.test(v.d?.note ?? ''),
+       '★ Партнёр завёл себе учебный магазин');
+
+    // РЕКВИЗИТЫ ОПЛАТЫ
+    v = await j('POST', '/platform/pay-settings',
+      { payDetails: 'Каспи 7777 7777 7777' }, SUPER);
+    ok(v.d?.ok, 'Реквизиты сохранены');
+    v = await j('GET', '/platform/pay-settings', null, SUPER);
+    ok(v.d?.payDetails === 'Каспи 7777 7777 7777', 'И читаются обратно');
+
+    v = await j('POST', '/platform/pay-settings', { payDetails: 'чужое' }, PARTNER);
+    ok(v.status === 403, 'Партнёр реквизиты не меняет');
+
+    // ЗАЯВКИ С САЙТА
+    v = await j('GET', '/platform/leads', null, SUPER);
+    ok(Array.isArray(v.d), 'Заявки с сайта читаются');
+
+    v = await j('GET', '/platform/leads', null, PARTNER);
+    ok(v.status === 403, 'Партнёр заявки с сайта не смотрит');
+
+    // КОД АКТИВАЦИИ: без кассы его нет, и об этом сказано прямо.
+    v = await j('GET', `/platform/clients/${newId}/activation`, null, SUPER);
+    ok(v.status === 400 && /нет кассы/.test(v.d?.message ?? ''),
+       '★ Без кассы код не выдаётся, и объяснено почему');
+  }
+
   // ---------- ЗАМОК ПОДПИСКИ ----------
   // Правило соседей: предупреждать за три дня, за день и в день
   // окончания. Человек должен узнать заранее, а не когда смена уже

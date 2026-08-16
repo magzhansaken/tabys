@@ -494,3 +494,119 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
    ORDER BY tr.created_at DESC LIMIT 200;
 $$;
 GRANT EXECUTE ON FUNCTION platform_requests(text, text, uuid) TO shop_app;
+
+-- ── Функции для полного набора действий платформы ────────────────────
+-- Всё, что трогает данные магазинов, — здесь. Правило, выведенное
+-- пятью одинаковыми ловушками: прямой запрос из платформы к закрытым
+-- таблицам возвращает пусто МОЛЧА, без ошибки.
+
+/** Поиск по последним десяти цифрам телефона: люди пишут то +7, то 8. */
+CREATE OR REPLACE FUNCTION platform_find_by_phone(p_phone text)
+RETURNS TABLE (id uuid, name text)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT a.id, a.name FROM account a
+   WHERE a.deleted_at IS NULL AND phone_tail(a.phone) = phone_tail(p_phone)
+   LIMIT 1;
+$$;
+GRANT EXECUTE ON FUNCTION platform_find_by_phone(text) TO shop_app;
+
+/**
+ * Завести магазин с владельцем и пробным периодом.
+ *
+ * Всё одной операцией: магазин, точка, роль владельца, сотрудник,
+ * подписка, карточка. Половина заведённого магазина хуже незаведённого
+ * — в него нельзя войти, но он занимает телефон.
+ */
+CREATE OR REPLACE FUNCTION platform_create_tenant(
+  p_name text, p_phone text, p_owner text, p_hash text,
+  p_trial_days integer, p_partner uuid)
+RETURNS uuid
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE v_acc uuid; v_role uuid; v_store uuid; v_t record;
+BEGIN
+  INSERT INTO account (name, phone, status) VALUES (p_name, p_phone, 'trial')
+    RETURNING id INTO v_acc;
+
+  SELECT id INTO v_role FROM role WHERE account_id = v_acc AND code = 'owner';
+  IF v_role IS NULL THEN
+    INSERT INTO role (account_id, code, name, is_system)
+    VALUES (v_acc, 'owner', 'Владелец', true) RETURNING id INTO v_role;
+  END IF;
+
+  -- Владельцу нужен вход и в кабинет, и на кассу. Без can_login_admin
+  -- он заводится, но войти не может — поймал на живой проверке: пароль
+  -- подходит, отпечаток верный, а вход отбивается.
+  INSERT INTO employee (account_id, role_id, first_name, phone, password_hash,
+                        can_login_admin, can_login_pos, is_active)
+  VALUES (v_acc, v_role, p_owner, p_phone, p_hash, true, true, true);
+
+  INSERT INTO store (account_id, name) VALUES (v_acc, p_name) RETURNING id INTO v_store;
+
+  SELECT id, price_month INTO v_t FROM tariff WHERE is_public ORDER BY price_month LIMIT 1;
+  IF v_t.id IS NOT NULL THEN
+    INSERT INTO subscription (account_id, tariff_id, status, paid_until, starts_at,
+                              price_locked, price_locked_until)
+    VALUES (v_acc, v_t.id, 'trial', now() + (p_trial_days || ' days')::interval, now(),
+            v_t.price_month, now() + interval '1 year');
+    INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+    VALUES (v_acc, 'base', 'Тариф', 1, v_t.price_month * 100);
+  END IF;
+
+  INSERT INTO tenant_card (account_id, partner_id, owner_name, owner_phone, deal_stage)
+  VALUES (v_acc, p_partner, p_owner, p_phone, 'won');
+
+  RETURN v_acc;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_create_tenant(text, text, text, text, integer, uuid) TO shop_app;
+
+/** Одобрить самозапись: открыть пробный период. */
+CREATE OR REPLACE FUNCTION platform_approve_signup(p_account uuid, p_days integer)
+RETURNS timestamptz
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE v_until timestamptz;
+BEGIN
+  v_until := now() + (p_days || ' days')::interval;
+  UPDATE account SET status = 'trial' WHERE id = p_account AND deleted_at IS NULL;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  UPDATE subscription SET paid_until = v_until, status = 'trial' WHERE account_id = p_account;
+  RETURN v_until;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_approve_signup(uuid, integer) TO shop_app;
+
+/** Заморозить или разморозить магазин. */
+CREATE OR REPLACE FUNCTION platform_set_status(p_account uuid, p_status account_status)
+RETURNS void
+SECURITY DEFINER SET search_path = public LANGUAGE sql AS $$
+  UPDATE account SET status = p_status WHERE id = p_account AND deleted_at IS NULL;
+$$;
+GRANT EXECUTE ON FUNCTION platform_set_status(uuid, account_status) TO shop_app;
+
+/**
+ * Код привязки кассы. Берёт первую кассу магазина и выдаёт свежий код.
+ * Партнёр приезжает к клиенту и вводит его на планшете, не заходя в
+ * кабинет магазина.
+ */
+CREATE OR REPLACE FUNCTION platform_pairing_code(p_account uuid)
+RETURNS TABLE (code text, expires_at timestamptz, register_name text)
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE v_reg record; v_code text;
+BEGIN
+  SELECT cr.id, cr.name INTO v_reg FROM cash_register cr
+   WHERE cr.account_id = p_account ORDER BY cr.created_at LIMIT 1;
+  IF v_reg.id IS NULL THEN RETURN; END IF;
+
+  -- Код из восьми знаков в верхнем регистре: его диктуют по телефону,
+  -- и так он читается вслух без «а это буква или цифра».
+  v_code := upper(encode(gen_random_bytes(4), 'hex'));
+
+  -- Прежний непривязанный код гасим: иначе у кассы окажется два живых
+  -- кода, и непонятно, какой ввели.
+  UPDATE device SET deleted_at = now()
+   WHERE cash_register_id = v_reg.id AND token_hash IS NULL AND deleted_at IS NULL;
+
+  INSERT INTO device (account_id, cash_register_id, name, pairing_code, pairing_expires_at)
+  VALUES (p_account, v_reg.id, v_reg.name, v_code, now() + interval '30 minutes');
+
+  RETURN QUERY SELECT v_code, now() + interval '30 minutes', v_reg.name;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_pairing_code(uuid) TO shop_app;
