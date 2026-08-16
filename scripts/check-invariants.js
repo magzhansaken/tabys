@@ -304,6 +304,11 @@ const RULES = [
   { file: 'admin/lib/ui.tsx', must: 'cancel.focus()',
     why: 'В опасном окне наведено на «Отмена»: случайный Enter не должен запускать необратимое' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'async previewPayment',
+    why: 'Предпросмотр считает сервер той же функцией, что и подтверждение: иначе правило о деньгах живёт в двух местах и разъедется' },
+  { file: 'db/migrations/052_platform.sql', must: 'tc.deal_note, tc.touched_at',
+    why: 'Заметка и дата касания в воронке: без них партнёр видит этап, но не помнит, о чём говорили' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

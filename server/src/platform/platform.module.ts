@@ -92,6 +92,7 @@ export class PlatformService {
         status: r.status, subStatus: r.sub_status,
         tariff: r.tariff_name, partner: r.partner_name, partnerId: r.partner_id,
         dealStage: r.deal_stage, isDemo: r.is_demo,
+        dealNote: r.deal_note, touchedAt: r.touched_at,
         paidUntil: r.paid_until, daysLeft: days,
         // Подсвечиваем за неделю: у донора именно так, и это тот срок,
         // когда звонок ещё уместен, а не выглядит выбиванием долга.
@@ -202,6 +203,54 @@ export class PlatformService {
       ok: true, paidUntil: until.toISOString(),
       partnerShare: money(partnerShare), platformShare: money(platformShare),
       note: `Доступ продлён до ${until.toLocaleDateString('ru-RU')}`,
+    };
+  }
+
+  /**
+   * ЧТО ПРОИЗОЙДЁТ, ЕСЛИ ПОДТВЕРДИТЬ. Считает сервер, кабинет
+   * показывает.
+   *
+   * Дизайнер верно заметил: он выводил дату продления и долю партнёра
+   * по правилу сервера прямо в кабинете — то есть правило о деньгах
+   * начинало жить в двух местах. Разъедутся на первой правке, и
+   * владелец увидит одну цифру, а система применит другую.
+   *
+   * Здесь тот же расчёт, что и при подтверждении, но без записи. Одно
+   * правило, два способа спросить.
+   */
+  async previewPayment(ctx: PlatformCtx, paymentId: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+
+    const p = (await this.q(`SELECT * FROM tenant_payment WHERE id = $1`, [paymentId])).rows[0];
+    if (!p) throw new BadRequestException('Оплата не найдена');
+
+    const bp = p.partner_id
+      ? Number((await this.q(`SELECT commission_bp FROM platform_user WHERE id = $1`,
+          [p.partner_id])).rows[0]?.commission_bp ?? 0)
+      : 0;
+    const partnerShare = Math.round(Number(p.amount) * bp / 10000);
+
+    // Дату считаем той же функцией, что и при подтверждении, — но в
+    // откате, чтобы ничего не записалось. Так предпросмотр не может
+    // разойтись с делом даже теоретически.
+    const c = await (this.db as any).pool.connect();
+    let until: string;
+    try {
+      await c.query('BEGIN');
+      until = (await c.query(`SELECT platform_extend_subscription($1,$2) AS until`,
+        [p.account_id, Number(p.months)])).rows[0].until;
+    } finally {
+      await c.query('ROLLBACK').catch(() => {});
+      c.release();
+    }
+
+    return {
+      paidUntil: until,
+      partnerShare: money(partnerShare),
+      platformShare: money(Number(p.amount) - partnerShare),
+      amount: money(Number(p.amount)),
+      months: Number(p.months),
+      partnerPercent: bp / 100,
     };
   }
 
@@ -403,6 +452,12 @@ export class PlatformController {
   approve(@Req() r: any, @Param('id') id: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.approvePayment(Pl(r), id);
+  }
+
+  @Public() @Get('payments/:id/preview')
+  preview(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.previewPayment(Pl(r), id);
   }
 
   @Public() @Post('payments/:id/reject')

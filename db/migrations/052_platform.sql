@@ -253,7 +253,11 @@ RETURNS TABLE (
   id uuid, name text, phone text, status text, city text,
   owner_name text, owner_phone text, deal_stage text, is_demo boolean,
   partner_id uuid, partner_name text, paid_until timestamptz,
-  tariff_name text, revenue_30d numeric, stores bigint, registers bigint)
+  tariff_name text, revenue_30d numeric, stores bigint, registers bigint,
+  -- Заметка и дата последнего касания. Без них воронка бесполезна:
+  -- партнёр видит этап, но не помнит, о чём говорили и когда. Через
+  -- две недели «связались» ничего не значит.
+  deal_note text, touched_at timestamptz)
 SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
   SELECT a.id, a.name, a.phone, a.status::text, tc.city,
          tc.owner_name, tc.owner_phone, tc.deal_stage, coalesce(tc.is_demo, false),
@@ -262,7 +266,8 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
                     WHERE sl.account_id = a.id AND sl.return_of_id IS NULL
                       AND sl.created_at > now() - interval '30 days'), 0),
          (SELECT count(*) FROM store st WHERE st.account_id = a.id),
-         (SELECT count(*) FROM cash_register cr WHERE cr.account_id = a.id)
+         (SELECT count(*) FROM cash_register cr WHERE cr.account_id = a.id),
+         tc.deal_note, tc.touched_at
     FROM account a
     LEFT JOIN tenant_card tc ON tc.account_id = a.id
     LEFT JOIN platform_user pu ON pu.id = tc.partner_id

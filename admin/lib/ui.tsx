@@ -390,7 +390,11 @@ export function Field({ label, children }: any) {
 
 /** Таблица данных: цифры выравниваются вправо и набраны табличными цифрами.
  *  data-label на ячейке — подпись поля, когда строка станет карточкой. */
-export function Table({ cols, rows, empty = 'Пока пусто' }: { cols: { h: string; k?: string; r?: (row: any) => any; right?: boolean }[]; rows: any[]; empty?: string }) {
+export function Table({ cols, rows, empty = 'Пока пусто', rowStyle, onRowClick }: { cols: { h: string; k?: string; r?: (row: any) => any; right?: boolean }[]; rows: any[]; empty?: string;
+  /** подсветка строки данными строки: срок вышел — красным, кончается — тёплым */
+  rowStyle?: (row: any) => any;
+  /** нажатие по строке: карточка открывается там же, где на неё смотрят */
+  onRowClick?: (row: any) => void }) {
   if (!rows?.length) return <div style={{ color: C.dim, fontSize: 14, padding: '10px 0' }}>{empty}</div>;
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -405,7 +409,8 @@ export function Table({ cols, rows, empty = 'Пока пусто' }: { cols: { h
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={row.id ?? ri}>
+            <tr key={row.id ?? ri} onClick={onRowClick ? () => onRowClick(row) : undefined}
+              style={{ ...(onRowClick ? { cursor: 'pointer' } : null), ...(rowStyle ? rowStyle(row) : null) }}>
               {cols.map((c, ci) => (
                 <td key={ci} data-label={c.h} style={{
                   padding: '11px 12px', borderBottom: `1px solid ${C.lineIn}`, verticalAlign: 'top',
@@ -517,7 +522,7 @@ function cellText(c: any, row: any): string {
 }
 
 export function DataTable({
-  cols, rows, empty = 'Пока пусто', storageKey, search = true, exportName, hint, extra,
+  cols, rows, empty = 'Пока пусто', storageKey, search = true, exportName, hint, extra, rowStyle, onRowClick,
 }: {
   cols: { h: string; k?: string; r?: (row: any) => any; right?: boolean }[];
   rows: any[];
@@ -531,6 +536,10 @@ export function DataTable({
   hint?: string;
   /** свои кнопки в строке инструментов */
   extra?: any;
+  /** подсветка строки (передаётся в Table) */
+  rowStyle?: (row: any) => any;
+  /** нажатие по строке (передаётся в Table) */
+  onRowClick?: (row: any) => void;
 }) {
   const [q, setQ] = useState('');
   const [hidden, setHidden] = useState<string[]>([]);
@@ -624,7 +633,7 @@ export function DataTable({
       ) : !list.length ? (
         <EmptyState text={`По запросу «${q}» ничего не нашлось`} />
       ) : (
-        <Table cols={shown} rows={list} empty={empty} />
+        <Table cols={shown} rows={list} empty={empty} rowStyle={rowStyle} onRowClick={onRowClick} />
       )}
     </div>
   );

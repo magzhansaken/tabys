@@ -107,6 +107,20 @@ const shop = async (name, owner) => {
   ok(r.status === 403 && /владелец платформы/.test(r.d?.message ?? ''),
      '★ ГЛАВНОЕ ПРАВИЛО: партнёр не подтверждает деньги');
 
+  // ---------- ПРЕДПРОСМОТР ПЕРЕД ПОДТВЕРЖДЕНИЕМ ----------
+  // Опасное действие показывает последствие ДО нажатия. Но считает
+  // это СЕРВЕР: дизайнер выводил дату и долю по правилу сервера прямо
+  // в кабинете, и правило о деньгах начинало жить в двух местах —
+  // разъедутся на первой правке.
+  r = await j('GET', `/platform/payments/${payId}/preview`, null, SUPER);
+  const prev = r.d;
+  ok(!!prev?.paidUntil && prev?.partnerShare === 1035,
+     `★ Предпросмотр: продлится до ${String(prev?.paidUntil).slice(0, 10)}, партнёру ${prev?.partnerShare} ₸`);
+  ok(prev?.partnerPercent === 15, 'Видно и процент, не только сумму');
+
+  r = await j('GET', `/platform/payments/${payId}/preview`, null, PARTNER);
+  ok(r.status === 403, 'Партнёру предпросмотр не показывается — он всё равно не подтверждает');
+
   // ---------- ПОДТВЕРЖДЕНИЕ ----------
   const before = (await j('GET', '/platform/clients', null, SUPER)).d.find((c) => c.id === id1);
   r = await j('POST', `/platform/payments/${payId}/approve`, null, SUPER);
@@ -114,6 +128,9 @@ const shop = async (name, owner) => {
   ok(r.d?.partnerShare === 1035,
      `★ Доля партнёра заморожена: ${r.d?.partnerShare} ₸ — 15% от 6900`);
   ok(r.d?.platformShare === 5865, `Платформе: ${r.d?.platformShare} ₸`);
+  ok(String(r.d?.paidUntil).slice(0, 10) === String(prev?.paidUntil).slice(0, 10)
+     && r.d?.partnerShare === prev?.partnerShare,
+     '★ Предпросмотр СОВПАЛ с подтверждением до дня и до тенге — правило одно на двоих');
 
   // Досрочная оплата не сжигает остаток: считаем от конца пробного,
   // а не от сегодня. Иначе заплативший заранее теряет дни и больше
@@ -153,6 +170,16 @@ const shop = async (name, owner) => {
   const acts = (r.d ?? []).map((x) => x.action);
   ok(acts.includes('payment_approved') && acts.includes('partner_created'),
      '★ Журнал решений: кто что решил и когда');
+
+  // ---------- ВОРОНКА: ЗАМЕТКА И ДАТА КАСАНИЯ ----------
+  await j('PATCH', `/platform/clients/${id1}`,
+    { dealStage: 'demo', dealNote: 'Показал кассу, думает до пятницы' }, PARTNER);
+  r = await j('GET', '/platform/clients', null, PARTNER);
+  const card = r.d[0];
+  ok(card?.dealNote === 'Показал кассу, думает до пятницы',
+     '★ Заметка видна в списке: без неё через две недели «показали» ничего не значит');
+  ok(!!card?.touchedAt, 'Дата последнего касания есть');
+  ok(card?.dealStage === 'demo', 'Этап воронки сохранён');
 
   // ---------- КАБИНЕТ КЛИЕНТА ----------
   // Порядок ответа обратный привычному, как у соседей: сначала
