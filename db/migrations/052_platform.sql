@@ -301,3 +301,65 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
      AND (p_role = 'super' OR tc.partner_id = p_user);
 $$;
 GRANT EXECUTE ON FUNCTION platform_summary(text, uuid) TO shop_app;
+
+-- ── Дата окончания подписки для платформы ────────────────────────────
+-- Ещё одно место, где нужен обход изоляции. Прямой запрос к подписке
+-- из платформы возвращает пусто — молча, без ошибки. Ловлю это уже
+-- третий раз, поэтому выношу в функцию: теперь один адрес на все
+-- случаи, и наступить снова некуда.
+CREATE OR REPLACE FUNCTION platform_paid_until(p_account uuid)
+RETURNS timestamptz
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT paid_until FROM subscription WHERE account_id = p_account;
+$$;
+GRANT EXECUTE ON FUNCTION platform_paid_until(uuid) TO shop_app;
+
+-- ── Отбор клиентов для массового действия ────────────────────────────
+-- И снова обход изоляции: account закрыт правилом «только свой
+-- магазин», и массовое действие видело ноль строк — молча, показывая
+-- «затронет 0 клиентов».
+--
+-- Учебные отсекаются ЗДЕСЬ, а не в коде: правило «демо не участвует в
+-- деньгах» должно жить в одном месте, иначе новое массовое действие
+-- однажды заденет учебный магазин партнёра.
+CREATE OR REPLACE FUNCTION platform_bulk_targets(p_ids uuid[])
+RETURNS TABLE (id uuid, name text, paid_until timestamptz, is_demo boolean)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT a.id, a.name, s.paid_until, coalesce(tc.is_demo, false)
+    FROM account a
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN subscription s ON s.account_id = a.id
+   WHERE a.id = ANY(p_ids) AND a.deleted_at IS NULL;
+$$;
+GRANT EXECUTE ON FUNCTION platform_bulk_targets(uuid[]) TO shop_app;
+
+/** Применение массового действия. Учебные отсечены на входе. */
+CREATE OR REPLACE FUNCTION platform_bulk_apply(
+  p_ids uuid[], p_action text, p_days integer DEFAULT NULL)
+RETURNS integer
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE v_done integer := 0; v_id uuid;
+BEGIN
+  FOR v_id IN
+    SELECT a.id FROM account a
+      LEFT JOIN tenant_card tc ON tc.account_id = a.id
+     WHERE a.id = ANY(p_ids) AND a.deleted_at IS NULL
+       AND coalesce(tc.is_demo, false) = false
+  LOOP
+    IF p_action = 'grace' AND p_days IS NOT NULL THEN
+      UPDATE subscription
+         SET paid_until = greatest(coalesce(paid_until, now()), now()) + (p_days || ' days')::interval,
+             status = 'active'
+       WHERE account_id = v_id;
+    ELSIF p_action = 'disable' THEN
+      UPDATE account SET status = 'frozen' WHERE id = v_id;
+    ELSIF p_action = 'enable' THEN
+      UPDATE account SET status = 'active' WHERE id = v_id;
+    ELSE
+      CONTINUE;
+    END IF;
+    v_done := v_done + 1;
+  END LOOP;
+  RETURN v_done;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_bulk_apply(uuid[], text, integer) TO shop_app;

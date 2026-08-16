@@ -171,6 +171,102 @@ const shop = async (name, owner) => {
   ok(acts.includes('payment_approved') && acts.includes('partner_created'),
      '★ Журнал решений: кто что решил и когда');
 
+  // ---------- ДОПЛАТА ЗА УСТРОЙСТВО: ПРАВИЛО ДЕСЯТИ ДНЕЙ ----------
+  // Доплата за остаток берётся, только если до конца десять дней и
+  // больше. Меньше — не берём вовсе: спорить с клиентом из-за трёхсот
+  // тенге в конце месяца дороже самих трёхсот тенге, а ощущение
+  // «содрали за неделю как за месяц» он запомнит надолго.
+  {
+    // Ставим дату из-под контекста магазина: таблица подписок закрыта
+    // правилом «только свой», и без контекста обновление трогает ноль
+    // строк — молча, как я уже ловил на сервере.
+    const setUntil = async (days) => {
+      await db.query('BEGIN');
+      await db.query(`SET LOCAL app.account_id = '${id1}'`);
+      await db.query(`UPDATE subscription SET paid_until = now() + ($1 || ' days')::interval
+                       WHERE account_id = $2`, [String(days), id1]);
+      await db.query('COMMIT');
+    };
+
+    await setUntil(20);
+    r = await j('GET', `/platform/clients/${id1}/device-preview?kind=pos`, null, SUPER);
+    ok(r.d?.proRata > 0, `★ Осталось 20 дн — доплата ${r.d?.proRata} ₸ за остаток периода`);
+    ok(r.d?.daysLeft === 20, 'Видно, за сколько дней берём');
+
+    await setUntil(7);
+    r = await j('GET', `/platform/clients/${id1}/device-preview?kind=pos`, null, SUPER);
+    ok(r.d?.proRata === 0,
+       '★ ПРАВИЛО ДЕСЯТИ ДНЕЙ: осталось 7 дн — доплату не берём вовсе');
+    ok(/не берём/.test(r.d?.note ?? ''), 'И объясняем почему, а не молчим');
+  }
+
+  // ---------- СТРОКИ СЧЁТА ----------
+  // Счёт не одно число, а строки: клиент добавил вторую кассу — цена
+  // выросла на понятную величину, а не стала другой цифрой.
+  r = await j('POST', `/platform/clients/${id1}/lines`,
+    { kind: 'pos', title: 'Касса №2', price: 3000 }, SUPER);
+  ok(r.status === 200 || r.status === 201, 'Строка счёта добавлена');
+
+  r = await j('POST', `/platform/clients/${id1}/lines`,
+    { kind: 'discount', title: 'Скидка постоянному', price: 500 }, SUPER);
+  const lineId = r.d?.id;
+
+  r = await j('GET', `/platform/clients/${id1}/lines`, null, SUPER);
+  const disc = (r.d ?? []).find((x) => x.kind === 'discount');
+  ok(disc?.price === -500,
+     '★ Скидка — строка с МИНУСОМ: попадает в тот же расчёт и видна в том же списке');
+
+  r = await j('DELETE', `/platform/lines/${lineId}`, null, SUPER);
+  ok(r.d?.ok, 'Строка закрывается, а не удаляется — счета прошлых месяцев должны сходиться');
+
+  // ---------- УЧЕБНЫЙ МАГАЗИН И МАССОВЫЕ ДЕЙСТВИЯ ----------
+  r = await j('POST', `/platform/clients/${id2}/demo`, { isDemo: true }, SUPER);
+  ok(/не попадает в деньги/.test(r.d?.note ?? ''), '★ Магазин помечен учебным');
+
+  r = await j('POST', '/platform/bulk/preview',
+    { action: 'grace', days: 7, accountIds: [id1, id2] }, SUPER);
+  ok(r.d?.willAffect === 1 && r.d?.skippedDemo === 1,
+     '★ ПРЕДПРОСМОТР ПЕРЕД МАССОВЫМ: затронет 1, учебный пропущен');
+  ok(/не участвуют в деньгах/.test(r.d?.note ?? ''), 'Сказано, почему пропущен');
+
+  r = await j('POST', '/platform/bulk/apply',
+    { action: 'grace', days: 7, accountIds: [id1, id2] }, SUPER);
+  ok(r.d?.affected === 1 && r.d?.skippedDemo === 1,
+     '★ Применилось ровно к тому, что показал предпросмотр');
+
+  r = await j('POST', '/platform/bulk/apply',
+    { action: 'grace', days: 7, accountIds: [id1] }, PARTNER);
+  ok(r.status === 403, 'Партнёр не делает массовых действий');
+
+  // ---------- ЗАЯВКИ ПАРТНЁРА ----------
+  r = await j('POST', '/platform/requests',
+    { accountId: id1, kind: 'device', comment: 'Клиент просит вторую кассу' }, PARTNER);
+  const reqId = r.d?.id;
+  ok(r.d?.status === 'pending', '★ Партнёр подал заявку — решает владелец');
+
+  r = await j('POST', `/platform/requests/${reqId}/decide`, { approve: false }, SUPER);
+  ok(r.status === 400 && /причину/.test(r.d?.message ?? ''),
+     '★ Отказ по заявке требует причины — как и с оплатой');
+
+  r = await j('POST', `/platform/requests/${reqId}/decide`,
+    { approve: true, note: 'Согласовано, ставим' }, SUPER);
+  ok(r.d?.ok, 'Заявка решена');
+
+  // ---------- ПРАЙС-ЛИСТ ----------
+  r = await j('GET', '/platform/price-book', null, SUPER);
+  ok(r.d?.base > 0 && r.d?.extraPos > 0, `★ Прайс: тариф ${r.d?.base} ₸, вторая касса ${r.d?.extraPos} ₸`);
+
+  r = await j('POST', '/platform/price-book', { extraPos: 3500 }, SUPER);
+  ok(/Оплаченные периоды не меняются/.test(r.d?.note ?? ''),
+     '★ Смена цен не трогает оплаченные периоды');
+
+  r = await j('POST', '/platform/price-book', { extraPos: 9999 }, PARTNER);
+  ok(r.status === 403, 'Партнёр цены не назначает');
+
+  // ---------- СВОДКА ПО ДНЯМ ----------
+  r = await j('GET', '/platform/metrics?days=30', null, SUPER);
+  ok(Array.isArray(r.d), `★ Сводка по дням: ${r.d?.length} дней с оплатами`);
+
   // ---------- ВОРОНКА: ЗАМЕТКА И ДАТА КАСАНИЯ ----------
   await j('PATCH', `/platform/clients/${id1}`,
     { dealStage: 'demo', dealNote: 'Показал кассу, думает до пятницы' }, PARTNER);

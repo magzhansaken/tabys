@@ -309,6 +309,13 @@ const RULES = [
   { file: 'db/migrations/052_platform.sql', must: 'tc.deal_note, tc.touched_at',
     why: 'Заметка и дата касания в воронке: без них партнёр видит этап, но не помнит, о чём говорили' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'if (days >= 10) proRata',
+    why: 'Правило десяти дней: спорить из-за трёхсот тенге в конце месяца дороже самих трёхсот, а обиду клиент запомнит' },
+  { file: 'db/migrations/052_platform.sql', must: "coalesce(tc.is_demo, false) = false\n  LOOP",
+    why: 'Учебные отсекаются внутри функции массового действия: новое действие иначе однажды заденет демо партнёра' },
+  { file: 'server/src/platform/platform.module.ts', must: 'async bulkPreview',
+    why: 'Массовое действие всегда сначала показывает, кого затронет: «применилось к 47 клиентам» постфактум узнавать нельзя' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

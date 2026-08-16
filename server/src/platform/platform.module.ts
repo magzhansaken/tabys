@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query, Req, Module, Injectable,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, Req, Module, Injectable,
   CanActivate, ExecutionContext, UnauthorizedException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { DbService } from '../db/db.service';
@@ -356,6 +356,277 @@ export class PlatformService {
     return { ok: true };
   }
 
+  // ── СТРОКИ СЧЁТА ────────────────────────────────────────────────────
+  /**
+   * Состав счёта клиента. Владелец платформы видит, из чего сложилась
+   * сумма, и правит по строке — а не меняет итог одним числом.
+   */
+  async planLines(ctx: PlatformCtx, accountId: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const lines = (await this.q(
+      `SELECT id, kind, title, qty, unit_price, starts_at, ends_at
+         FROM plan_line WHERE account_id = $1 ORDER BY starts_at`, [accountId])).rows;
+    return lines.map((r: any) => ({
+      id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
+      price: money(Number(r.unit_price)),
+      sum: money(Number(r.unit_price) * Number(r.qty)),
+      active: !r.ends_at, startsAt: r.starts_at, endsAt: r.ends_at,
+    }));
+  }
+
+  async addPlanLine(ctx: PlatformCtx, accountId: string, d: {
+    kind: string; title: string; qty?: number; price: number;
+  }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Цены назначает владелец платформы');
+    if (!d.title?.trim()) throw new BadRequestException('Назовите строку: «Касса №2», «Скидка за год»');
+    const kinds = ['base', 'pos', 'store', 'module', 'discount'];
+    if (!kinds.includes(d.kind)) throw new BadRequestException('Неизвестный вид строки');
+
+    // Скидка — строка с отрицательной ценой. Так она попадает в тот же
+    // расчёт и видна в том же списке, а не живёт отдельным полем, о
+    // котором забывают.
+    const price = Math.round(Number(d.price) * 100) * (d.kind === 'discount' ? -1 : 1);
+
+    const r = (await this.q(
+      `INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [accountId, d.kind, d.title.trim(), Math.max(1, Math.floor(Number(d.qty ?? 1))), price])).rows[0];
+
+    await this.audit(ctx, 'plan_line_added', accountId,
+      { title: d.title, price: money(price), kind: d.kind });
+    return { ...r, note: 'Строка добавлена. Новая сумма применится со следующего счёта.' };
+  }
+
+  /** Закрыть строку. Не удаляем: счета прошлых месяцев должны сходиться. */
+  async closePlanLine(ctx: PlatformCtx, id: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const r = await this.q(
+      `UPDATE plan_line SET ends_at = now() WHERE id = $1 AND ends_at IS NULL
+       RETURNING account_id, title`, [id]);
+    if (!r.rows[0]) throw new BadRequestException('Строка не найдена или уже закрыта');
+    await this.audit(ctx, 'plan_line_closed', r.rows[0].account_id, { title: r.rows[0].title });
+    return { ok: true };
+  }
+
+  // ── ДОПЛАТА ЗА УСТРОЙСТВО ───────────────────────────────────────────
+  /**
+   * Сколько стоит добавить кассу или точку прямо сейчас.
+   *
+   * ПРАВИЛО ДЕСЯТИ ДНЕЙ, взятое у донора: доплата за остаток
+   * оплаченного периода берётся, только если до конца десять дней и
+   * больше. Меньше — не берём вовсе.
+   *
+   * Причина житейская: спорить с клиентом из-за трёхсот тенге в конце
+   * месяца дороже самих трёхсот тенге. А ощущение «содрали за неделю
+   * как за месяц» он запомнит надолго.
+   *
+   * У клиента при этом всегда ОДНА дата платежа, сколько бы устройств
+   * он ни добавил.
+   */
+  async deviceAddPreview(ctx: PlatformCtx, accountId: string, kind: 'pos' | 'store') {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+
+    const set = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+    const unit = Number(kind === 'pos' ? set.price_extra_pos : set.price_extra_store);
+
+    // Через функцию с обходом изоляции: прямой запрос к подписке из
+    // платформы возвращает пусто — молча, без ошибки.
+    const until = (await this.q(
+      `SELECT platform_paid_until($1) AS d`, [accountId])).rows[0]?.d;
+
+    let days = 0, proRata = 0;
+    if (until && new Date(until) > new Date()) {
+      days = Math.ceil((new Date(until).getTime() - Date.now()) / 86400000);
+      if (days >= 10) proRata = Math.round(unit * days / 30);
+    }
+
+    return {
+      kind, monthly: money(unit), daysLeft: days, proRata: money(proRata),
+      note: days === 0 ? 'Период не оплачен — доплаты нет, устройство войдёт в следующий счёт'
+        : proRata === 0
+          ? `До конца периода ${days} дн. — доплату не берём, устройство войдёт в следующий счёт`
+          : `Доплата за ${days} дн. до конца оплаченного периода`,
+    };
+  }
+
+  // ── ЗАЯВКИ ПАРТНЁРА ─────────────────────────────────────────────────
+  /** Партнёр просит: вторую кассу, другой тариф, отсрочку. */
+  async createRequest(ctx: PlatformCtx, d: {
+    accountId: string; kind: string; comment?: string; payload?: any;
+  }) {
+    if (!['device', 'tariff', 'grace', 'other'].includes(d.kind))
+      throw new BadRequestException('Неизвестный вид заявки');
+    if (ctx.role === 'partner') {
+      const own = (await this.q(
+        `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
+        [d.accountId, ctx.userId])).rows[0];
+      if (!own) throw new ForbiddenException('Это не ваш клиент');
+    }
+    const r = (await this.q(
+      `INSERT INTO tenant_request (account_id, kind, payload, comment, created_by)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id, kind, status`,
+      [d.accountId, d.kind, JSON.stringify(d.payload ?? {}), d.comment ?? null, ctx.userId])).rows[0];
+    await this.audit(ctx, 'request_created', d.accountId, { kind: d.kind });
+    return { ...r, note: 'Заявка отправлена владельцу платформы' };
+  }
+
+  async requests(ctx: PlatformCtx, status?: string) {
+    return (await this.q(
+      `SELECT tr.id, tr.kind, tr.payload, tr.comment, tr.status, tr.decision_note,
+              tr.created_at, tr.decided_at, a.name AS client, a.id AS account_id,
+              pu.full_name AS author
+         FROM tenant_request tr
+         JOIN account a ON a.id = tr.account_id
+         LEFT JOIN platform_user pu ON pu.id = tr.created_by
+        WHERE ($1::text IS NULL OR tr.status = $1)
+          AND ($2::text = 'super' OR tr.created_by = $3::uuid)
+        ORDER BY tr.created_at DESC LIMIT 200`,
+      [status ?? null, ctx.role, ctx.userId])).rows;
+  }
+
+  /** Решение по заявке. Отказ требует причины — как и с оплатой. */
+  async decideRequest(ctx: PlatformCtx, id: string, approve: boolean, note?: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Решает владелец платформы');
+    if (!approve && !note?.trim())
+      throw new BadRequestException('Напишите причину отказа — партнёр должен понять, что не так');
+
+    const r = await this.q(
+      `UPDATE tenant_request SET status=$2, decision_note=$3, decided_by=$4, decided_at=now()
+        WHERE id=$1 AND status='pending' RETURNING account_id, kind`,
+      [id, approve ? 'approved' : 'rejected', note?.trim() ?? null, ctx.userId]);
+    if (!r.rows[0]) throw new BadRequestException('Заявка не найдена или уже решена');
+
+    await this.audit(ctx, approve ? 'request_approved' : 'request_rejected',
+      r.rows[0].account_id, { kind: r.rows[0].kind, note });
+    return { ok: true };
+  }
+
+  // ── ПРАЙС-ЛИСТ ──────────────────────────────────────────────────────
+  async priceBook(ctx: PlatformCtx) {
+    const s = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+    return {
+      base: money(Number(s.price_base)), pro: money(Number(s.price_pro)),
+      extraPos: money(Number(s.price_extra_pos)), extraStore: money(Number(s.price_extra_store)),
+      discount6m: Number(s.discount_6m_bp) / 100, discount12m: Number(s.discount_12m_bp) / 100,
+      payQr: s.pay_qr_url, payDetails: s.pay_details,
+    };
+  }
+
+  async setPriceBook(ctx: PlatformCtx, d: any) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Цены назначает владелец платформы');
+    const t = (v: any) => v == null ? null : Math.round(Number(v) * 100);
+    await this.q(
+      `UPDATE platform_settings SET
+         price_base = coalesce($1, price_base),
+         price_pro = coalesce($2, price_pro),
+         price_extra_pos = coalesce($3, price_extra_pos),
+         price_extra_store = coalesce($4, price_extra_store),
+         discount_6m_bp = coalesce($5, discount_6m_bp),
+         discount_12m_bp = coalesce($6, discount_12m_bp),
+         pay_qr_url = coalesce($7, pay_qr_url),
+         pay_details = coalesce($8, pay_details),
+         updated_at = now() WHERE id`,
+      [t(d.base), t(d.pro), t(d.extraPos), t(d.extraStore),
+       d.discount6m == null ? null : Math.round(Number(d.discount6m) * 100),
+       d.discount12m == null ? null : Math.round(Number(d.discount12m) * 100),
+       d.payQr ?? null, d.payDetails ?? null]);
+    await this.audit(ctx, 'price_book_changed', null, d);
+    // Цены на витрине берутся отсюда же — менять в двух местах не нужно.
+    return { ok: true, note: 'Новые цены применятся к следующим счетам. Оплаченные периоды не меняются.' };
+  }
+
+  // ── МАССОВЫЕ ДЕЙСТВИЯ ───────────────────────────────────────────────
+  /**
+   * Что произойдёт, если применить действие к нескольким клиентам.
+   *
+   * ВСЕГДА СНАЧАЛА ПРЕДПРОСМОТР. Массовое действие затрагивает чужие
+   * деньги, и «применилось к 47 клиентам» узнавать постфактум нельзя.
+   *
+   * УЧЕБНЫЕ МАГАЗИНЫ В МАССОВЫЕ ПРАВКИ НЕ ПОПАДАЮТ НИКОГДА — правило
+   * донора. Иначе демо однажды окажется в списке на отключение.
+   */
+  async bulkPreview(ctx: PlatformCtx, d: { action: string; accountIds: string[]; days?: number }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const ids = (d.accountIds ?? []).filter(Boolean);
+    if (!ids.length) throw new BadRequestException('Выберите клиентов');
+
+    const rows = (await this.q(
+      `SELECT * FROM platform_bulk_targets($1::uuid[])`, [ids])).rows;
+
+    const demo = rows.filter((r: any) => r.is_demo);
+    const real = rows.filter((r: any) => !r.is_demo);
+
+    return {
+      action: d.action,
+      willAffect: real.length,
+      skippedDemo: demo.length,
+      clients: real.map((r: any) => ({
+        id: r.id, name: r.name, paidUntil: r.paid_until,
+        after: d.action === 'grace' && d.days
+          ? new Date(new Date(r.paid_until ?? Date.now()).getTime() + d.days * 86400000).toISOString()
+          : null,
+      })),
+      note: demo.length
+        ? `${real.length} клиентов затронет. Учебных пропущено: ${demo.length} — они не участвуют в деньгах`
+        : `${real.length} клиентов затронет`,
+    };
+  }
+
+  async bulkApply(ctx: PlatformCtx, d: { action: string; accountIds: string[]; days?: number }) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const ids = (d.accountIds ?? []).filter(Boolean);
+    if (!ids.length) throw new BadRequestException('Выберите клиентов');
+
+    // Учебные отсекаются ВНУТРИ функции, а не здесь: правило «демо не
+    // участвует в деньгах» должно жить в одном месте, иначе новое
+    // массовое действие однажды заденет учебный магазин партнёра.
+    const done = Number((await this.q(
+      `SELECT platform_bulk_apply($1::uuid[], $2, $3) AS n`,
+      [ids, d.action, d.days ?? null])).rows[0].n);
+
+    const total = Number((await this.q(
+      `SELECT count(*) AS n FROM platform_bulk_targets($1::uuid[])`, [ids])).rows[0].n);
+
+    await this.audit(ctx, 'bulk_' + d.action, null, { count: done, days: d.days });
+    return { ok: true, affected: done, skippedDemo: total - done };
+  }
+
+  // ── УЧЕБНЫЙ МАГАЗИН ─────────────────────────────────────────────────
+  /**
+   * Демо для партнёра: показывать систему на боевом клиенте нельзя.
+   * Исключён из всех денег и сводок — иначе они врут.
+   */
+  async markDemo(ctx: PlatformCtx, accountId: string, isDemo: boolean) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    await this.q(
+      `INSERT INTO tenant_card (account_id, is_demo) VALUES ($1,$2)
+       ON CONFLICT (account_id) DO UPDATE SET is_demo = $2, updated_at = now()`,
+      [accountId, isDemo]);
+    await this.audit(ctx, isDemo ? 'marked_demo' : 'unmarked_demo', accountId, {});
+    return { ok: true, note: isDemo
+      ? 'Магазин помечен учебным: не попадает в деньги, сводки и массовые действия'
+      : 'Пометка снята — магазин снова участвует в деньгах и сводках' };
+  }
+
+  // ── СВОДКА ПО ДНЯМ ──────────────────────────────────────────────────
+  /** Как менялись деньги и число клиентов. Демо исключены. */
+  async metrics(ctx: PlatformCtx, days = 30) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const n = Math.min(365, Math.max(7, Math.floor(Number(days))));
+    return (await this.q(
+      `SELECT date_trunc('day', tp.approved_at)::date AS day,
+              sum(tp.amount) AS amount,
+              sum(tp.partner_share) AS partner_share,
+              count(*)::int AS payments
+         FROM tenant_payment tp
+         LEFT JOIN tenant_card tc ON tc.account_id = tp.account_id
+        WHERE tp.status = 'approved' AND tp.approved_at > now() - ($1 || ' days')::interval
+          AND coalesce(tc.is_demo, false) = false
+        GROUP BY 1 ORDER BY 1`, [n])).rows
+      .map((r: any) => ({ day: r.day, amount: money(Number(r.amount)),
+                          partnerShare: money(Number(r.partner_share)), payments: r.payments }));
+  }
+
   // ── ВОРОНКА И КАРТОЧКА ──────────────────────────────────────────────
   async updateCard(ctx: PlatformCtx, accountId: string, d: any) {
     if (ctx.role === 'partner') {
@@ -494,6 +765,91 @@ export class PlatformController {
   updateCard(@Req() r: any, @Param('id') id: string, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.updateCard(Pl(r), id, d ?? {});
+  }
+
+  // ── строки счёта ──
+  @Public() @Get('clients/:id/lines')
+  lines(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.planLines(Pl(r), id);
+  }
+
+  @Public() @Post('clients/:id/lines')
+  addLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.addPlanLine(Pl(r), id, d);
+  }
+
+  @Public() @Delete('lines/:id')
+  closeLine(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.closePlanLine(Pl(r), id);
+  }
+
+  // ── доплата за устройство ──
+  @Public() @Get('clients/:id/device-preview')
+  devicePreview(@Req() r: any, @Param('id') id: string, @Query('kind') kind: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.deviceAddPreview(Pl(r), id, kind === 'store' ? 'store' : 'pos');
+  }
+
+  // ── заявки ──
+  @Public() @Get('requests')
+  requests(@Req() r: any, @Query('status') st?: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.requests(Pl(r), st);
+  }
+
+  @Public() @Post('requests')
+  createRequest(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.createRequest(Pl(r), d);
+  }
+
+  @Public() @Post('requests/:id/decide')
+  decide(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.decideRequest(Pl(r), id, !!d?.approve, d?.note);
+  }
+
+  // ── прайс-лист ──
+  @Public() @Get('price-book')
+  priceBook(@Req() r: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.priceBook(Pl(r));
+  }
+
+  @Public() @Post('price-book')
+  setPriceBook(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.setPriceBook(Pl(r), d ?? {});
+  }
+
+  // ── массовые действия: всегда сначала предпросмотр ──
+  @Public() @Post('bulk/preview')
+  bulkPreview(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.bulkPreview(Pl(r), d ?? {});
+  }
+
+  @Public() @Post('bulk/apply')
+  bulkApply(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.bulkApply(Pl(r), d ?? {});
+  }
+
+  // ── учебный магазин ──
+  @Public() @Post('clients/:id/demo')
+  demo(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.markDemo(Pl(r), id, d?.isDemo !== false);
+  }
+
+  // ── сводка по дням ──
+  @Public() @Get('metrics')
+  metrics(@Req() r: any, @Query('days') days?: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.metrics(Pl(r), Number(days ?? 30));
   }
 
   @Public() @Get('audit')
