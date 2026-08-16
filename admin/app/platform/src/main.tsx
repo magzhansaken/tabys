@@ -116,6 +116,37 @@ const toTheirs = (path: string, data: any): any => {
   if (!data || typeof data !== 'object') return data;
 
   // Вход: имя и роль.
+  const fix = (x: any) => (x && typeof x === 'object')
+    ? { ...x,
+        fullName: x.fullName ?? x.name ?? undefined,
+        role: x.role ? String(x.role).toUpperCase() : undefined,
+        status: x.status ? String(x.status).toUpperCase() : undefined }
+    : x;
+
+  // Список клиентов — со сводкой, как ждёт кабинет.
+  if (path.startsWith('/tenants') && Array.isArray(data)) return withTotals(data.map(fix));
+
+  // Заявки с сайта кабинет ждёт как { rows }, у нас — массив.
+  if (path.startsWith('/leads')) return { rows: Array.isArray(data) ? data.map(fix) : [] };
+
+  // Прайс-лист: у них девять полей под ресторан (экран кухни, официант,
+  // курьер), у нас четыре под магазин. Недостающие отдаём нулями — они
+  // просто не покажутся, а кабинет не упадёт на чтении.
+  if (path.startsWith('/price-book')) return {
+    base: data.base ?? 0, basePro: data.pro ?? 0,
+    pos: data.extraPos ?? 0,
+    kds: 0, waiter: 0, courier: 0,          // ресторанное, у магазина нет
+    discount3: 0,
+    discount6: data.discount6 ?? 0,
+    discount12: data.discount12 ?? 0,
+  };
+
+  // Реквизиты оплаты живут там же, в прайс-листе.
+  if (path.startsWith('/pay-settings')) return {
+    payUrl: null, payQrUrl: data.payQr ?? null,
+    payPhone: null, payName: null, payNote: data.payDetails ?? null,
+  };
+
   if (path === '/login' && data.user) {
     return { ...data, user: {
       ...data.user,
@@ -125,16 +156,37 @@ const toTheirs = (path: string, data: any): any => {
   }
 
   // Списки: имя партнёра и роль встречаются и там.
-  const fix = (x: any) => (x && typeof x === 'object')
-    ? { ...x,
-        fullName: x.fullName ?? x.name ?? undefined,
-        role: x.role ? String(x.role).toUpperCase() : undefined,
-        status: x.status ? String(x.status).toUpperCase() : undefined }
-    : x;
 
   if (Array.isArray(data)) return data.map(fix);
   if (Array.isArray(data.items)) return { ...data, items: data.items.map(fix) };
   return data;
+};
+
+/**
+ * Список клиентов кабинет ждёт со СВОДКОЙ: { rows, totals }. Наш сервер
+ * отдаёт просто массив, а сводку — отдельным запросом.
+ *
+ * Считаем итоги здесь по тем же строкам, что и показываем: два запроса
+ * ради пяти чисел означали бы, что список и сводка могут разойтись —
+ * пока идёт второй запрос, первый уже устарел.
+ */
+const withTotals = (rows: any[]) => {
+  const now = Date.now();
+  const days = (d: any) => d ? Math.ceil((new Date(d).getTime() - now) / 86400000) : null;
+  const live = rows.filter((r) => !r.isDemo);   // учебные в деньги не идут
+  return {
+    rows,
+    totals: {
+      all: live.length,
+      active: live.filter((r) => (days(r.paidUntil) ?? -1) >= 0).length,
+      pending: live.filter((r) => String(r.status ?? '').toUpperCase() === 'TRIAL').length,
+      expired: live.filter((r) => (days(r.paidUntil) ?? 0) < 0).length,
+      // Доход в месяц — в тиынах: кабинет делит на сто при показе.
+      mrr: live
+        .filter((r) => (days(r.paidUntil) ?? -1) >= 0)
+        .reduce((a, r) => a + Math.round(Number(r.planPrice ?? r.monthly ?? 0) * 100), 0),
+    },
+  };
 };
 
 export async function call<T>(path: string, opts: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
