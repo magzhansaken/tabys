@@ -120,5 +120,8 @@
 \echo '--- 051 режим печати бумажного чека ---'
 \i db/migrations/051_receipt_print_mode.sql
 
+\echo '--- 052 платформа: партнёры, строки счёта, оплаты ---'
+\i db/migrations/052_platform.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

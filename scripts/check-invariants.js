@@ -277,6 +277,23 @@ const RULES = [
   { file: 'server/src/pos/pos.service.ts', must: 'for (const mark of (it.marks',
     why: 'Коды считаются поштучно: две бутылки — два кода, каждый выводится отдельно' },
 
+  // ── Платформа: партнёры и деньги ───────────────────────────────────
+  { file: 'server/src/platform/platform.module.ts', must: "Подтверждает только владелец платформы",
+    why: 'Главное правило донора: партнёр доводит клиента до работы, деньги включает владелец — одна точка на всю систему' },
+  { file: 'server/src/platform/platform.module.ts', must: "p_role = 'super' OR tc.partner_id",
+    why: 'Партнёр видит только своих: чужие обороты и телефоны владельцев — не его дело' },
+  { file: 'db/migrations/052_platform.sql', must: 'greatest(coalesce(v_from, now()), now())',
+    why: 'Досрочная оплата не сжигает остаток: иначе заплативший заранее теряет дни и больше никогда не платит вперёд' },
+  { file: 'db/migrations/052_platform.sql', must: "coalesce(tc.is_demo, false) = false",
+    why: 'Демо исключены из сводки: иначе она врёт, а по ней принимают решения' },
+  { file: 'server/src/platform/platform.module.ts', must: 'Напишите причину',
+    why: 'Отклонение требует причины: партнёр должен понять, что не так, а не гадать' },
+
+  { file: 'server/src/billing/billing.service.ts', must: 'canCloseShift: true',
+    why: 'Закрытие смены работает даже при закрытых продажах: в ящике чужие деньги, они обязаны сойтись' },
+  { file: 'server/src/automation/scheduler.module.ts', must: 'last_sent_at < current_date',
+    why: 'Рассылка не повторяется при перезапуске сервера: проход повторится, а письмо владельцу — нет' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

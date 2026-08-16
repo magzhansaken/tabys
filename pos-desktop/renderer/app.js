@@ -89,6 +89,11 @@ async function api(path, { method = 'GET', body, device = true } = {}) {
       SET.receiptHeader = p.receipt_header;
       SET.receiptFooter = p.receipt_footer;
       SET.printMode = p.receipt_print_mode || 'always';
+      // Состояние подписки приходит тем же ответом. Показываем сразу:
+      // владелец должен узнать про срок от кассы, а не когда смена
+      // встала посреди рабочего дня.
+      SET.lock = p.lock || null;
+      drawLock();
       await K.saveSettings(SET);
     }
   } catch { /* нет связи — работаем по сохранённым */ }
@@ -203,6 +208,29 @@ function openSale() {
  * цифру с тем, что насчитал руками — расхождение видно сразу, а не
  * через неделю в отчёте у владельца.
  */
+/**
+ * ПОЛОСА О ПОДПИСКЕ.
+ *
+ * За три дня — жёлтая: «оплатите заранее, чтобы смена не встала».
+ * После срока — красная: продажи закрыты.
+ *
+ * ЗАКРЫТИЕ СМЕНЫ РАБОТАЕТ ВСЕГДА, даже когда продажи закрыты. В ящике
+ * чужие деньги, они обязаны сойтись — что бы ни случилось с оплатой.
+ * Это правило взято у соседнего проекта и оно не обсуждается.
+ */
+function drawLock() {
+  const el = $('lockBar');
+  if (!el) return;
+  const l = SET.lock;
+  if (!l) { el.className = 'lock-bar'; el.innerHTML = ''; return; }
+  el.className = 'lock-bar on ' + (l.kind === 'block' ? 'bad' : 'warn');
+  el.innerHTML = `<b>${escapeHtml(l.title)}</b><span>${escapeHtml(l.message)}</span>`;
+  // Продажи закрываем, но кнопку смены не трогаем.
+  if (l.kind === 'block') {
+    const pay = $('btnPay'); if (pay) { pay.disabled = true; pay.title = l.title; }
+  }
+}
+
 function drawTop() {
   $('shiftLabel').textContent = S.shift ? 'Смена открыта' : 'Смена не открыта';
   const el = $('cashLabel');

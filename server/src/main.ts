@@ -26,12 +26,14 @@ import { PublicApiModule } from './api/public-api.module';
 import { PosSettingsModule } from './pos/pos-settings.module';
 import { CompanySettingsModule } from './admin/company-settings.module';
 import { AlertsModule } from './admin/alerts.module';
+import { PlatformModule } from './platform/platform.module';
+import { SchedulerModule } from './automation/scheduler.module';
 import { WarehousePlusModule } from './warehouse/warehouse.module';
 import { AutomationModule } from './automation/automation.module';
 import { PosService } from './pos/pos.service';
 import { AdminApiModule } from './admin/admin.module';
 
-@Module({ imports: [AuthModule, SyncModule, HealthModule, GoodsModule, PosModule, AdminApiModule, LeadsModule, OperatorModule, ExportModule, TaxModule, PeopleModule, CashPlusModule, WarehousePlusModule, AutomationModule, MarkingModule, WholesaleModule, MarketplaceModule, VerificationModule, ExciseModule, RfmModule, PosUpdateModule, PublicApiModule, CompanySettingsModule, PosSettingsModule, AlertsModule] })
+@Module({ imports: [AuthModule, SyncModule, HealthModule, GoodsModule, PosModule, AdminApiModule, LeadsModule, OperatorModule, ExportModule, TaxModule, PeopleModule, CashPlusModule, WarehousePlusModule, AutomationModule, MarkingModule, WholesaleModule, MarketplaceModule, VerificationModule, ExciseModule, RfmModule, PosUpdateModule, PublicApiModule, CompanySettingsModule, PosSettingsModule, AlertsModule, PlatformModule, SchedulerModule] })
 export class AppModule {}
 
 async function bootstrap() {

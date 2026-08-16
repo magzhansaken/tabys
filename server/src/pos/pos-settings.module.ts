@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Body, Module, Injectable, BadRequestException } from '@nestjs/common';
+import { BillingService } from '../billing/billing.service';
 import { DbService } from '../db/db.service';
 import { Ctx, RequirePermission, Public, DeviceGuard, Dev } from '../auth/guards';
 import { EmployeeContext } from '../auth/permissions';
@@ -210,10 +211,20 @@ export class PosSettingsController {
 @UseGuards(DeviceGuard)
 @Controller('pos/settings')
 export class PosDeviceSettingsController {
-  constructor(private svc: PosSettingsService) {}
+  constructor(private svc: PosSettingsService, private billing: BillingService) {}
 
   @Public() @Get()
-  get(@Dev() dev: any) { return this.svc.get(dev.account_id); }
+  async get(@Dev() dev: any) {
+    // Настройки и состояние подписки — ОДНИМ ответом. Касса спрашивает
+    // их при входе и раз в час; второй запрос ради одного поля означал
+    // бы лишнее ожидание там, где связь и так медленная.
+    const [settings, access] = await Promise.all([
+      this.svc.get(dev.account_id),
+      this.billing.access(dev.account_id).catch((): any => null),
+    ]);
+    return { ...settings, lock: (access as any)?.lock ?? null,
+             paidUntil: (access as any)?.paidUntil ?? null };
+  }
 
   @Public() @Post('approve')
   approve(@Dev() dev: any, @Body() d: { pin: string }) {
@@ -263,6 +274,6 @@ export class PosBonusController {
   // вовсе — компилятор такую ошибку не ловит, только запуск.
   imports: [AuthModule],
   controllers: [PosSettingsController, PosDeviceSettingsController, PosBonusController],
-  providers: [PosSettingsService, LoyaltyService, DbService],
+  providers: [PosSettingsService, LoyaltyService, DbService, BillingService],
 })
 export class PosSettingsModule {}
