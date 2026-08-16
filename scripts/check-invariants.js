@@ -316,6 +316,9 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'async bulkPreview',
     why: 'Массовое действие всегда сначала показывает, кого затронет: «применилось к 47 клиентам» постфактум узнавать нельзя' },
 
+  { file: 'deploy/14_platform_user.sh', must: 'PU_PASS',
+    why: 'Пароль передаётся переменной окружения, а не в строке команды: иначе PowerShell и оболочка съедают $ и !, и войти нечем' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
