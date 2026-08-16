@@ -101,6 +101,42 @@ const toOurs = (path: string) => {
   return '/platform' + path;
 };
 
+/**
+ * Приведение ответа к тому виду, которого ждёт перенесённый кабинет.
+ *
+ * Он писался под свой сервер и называет поля по-своему: fullName вместо
+ * name, роли заглавными (SUPER/PARTNER) вместо строчных. Меняем здесь,
+ * а не в кабинете: тогда его 5562 строки остаются нетронутыми, и
+ * следующее обновление от них ляжет без правок.
+ *
+ * Поймано на живом входе: кабинет падал на попытке взять инициалы из
+ * имени, потому что имени в ответе не было под тем названием.
+ */
+const toTheirs = (path: string, data: any): any => {
+  if (!data || typeof data !== 'object') return data;
+
+  // Вход: имя и роль.
+  if (path === '/login' && data.user) {
+    return { ...data, user: {
+      ...data.user,
+      fullName: data.user.fullName ?? data.user.name ?? data.user.email ?? 'Пользователь',
+      role: String(data.user.role ?? 'partner').toUpperCase(),
+    } };
+  }
+
+  // Списки: имя партнёра и роль встречаются и там.
+  const fix = (x: any) => (x && typeof x === 'object')
+    ? { ...x,
+        fullName: x.fullName ?? x.name ?? undefined,
+        role: x.role ? String(x.role).toUpperCase() : undefined,
+        status: x.status ? String(x.status).toUpperCase() : undefined }
+    : x;
+
+  if (Array.isArray(data)) return data.map(fix);
+  if (Array.isArray(data.items)) return { ...data, items: data.items.map(fix) };
+  return data;
+};
+
 export async function call<T>(path: string, opts: { method?: string; body?: unknown; token?: string } = {}): Promise<T> {
   const res = await fetch(`${API}${toOurs(path)}`, {
     method: opts.method ?? 'GET',
@@ -118,7 +154,7 @@ export async function call<T>(path: string, opts: { method?: string; body?: unkn
     try { msg = JSON.parse(text).message ?? msg; } catch { /* оставляем как есть */ }
     throw new Error(msg || `Ошибка ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return toTheirs(path, await res.json()) as T;
 }
 
 // ─────────────────────────────────────────── вход
