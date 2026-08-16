@@ -12,8 +12,24 @@ DST=/opt/tabys
 [ -f "$DST/deploy/.env" ] || { echo "ОШИБКА: $DST/deploy/.env не найден. Это не обновление, а первая установка — используйте 01_install.sh"; exit 1; }
 
 echo "=== Обновляю код (настройки и пароли сохраняются)"
-cp "$SRC"/server -r "$DST"/ 2>/dev/null || cp -r "$SRC"/server "$DST"/
-cp -r "$SRC"/admin "$DST"/
+# Копируем С УДАЛЕНИЕМ лишнего (rsync --delete), а не просто поверх.
+#
+# Причина: раньше файлы клали поверх, и удалённые оставались на сервере
+# навсегда. Убрали страницу из проекта — она продолжала собираться и
+# работать у клиента. Нашлось, когда заменяли кабинет платформы: новый
+# лёг рядом со старым, и старый выиграл по адресу.
+#
+# Настройки и пароли не трогаем: .env лежит в deploy/, а его копируем
+# отдельно и выборочно.
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete "$SRC"/server/ "$DST"/server/
+  rsync -a --delete "$SRC"/admin/  "$DST"/admin/
+else
+  # rsync может не стоять на голой машине — тогда чистим руками.
+  rm -rf "$DST"/server "$DST"/admin
+  cp -r "$SRC"/server "$DST"/
+  cp -r "$SRC"/admin "$DST"/
+fi
 cp -r "$SRC"/db "$DST"/
 cp -r "$SRC"/docs "$DST"/ 2>/dev/null || true
 cp -r "$SRC"/shared "$DST"/ 2>/dev/null || true
