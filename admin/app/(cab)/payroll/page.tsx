@@ -51,7 +51,7 @@ export default function PayrollPage() {
   const pay = async (row: any) => {
     setErr(''); setMsg('');
     // Выплата необратима и уходит в движение денег — называем последствие.
-    if (!confirmDanger(
+    if (!await confirmDanger(
       `Выплатить ${money(row.totalAccrued)} — ${row.employeeName}?`,
       'Сумма ляжет в расходы статьёй «Зарплата», ведомость закроется. Изменить начисление после выплаты нельзя.',
     )) return;

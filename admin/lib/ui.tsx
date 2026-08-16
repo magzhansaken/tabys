@@ -170,11 +170,70 @@ export function PageHeader({ title, fact, actions, note }: {
  * Полезно назвать ПОСЛЕДСТВИЕ — что произойдёт с данными и деньгами.
  * Поэтому здесь два обязательных довода, а не один вопрос.
  *
- *   if (!confirmDanger('Удалить приёмку №148?',
- *                      'Движения по складу будут отменены, остатки уменьшатся на 42 позиции.')) return;
+ *   if (!await confirmDanger('Удалить приёмку №148?',
+ *                            'Движения по складу будут отменены, остатки уменьшатся на 42 позиции.')) return;
+ *
+ * СВОЁ ОКНО, А НЕ СИСТЕМНОЕ. Раньше здесь стоял window.confirm — и это
+ * противоречило правилу, ради которого функция и писалась. Системное
+ * окно нельзя оформить, в нём последствие выглядит как продолжение
+ * вопроса, и человек жмёт «ОК», не дочитав. Плюс оно рисуется поверх
+ * всего одинаково серым — опасное действие ничем не отличается от
+ * «сохранить настройки».
+ *
+ * Возвращает обещание: вызывать через await.
  */
-export function confirmDanger(what: string, consequence: string) {
-  return window.confirm(`${what}\n\n${consequence}`);
+export function confirmDanger(what: string, consequence: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.setAttribute('data-no-print', '');
+    back.style.cssText = 'position:fixed;inset:0;z-index:1000;display:grid;place-items:center;'
+      + 'background:rgba(20,24,22,.45);padding:16px';
+
+    const card = document.createElement('div');
+    card.style.cssText = `background:${C.card};border:1px solid ${C.line};border-radius:16px;`
+      + 'max-width:460px;width:100%;padding:22px;box-shadow:0 18px 50px rgba(0,0,0,.18)';
+
+    // Заголовок — что произойдёт. Последствие — отдельным абзацем и
+    // тише: его читают вторым, но читают.
+    const h = document.createElement('div');
+    h.style.cssText = `font-size:19px;font-weight:600;color:${C.text};margin-bottom:8px`;
+    h.textContent = what;
+
+    const p = document.createElement('div');
+    p.style.cssText = `font-size:15px;line-height:1.45;color:${C.prose ?? C.dim};margin-bottom:18px`;
+    p.textContent = consequence;
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap';
+
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Отмена';
+    cancel.style.cssText = `min-height:44px;padding:0 18px;border-radius:10px;font-size:15px;`
+      + `background:${C.card};border:1px solid ${C.line};color:${C.text};cursor:pointer`;
+
+    const go = document.createElement('button');
+    go.textContent = 'Да, продолжить';
+    go.style.cssText = 'min-height:44px;padding:0 18px;border-radius:10px;font-size:15px;font-weight:600;'
+      + `background:${C.red};border:1px solid ${C.red};color:#fff;cursor:pointer`;
+
+    const close = (v: boolean) => { document.removeEventListener('keydown', onKey); back.remove(); resolve(v); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(false); };
+
+    cancel.onclick = () => close(false);
+    go.onclick = () => close(true);
+    // Клик мимо окна = отмена. Опасное действие не должно случаться
+    // от неточного нажатия.
+    back.onclick = (e) => { if (e.target === back) close(false); };
+    document.addEventListener('keydown', onKey);
+
+    row.append(cancel, go);
+    card.append(h, p, row);
+    back.append(card);
+    document.body.append(back);
+    // Наводим на «Отмена», а не на «Продолжить»: случайный Enter не
+    // должен запускать необратимое.
+    cancel.focus();
+  });
 }
 
 /** Включено/выключено. Разными должны быть и цвет, и положение, и подпись:
@@ -639,6 +698,25 @@ const STATUS: Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim'
  * Status. Поэтому уточнения живут ЗДЕСЬ, а не в разделах.
  */
 const STATUS_BY_KIND: Record<string, Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim' }>> = {
+  // Клиент глазами платформы. Отдельным видом, потому что те же слова
+  // значат здесь другое: active у сертификата «Активен», а у клиента
+  // «Работает» — он не активен, он торгует.
+  tenant: {
+    trial:    { text: 'Пробный',      tone: 'warn' },
+    setup:    { text: 'Настройка',    tone: 'warn' },
+    active:   { text: 'Работает',     tone: 'ok'   },
+    // «Срок вышел», а не «Просрочен»: клиент не провинился, у него
+    // кончилась оплата, и он вернётся, если позвонить вовремя.
+    expired:  { text: 'Срок вышел',   tone: 'bad'  },
+    disabled: { text: 'Отключён',     tone: 'bad'  },
+    frozen:   { text: 'Заморожен',    tone: 'dim'  },
+  },
+  // Оплата на подтверждении у владельца платформы.
+  pay: {
+    pending:  { text: 'Ждёт подтверждения', tone: 'warn' },
+    approved: { text: 'Подтверждена',       tone: 'ok'   },
+    rejected: { text: 'Отклонена',          tone: 'bad'  },
+  },
   cert: {
     active:  { text: 'Активен',      tone: 'ok'  },
     used:    { text: 'Использован',  tone: 'dim' },

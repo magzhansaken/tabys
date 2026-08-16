@@ -79,7 +79,7 @@ export default function StockPage() {
     setErr('');
     const total = items.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.price) || 0), 0);
     // Проведение меняет остатки и себестоимость — называем последствие.
-    if (!confirmDanger(
+    if (!await confirmDanger(
       `Провести ${KINDS[doc.kind].toLowerCase()} №${doc.number}?`,
       doc.kind === 'supply'
         ? `Остатки вырастут на ${items.length} позиций, себестоимость пересчитается${total > 0 ? ` на сумму ${money(total)}` : ''}. Отменить проведение можно только обратным документом.`

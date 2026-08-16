@@ -110,7 +110,7 @@ export default function AutomationPage() {
                     }} />
                 ) },
               { h: '', r: (r: any) => <Btn kind="danger" onClick={async () => {
-                  if (!confirmDanger('Удалить расписание?',
+                  if (!await confirmDanger('Удалить расписание?',
                     `Вечерние сводки на ${r.target} перестанут приходить. Отчёты и данные не затрагиваются — расписание можно завести заново.`)) return;
                   await api(`/automation/schedules/${r.id}`, { method: 'DELETE' }); load();
                 }}>Удалить</Btn> },
@@ -173,7 +173,7 @@ export default function AutomationPage() {
               { h: '', r: (r: any) => <div style={{ display: 'flex', gap: 6 }}>
                   <Btn kind="ghost" onClick={async () => { await api('/automation/webhooks/test', { method: 'POST', body: '{}' }); setMsg('Тестовое событие отправлено'); load(); }}>Тест</Btn>
                   <Btn kind="danger" onClick={async () => {
-                    if (!confirmDanger('Удалить вебхук?',
+                    if (!await confirmDanger('Удалить вебхук?',
                       `Программа на ${r.url} перестанет получать события сразу. Журнал доставки останется.`)) return;
                     await api(`/automation/webhooks/${r.id}`, { method: 'DELETE' }); load();
                   }}>Удалить</Btn>

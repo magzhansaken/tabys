@@ -241,7 +241,7 @@ export default function ContragentsPage() {
             <Btn kind="danger" disabled={!primary || mergeSel.length === 0} onClick={async () => {
               setErr(''); setPmsg('');
               const main = rows.find((r: any) => (r.counterpartyId ?? r.id) === primary);
-              if (!confirmDanger(
+              if (!await confirmDanger(
                 `Объединить ${mergeSel.length} дублей в «${main?.name ?? 'основного'}»?`,
                 'Продажи, долги и договоры дублей перенесутся на основного, сами дубли уйдут в архив. Разделить их обратно будет нельзя.',
               )) return;

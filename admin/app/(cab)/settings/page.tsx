@@ -173,13 +173,13 @@ export default function SettingsPage() {
                         {r.env !== 'production'
                           ? <Btn onClick={async () => {
                               setErr(''); setMsg('');
-                              if (!confirmDanger(`Перевести «${r.cashRegister}» в боевой режим?`,
+                              if (!await confirmDanger(`Перевести «${r.cashRegister}» в боевой режим?`,
                                 'С этого момента чеки уходят оператору фискальных данных и попадают в налоговую. Тестовые чеки больше пробивать нельзя.')) return;
                               try { const res = await api('/fiscal/set-env', { method: 'POST', body: JSON.stringify({ kkmId: r.kkmId, env: 'production' }) });
                                 setMsg(res.message); load(); } catch (e: any) { setErr(e.message); }
                             }} disabled={!r.readyForProduction}>В боевой режим</Btn>
                           : <Btn kind="ghost" style={{ color: C.dim }} onClick={async () => {
-                              if (!confirmDanger(`Вернуть «${r.cashRegister}» в тестовый режим?`,
+                              if (!await confirmDanger(`Вернуть «${r.cashRegister}» в тестовый режим?`,
                                 'Чеки перестанут уходить в налоговую. Реальные продажи в тестовом режиме — нарушение.')) return;
                               await api('/fiscal/set-env', { method: 'POST', body: JSON.stringify({ kkmId: r.kkmId, env: 'test' }) }); load();
                             }}>В тест</Btn>}
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                 </Field>
                 <Btn onClick={async () => {
                   setErr(''); setMsg('');
-                  if (!confirmDanger(`Сдвинуть начало дня на ${dayHour}:00?`,
+                  if (!await confirmDanger(`Сдвинуть начало дня на ${dayHour}:00?`,
                     'Уже показанные отчёты изменятся: ночные продажи перейдут в предыдущий день. Числа за прошлые месяцы станут другими — это правильно, но предупредите бухгалтера.')) return;
                   try { const r = await api('/company/day-start', { method: 'PATCH', body: JSON.stringify({ hour: Number(dayHour) }) });
                     setMsg(r.note); load(); }
@@ -352,7 +352,7 @@ export default function SettingsPage() {
                       : <Badge tone="ok">{r.status ?? 'работает'}</Badge> },
                   { h: '', r: (r: any) => r.revoked_at ? null : (
                       <Btn kind="danger" onClick={async () => {
-                        if (!confirmDanger(`Отозвать ключ «${r.name}»?`,
+                        if (!await confirmDanger(`Отозвать ключ «${r.name}»?`,
                           'Программа, которая им пользуется, перестанет работать сразу. Вернуть этот ключ нельзя — только выдать новый и прописать его заново.')) return;
                         try { await api(`/api-keys/${r.id}`, { method: 'DELETE' }); load(); }
                         catch (e: any) { setErr(e.message); }
@@ -399,7 +399,7 @@ export default function SettingsPage() {
                       borderRadius: 8, padding: '0 15px', fontSize: 14, background: C.card }}>Загрузить логотип</span>
                   </label>
                   {brand?.logo && <Btn kind="ghost" onClick={async () => {
-                    if (!confirmDanger('Убрать логотип?', 'Чеки начнут печататься без него после ближайшей синхронизации касс. Файл придётся загрузить заново.')) return;
+                    if (!await confirmDanger('Убрать логотип?', 'Чеки начнут печататься без него после ближайшей синхронизации касс. Файл придётся загрузить заново.')) return;
                     await api('/branding/logo/clear', { method: 'POST' }); load();
                   }}>Убрать</Btn>}
                 </div>
