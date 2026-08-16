@@ -31,11 +31,13 @@ const srv = spawn('node', ['dist/main.js'], { cwd: __dirname + '/..',
   env: { ...process.env, PORT, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
 const wait = async () => { for (let i = 0; i < 50; i++) { try { await fetch(API + '/health'); return true; } catch { await new Promise(r => setTimeout(r, 400)); } } return false; };
 
+let PHONE1 = '';
 const shop = async (name, owner) => {
   const phone = '+7730' + Math.floor(1000000 + Math.random() * 8999999);
   let r = await j('POST', '/auth/otp', { phone });
   r = await j('POST', '/auth/register', { phone, code: r.d.devCode,
     businessName: name, ownerName: owner, password: 'Password123' });
+  if (!PHONE1) PHONE1 = phone;      // телефон первого — для входа владельцем
   return r.d;
 };
 
@@ -151,6 +153,41 @@ const shop = async (name, owner) => {
   const acts = (r.d ?? []).map((x) => x.action);
   ok(acts.includes('payment_approved') && acts.includes('partner_created'),
      '★ Журнал решений: кто что решил и когда');
+
+  // ---------- КАБИНЕТ КЛИЕНТА ----------
+  // Порядок ответа обратный привычному, как у соседей: сначала
+  // состояние одной фразой, потом куда платить, и только затем
+  // подробности. У них «Куда платить» стояло под четырьмя равными
+  // карточками, а «Я оплатил» — в самом низу, после настроек зала.
+  {
+    // входим владельцем первого магазина
+    const login = await j('POST', '/auth/login',
+      { phone: PHONE1, password: 'Password123' });
+    const T1 = login.d?.access;
+
+    let v = await j('GET', '/billing/subscription', null, T1);
+    ok(!!v.d?.state?.title, `★ Состояние одной фразой: «${v.d?.state?.title}»`);
+    ok(Array.isArray(v.d?.periods) && v.d.periods.length === 4,
+       'Четыре варианта продления: 1, 3, 6, 12 месяцев');
+
+    const y = v.d.periods.find((p) => p.months === 12);
+    const m1 = v.d.periods.find((p) => p.months === 1);
+    ok(y.amount < m1.amount * 12,
+       `★ Скидка за год считается СЕРВЕРОМ: ${y.amount} ₸ вместо ${m1.amount * 12} — экономия ${y.save}`);
+    ok(v.d?.pay !== undefined, 'Куда платить — вторым блоком, а не в самом низу');
+
+    v = await j('POST', '/billing/declare-payment', { months: 6 }, T1);
+    ok(v.d?.ok && v.d?.months === 6, `★ «Я оплатил»: ${v.d?.amount} ₸ за полгода`);
+    ok(/ждёт подтверждения/.test(v.d?.note ?? ''),
+       'Клиенту сказано, что доступ откроется после подтверждения');
+
+    v = await j('POST', '/billing/declare-payment', { months: 1 }, T1);
+    ok(v.status === 400 && /отправлять вторую не нужно/.test(v.d?.message ?? ''),
+       '★ Вторая отправка отбита: иначе клиент отправит дважды и будет ждать вдвое');
+
+    v = await j('GET', '/billing/subscription', null, T1);
+    ok(!!v.d?.pendingPayment, 'Клиент видит, что оплата отправлена и ждёт');
+  }
 
   // ---------- ЗАМОК ПОДПИСКИ ----------
   // Правило соседей: предупреждать за три дня, за день и в день

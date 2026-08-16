@@ -167,6 +167,132 @@ export class BillingService {
     return {};
   }
 
+  /**
+   * Подписка глазами владельца магазина.
+   *
+   * Одним ответом: состояние, куда платить, состав счёта строками,
+   * варианты продления со скидками, история платежей.
+   *
+   * СОСТАВ СЧЁТА СТРОКАМИ — приём соседей. Клиент добавил вторую кассу:
+   * цена должна вырасти на понятную величину, а не стать другой цифрой
+   * без объяснения. Скидка идёт строкой с минусом, в том же списке, а
+   * не отдельным полем, о котором забывают.
+   */
+  async clientView(accountId: string) {
+    const sub = await this.db.withTenant(accountId, async (c) =>
+      (await c.query(
+        `SELECT s.*, t.name AS tariff_name, t.price_month
+           FROM subscription s LEFT JOIN tariff t ON t.id = s.tariff_id
+          WHERE s.account_id = $1`, [accountId])).rows[0]);
+
+    const set = (await this.db.raw(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+
+    // Строки счёта. Если их нет — показываем сам тариф одной строкой:
+    // человек всё равно должен видеть, за что платит.
+    const lines = (await this.db.raw(
+      `SELECT kind, title, qty, unit_price FROM plan_line
+        WHERE account_id = $1 AND ends_at IS NULL ORDER BY
+          CASE kind WHEN 'base' THEN 1 WHEN 'pos' THEN 2 WHEN 'store' THEN 3
+                    WHEN 'module' THEN 4 ELSE 5 END`, [accountId])).rows
+      .map((r: any) => ({ kind: r.kind, title: r.title, qty: Number(r.qty),
+                          price: Math.round(Number(r.unit_price) / 100),
+                          sum: Math.round(Number(r.unit_price) * Number(r.qty) / 100) }));
+
+    const monthly = lines.length
+      ? lines.reduce((a: number, b: any) => a + b.sum, 0)
+      : Math.round(Number(sub?.price_month ?? 0));
+
+    // Варианты продления. Скидка за срок считается ЗДЕСЬ, а не в
+    // кабинете: если считать по-своему, клиент увидит одно, а заплатит
+    // другое.
+    const periods = [1, 3, 6, 12].map((months) => {
+      const bp = months >= 12 ? Number(set.discount_12m_bp ?? 0)
+        : months >= 6 ? Number(set.discount_6m_bp ?? 0) : 0;
+      const full = monthly * months;
+      const amount = Math.round(full * (10000 - bp) / 10000);
+      return { months, percent: bp / 100, amount, save: full - amount };
+    });
+
+    const days = sub?.paid_until
+      ? Math.ceil((new Date(sub.paid_until).getTime() - Date.now()) / 86400000) : null;
+
+    // Ждёт ли подтверждения уже отправленная оплата. Если да — не
+    // показываем «Я оплатил» второй раз, иначе клиент отправит дважды
+    // и будет ждать вдвое.
+    const pending = (await this.db.raw(
+      `SELECT id, amount, months, created_at FROM tenant_payment
+        WHERE account_id = $1 AND status = 'pending'
+        ORDER BY created_at DESC LIMIT 1`, [accountId])).rows[0];
+
+    return {
+      // 1. Состояние одной фразой — первым, как у соседей.
+      state: {
+        status: sub?.status ?? 'none',
+        paidUntil: sub?.paid_until ?? null,
+        daysLeft: days,
+        title: !sub ? 'Подписка не оформлена'
+          : days == null ? 'Срок ещё не начат'
+          : days < 0 ? `Срок закончился ${new Date(sub.paid_until).toLocaleDateString('ru-RU')}`
+          : days === 0 ? 'Подписка заканчивается сегодня'
+          : `Оплачено до ${new Date(sub.paid_until).toLocaleDateString('ru-RU')}`,
+        tariff: sub?.tariff_name ?? null,
+      },
+      // 2. Куда платить — вторым, а не в самом низу.
+      pay: {
+        qr: set.pay_qr_url ?? null,
+        details: set.pay_details ?? null,
+      },
+      pendingPayment: pending
+        ? { amount: Math.round(Number(pending.amount) / 100), months: pending.months,
+            at: pending.created_at,
+            note: 'Оплата отправлена и ждёт подтверждения. Обычно это занимает несколько часов.' }
+        : null,
+      // 3. Подробности — последними.
+      monthly,
+      lines,
+      periods,
+    };
+  }
+
+  /**
+   * «Я оплатил». Доступ НЕ открывается — только владелец платформы
+   * сверяет поступление и подтверждает. Но заявление уходит сразу, и
+   * клиент видит, что оно принято.
+   */
+  async declarePayment(accountId: string, employeeId: string | null, d: {
+    months?: number; amount?: number; method?: string; comment?: string;
+  }) {
+    const months = Math.max(1, Math.floor(Number(d.months ?? 1)));
+
+    // Сумму берём из своего же расчёта, а не из того, что прислал
+    // кабинет: иначе её можно подменить в запросе и заявить оплату на
+    // тенге.
+    const view = await this.clientView(accountId);
+    const period = view.periods.find((p: any) => p.months === months) ?? view.periods[0];
+
+    const dup = (await this.db.raw(
+      `SELECT id FROM tenant_payment WHERE account_id=$1 AND status='pending'`, [accountId])).rows[0];
+    if (dup) throw new BadRequestException(
+      'Предыдущая оплата ещё ждёт подтверждения — отправлять вторую не нужно');
+
+    const row = (await this.db.raw(
+      `INSERT INTO tenant_payment (account_id, amount, months, method, comment, partner_id)
+       VALUES ($1,$2,$3,$4,$5,(SELECT partner_id FROM tenant_card WHERE account_id=$1))
+       RETURNING id, amount, months`,
+      [accountId, period.amount * 100, months, d.method ?? 'kaspi', d.comment ?? null])).rows[0];
+
+    await this.db.raw(
+      `INSERT INTO platform_audit (actor_name, action, account_id, details)
+       VALUES ('клиент', 'payment_declared', $1, $2)`,
+      [accountId, JSON.stringify({ amount: period.amount, months })]);
+
+    return {
+      ok: true, amount: period.amount, months,
+      note: 'Спасибо! Оплата отмечена и ждёт подтверждения. '
+          + 'Как только деньги поступят, срок продлится автоматически.',
+    };
+  }
+
   async history(accountId: string) {
     return this.db.withTenant(accountId, async (c) =>
       (await c.query(

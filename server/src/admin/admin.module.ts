@@ -611,6 +611,33 @@ export class BillingController {
     return this.bill.setAutoRenew(ctx.accountId, d.enabled);
   }
 
+  /**
+   * Подписка глазами владельца магазина — ОДНИМ ответом.
+   *
+   * Порядок в ответе обратный привычному, как у соседей: сначала
+   * состояние одной фразой, потом куда платить, и только затем
+   * подробности. У них «Куда платить» стояло под четырьмя равными
+   * карточками, а «Я оплатил» — в самом низу, после настроек зала.
+   *
+   * Суммы и скидки берём с сервера как есть и на стороне кабинета не
+   * пересчитываем: владелец платформы меняет их у себя, и если считать
+   * по-своему, клиент увидит одно, а заплатит другое.
+   */
+  @Get('subscription') @RequirePermission('billing', 'view')
+  subscription(@Ctx() ctx: EmployeeContext) { return this.bill.clientView(ctx.accountId); }
+
+  /**
+   * «Я оплатил» — клиент говорит, что деньги отправлены.
+   *
+   * Доступ при этом НЕ открывается: только владелец платформы сверяет
+   * поступление и подтверждает. Но сообщение уходит ему сразу, а
+   * клиент видит, что заявление принято, и не звонит с вопросом.
+   */
+  @Post('declare-payment') @RequirePermission('billing', 'edit')
+  declare(@Ctx() ctx: EmployeeContext, @Body() d: any) {
+    return this.bill.declarePayment(ctx.accountId, ctx.employeeId, d ?? {});
+  }
+
   @Post('run-auto-renew') @RequirePermission('billing', 'edit')
   runAutoRenew(@Ctx() ctx: EmployeeContext) { return this.bill.runAutoRenew(ctx.accountId); }
 

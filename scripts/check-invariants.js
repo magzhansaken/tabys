@@ -294,6 +294,11 @@ const RULES = [
   { file: 'server/src/automation/scheduler.module.ts', must: 'last_sent_at < current_date',
     why: 'Рассылка не повторяется при перезапуске сервера: проход повторится, а письмо владельцу — нет' },
 
+  { file: 'server/src/billing/billing.service.ts', must: 'const period = view.periods.find',
+    why: 'Сумма берётся из своего расчёта, а не из запроса кабинета: иначе её подменят и заявят оплату на тенге' },
+  { file: 'server/src/billing/billing.service.ts', must: 'отправлять вторую не нужно',
+    why: 'Вторая отправка отбита: иначе клиент отправит дважды и будет ждать подтверждения вдвое дольше' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
