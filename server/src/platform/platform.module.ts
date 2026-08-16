@@ -627,6 +627,86 @@ export class PlatformService {
                           partnerShare: money(Number(r.partner_share)), payments: r.payments }));
   }
 
+  // ── ТРИ ДЕЙСТВИЯ, КОТОРЫХ ЖДЁТ ПЕРЕНЕСЁННЫЙ КАБИНЕТ ─────────────────
+  /**
+   * Сбросить пароль владельцу магазина.
+   *
+   * Партнёру звонит клиент «забыл пароль» — и это должно решаться на
+   * месте, а не походом в другой раздел. Новый пароль показывается
+   * ОДИН раз: передать его надо голосом, а не письмом.
+   */
+  async resetOwnerPassword(ctx: PlatformCtx, accountId: string) {
+    if (ctx.role === 'partner') {
+      const own = (await this.q(
+        `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
+        [accountId, ctx.userId])).rows[0];
+      if (!own) throw new ForbiddenException('Это не ваш клиент');
+    }
+    // Пароль из букв и цифр без похожих знаков: его будут диктовать по
+    // телефону, и «l» с «1» там не различить.
+    const abc = 'abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const pass = Array.from({ length: 10 }, () => abc[Math.floor(Math.random() * abc.length)]).join('');
+
+    const r = await this.q(`SELECT platform_reset_owner_password($1, $2) AS ok`,
+      [accountId, await bcrypt.hash(pass, 10)]);
+    if (!r.rows[0]?.ok) throw new BadRequestException('У магазина нет владельца');
+
+    await this.audit(ctx, 'owner_password_reset', accountId, {});
+    return { password: pass,
+      note: 'Пароль показан один раз — продиктуйте владельцу сейчас. Записывать его никуда не нужно.' };
+  }
+
+  /** Добавить кассу или точку с доплатой по правилу десяти дней. */
+  async deviceAdd(ctx: PlatformCtx, accountId: string, kind: 'pos' | 'store') {
+    if (ctx.role !== 'super') throw new ForbiddenException('Устройства подключает владелец платформы');
+
+    const pv = await this.deviceAddPreview(ctx, accountId, kind);
+    const set = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+    const unit = Number(kind === 'pos' ? set.price_extra_pos : set.price_extra_store);
+
+    // Строка счёта — чтобы со следующего месяца цена выросла на
+    // понятную величину, а не стала другой цифрой без объяснения.
+    const n = Number((await this.q(
+      `SELECT count(*) AS n FROM plan_line
+        WHERE account_id=$1 AND kind=$2 AND ends_at IS NULL`, [accountId, kind])).rows[0].n) + 2;
+
+    await this.q(
+      `INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+       VALUES ($1,$2,$3,1,$4)`,
+      [accountId, kind, kind === 'pos' ? `Касса №${n}` : `Точка №${n}`, unit]);
+
+    await this.audit(ctx, 'device_added', accountId, { kind, proRata: pv.proRata });
+    return { ...pv, ok: true,
+      note: pv.proRata > 0
+        ? `Добавлено. Доплата ${pv.proRata} ₸ за остаток периода войдёт в счёт`
+        : 'Добавлено. Доплаты нет — устройство войдёт в следующий счёт' };
+  }
+
+  /**
+   * Удаление клиента. Требует набрать название СЛОВО В СЛОВО.
+   *
+   * Приём донора: удаление необратимо, а «случайно нажал» с чужими
+   * деньгами не шутка. Набирая название, человек успевает подумать.
+   *
+   * На деле это мягкое удаление: магазин перестаёт работать, но данные
+   * остаются — их могут спросить и через год, при разбирательстве.
+   */
+  async deleteTenant(ctx: PlatformCtx, accountId: string, confirmName: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Удаляет только владелец платформы');
+
+    const acc = (await this.q(
+      `SELECT * FROM platform_clients('super', NULL, NULL) WHERE id = $1`, [accountId])).rows[0];
+    if (!acc) throw new BadRequestException('Клиент не найден');
+
+    if (String(confirmName ?? '').trim() !== String(acc.name).trim())
+      throw new BadRequestException(`Наберите название магазина слово в слово: «${acc.name}»`);
+
+    await this.q(`SELECT platform_soft_delete_account($1)`, [accountId]);
+    await this.audit(ctx, 'tenant_deleted', accountId, { name: acc.name });
+    return { ok: true,
+      note: 'Магазин отключён. Данные сохранены — их могут спросить и через год.' };
+  }
+
   // ── ВОРОНКА И КАРТОЧКА ──────────────────────────────────────────────
   async updateCard(ctx: PlatformCtx, accountId: string, d: any) {
     if (ctx.role === 'partner') {
@@ -850,6 +930,30 @@ export class PlatformController {
   metrics(@Req() r: any, @Query('days') days?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.metrics(Pl(r), Number(days ?? 30));
+  }
+
+  @Public() @Post('reset-owner-password')
+  resetPass(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.resetOwnerPassword(Pl(r), d?.tenantId ?? d?.accountId);
+  }
+
+  @Public() @Post('device/add')
+  deviceAdd(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.deviceAdd(Pl(r), d?.tenantId ?? d?.accountId, d?.kind === 'store' ? 'store' : 'pos');
+  }
+
+  @Public() @Post('tenant/delete')
+  del(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.deleteTenant(Pl(r), d?.tenantId ?? d?.accountId, d?.confirmName ?? d?.name);
+  }
+
+  @Public() @Post('assign')
+  assignFlat(@Req() r: any, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.assignPartner(Pl(r), d?.tenantId ?? d?.accountId, d?.partnerId ?? null);
   }
 
   @Public() @Get('audit')

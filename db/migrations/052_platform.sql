@@ -352,7 +352,7 @@ BEGIN
              status = 'active'
        WHERE account_id = v_id;
     ELSIF p_action = 'disable' THEN
-      UPDATE account SET status = 'frozen' WHERE id = v_id;
+      UPDATE account SET status = 'suspended' WHERE id = v_id;
     ELSIF p_action = 'enable' THEN
       UPDATE account SET status = 'active' WHERE id = v_id;
     ELSE
@@ -363,3 +363,30 @@ BEGIN
   RETURN v_done;
 END; $$;
 GRANT EXECUTE ON FUNCTION platform_bulk_apply(uuid[], text, integer) TO shop_app;
+
+-- ── Сброс пароля владельцу и мягкое удаление ─────────────────────────
+-- Обе через обход изоляции: employee и account закрыты правилом
+-- «только свой магазин».
+CREATE OR REPLACE FUNCTION platform_reset_owner_password(p_account uuid, p_hash text)
+RETURNS boolean
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE v_id uuid;
+BEGIN
+  SELECT e.id INTO v_id FROM employee e
+    JOIN role r ON r.id = e.role_id
+   WHERE e.account_id = p_account AND r.code = 'owner' AND e.deleted_at IS NULL
+   LIMIT 1;
+  IF v_id IS NULL THEN RETURN false; END IF;
+  UPDATE employee SET password_hash = p_hash WHERE id = v_id;
+  RETURN true;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_reset_owner_password(uuid, text) TO shop_app;
+
+-- Мягкое удаление: магазин перестаёт работать, данные остаются. Их
+-- могут спросить и через год, при разбирательстве.
+CREATE OR REPLACE FUNCTION platform_soft_delete_account(p_account uuid)
+RETURNS void
+SECURITY DEFINER SET search_path = public LANGUAGE sql AS $$
+  UPDATE account SET deleted_at = now(), status = 'deleted' WHERE id = p_account;
+$$;
+GRANT EXECUTE ON FUNCTION platform_soft_delete_account(uuid) TO shop_app;

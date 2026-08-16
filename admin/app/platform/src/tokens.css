@@ -1,0 +1,418 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Дастархан 2.7 · дизайн-система «Вечерняя стойка»
+   Единственный источник правды для пяти приложений.
+
+   Цвета названы тем, что они значат, а не «primary/secondary»:
+   тёплый графит, латунь домбры, степной шалфей, обожжённая глина.
+   Синего в роли акцента нет — это язык конкурента, мы намеренно тёплые.
+
+   Подключение (тема задаётся атрибутом на <html>):
+     apps/pos    <html data-theme="dark">   тёмные роли
+     apps/kds    <html data-theme="dark">
+     apps/menu   <html data-theme="sand">   песочная бумага + автотёмная
+     apps/backoffice, apps/admin            светлые роли по умолчанию
+
+   Ни одного шрифта с CDN: заведение работает без интернета.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Сырые ступени палитры ───────────────────────────────────────────
+     В разметке ими не пользуются: только через смысловые роли ниже. */
+
+  /* Тёплый графит — база тёмной темы */
+  --graphite-900: #121617;
+  --graphite-850: #191d1f;
+  --graphite-800: #1f2427;
+  --graphite-750: #22282b;
+  --graphite-700: #2c3438;
+  --graphite-650: #333c41;
+  --graphite-600: #3a4348;
+  --graphite-500: #4b565c;
+
+  /* Топлёное молоко — светлые чернила на графите */
+  --cream-100: #f2efe8;
+  --cream-200: #edeae2;
+  --cream-300: #d5cfc4;
+  --cream-350: #c3bdb2;
+  --cream-400: #b3ada2;
+  --cream-600: #8b857b;
+
+  /* Тёплая бумага — база светлой темы */
+  --paper-000: #ffffff;
+  --paper-050: #faf9f7;
+  --paper-100: #f3f5f4;
+  --paper-200: #eceeec;
+  --paper-300: #dfe4e2;
+  --paper-400: #c8cfcc;
+
+  /* Песочная бумага — витрина гостя */
+  --sand-050: #faf7f2;
+  --sand-100: #f4efe6;
+  --sand-200: #efeae1;
+  --sand-300: #e7e1d6;
+  --sand-600: #6b665d;
+  --sand-900: #23211d;
+
+  /* Графитовые чернила */
+  --slate-900: #23282a;
+  --slate-600: #5f6866;
+  --slate-400: #8b9391;
+
+  /* Латунь домбры · кумысно-янтарный — акцент */
+  --brass-100: #f6ecda;
+  --brass-200: #f0dcbe;
+  --brass-300: #f0c078;
+  --brass-500: #e8a33d;   /* тёмная тема */
+  --brass-600: #cf8b28;
+  --brass-650: #c9821f;   /* светлая тема: охра «дастархан» */
+  --brass-700: #a86d1c;
+  --brass-ink: #1d1405;
+
+  /* Степной шалфей — успех, готовность, связь */
+  --sage-200: #e8f0e9;
+  --sage-300: #a8c7b3;
+  --sage-500: #7fa98f;    /* тёмная тема */
+  --sage-700: #4f7f63;    /* светлая тема */
+  --sage-800: #1f7a5c;    /* марка: тот же зелёный, что в icon.svg */
+
+  /* Обожжённая глина / терракота — стоп, просрочка, минус */
+  --clay-100: #f7e4df;
+  --clay-300: #eaa79a;
+  --clay-400: #f0b3a6;
+  --clay-500: #d66a5a;    /* тёмная тема */
+  --clay-700: #b8503f;    /* светлая тема */
+  --clay-800: #a94a3c;
+
+  /* Дымка над степью — только статусы (в пути, назначен, инфо).
+     Никогда не кнопка и не акцент: иначе продукт становится «синим». */
+  --haze-100: #eef2fb;
+  --haze-300: #dbe9f2;
+  --haze-500: #7f9dbd;
+  --haze-700: #4a6e8c;
+  --haze-800: #2c4f96;
+
+  /* Сирень — доставка на кухне (единственный холодный маркер режима) */
+  --lilac-300: #b3a6f0;
+  --lilac-500: #7e6bd8;
+  --lilac-ink: #1a1330;
+
+  /* ── Типографика ─────────────────────────────────────────────────── */
+  --font: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  --font-display: Georgia, "Times New Roman", serif;   /* только витрина гостя */
+
+  --text-11: 11px;  --text-12: 12px;  --text-13: 13px;  --text-14: 14px;
+  --text-16: 16px;  --text-18: 18px;  --text-20: 20px;  --text-24: 24px;
+  --text-28: 28px;  --text-32: 32px;  --text-40: 40px;
+
+  --weight-regular: 400;
+  --weight-medium: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --leading-loose: 1.55;
+
+  --tracking-tight: -0.02em;
+  --tracking-eyebrow: 0.16em;
+
+  /* ── Отступы ─────────────────────────────────────────────────────── */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;  --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px;
+
+  /* ── Скругления. Больше 16 px не бывает: продукт деловой. ────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* ── Цели касания ────────────────────────────────────────────────── */
+  --tap: 56px;          /* касса: стоя, палец, иногда мокрые руки */
+  --tap-compact: 44px;  /* витрина, вспомогательные кнопки в строке */
+  --tap-gap: 8px;       /* минимальный зазор между соседними целями */
+
+  /* ── Переходы. 120 мс мелочи, 200 мс панели. ─────────────────────── */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --t-fast: 120ms;
+  --t-slow: 200ms;
+
+  /* ── Слои ────────────────────────────────────────────────────────── */
+  --z-sticky: 10;
+  --z-sheet: 40;
+  --z-toast: 60;
+  --z-fullscreen: 200;
+}
+
+/* ═══ СВЕТЛЫЕ РОЛИ — офис, панель платформы ═══════════════════════════
+   Контраст на surface: ink 13.9:1, ink-dim 6.1:1.
+   ink-faint — только рамки и служебные подписи, никогда основной текст. */
+:root,
+[data-theme="light"] {
+  --bg: var(--paper-100);
+  --surface: var(--paper-000);
+  --surface-sunk: var(--paper-050);
+  --surface-raised: var(--paper-000);
+  --surface-hover: var(--paper-050);
+  --overlay: rgba(35, 40, 42, 0.45);
+
+  --line: var(--paper-300);
+  --line-strong: var(--paper-400);
+  --line-soft: var(--paper-200);
+
+  --ink: var(--slate-900);
+  --ink-dim: var(--slate-600);
+  --ink-faint: var(--slate-400);
+  /* Текст, который НАЗЫВАЕТ значение рядом (подписи осей, волны
+     подачи, подписи колонок, плейсхолдеры). Мелкий кегль — не повод
+     для 3:1: без него цифра рядом теряет смысл. --ink-faint остаётся
+     только для рамок, разделителей и декора. */
+  --ink-label: var(--slate-600);
+  --ink-on-accent: #ffffff;
+  /* Текст на цветных заливках среднего тона (глина, латунь, сирень):
+     белый на них даёт 3,5–4,2:1, тёмные чернила — 5,6–8:1
+     и при этом не делают плашку тише. */
+  --ink-on-fill: var(--brass-ink);
+
+  --accent: var(--brass-650);
+  --accent-hover: var(--brass-700);
+  --accent-quiet: var(--brass-100);
+  /* Залитая кнопка и акцентный текст: белый на #c9821f даёт 3,1:1 —
+     ниже порога. Охра остаётся цветом бренда (рамки, подложки,
+     графики), а под текст идёт глубокая латунь: 5,6:1 с белым
+     и 6,4:1 на бумаге. */
+  --accent-strong: #8f5c12;
+  --ink-on-warm: #7a4e10;    /* текст на латунных подложках: 5,4:1 */
+  --ok-strong: #38624a;      /* текст на шалфейных подложках: 5,5:1 */
+  --danger-strong: #8f3a2c;  /* текст на терракотовых подложках: 5,5:1 */
+
+  --ok: var(--sage-700);
+  --ok-quiet: var(--sage-200);
+  --warn: var(--brass-700);
+  --warn-quiet: var(--brass-200);
+  --danger: var(--clay-700);
+  --danger-quiet: var(--clay-100);
+  --info: var(--haze-700);
+  --info-quiet: var(--haze-100);
+
+  /* Тени тёплые: серая тень на тёплой бумаге читается как грязь */
+  --shadow-1: 0 1px 2px rgba(56, 38, 14, 0.07);
+  --shadow-2: 0 4px 12px -2px rgba(56, 38, 14, 0.11), 0 2px 4px rgba(56, 38, 14, 0.06);
+  --shadow-3: 0 16px 32px -8px rgba(56, 38, 14, 0.18), 0 4px 10px rgba(56, 38, 14, 0.08);
+  --shadow-lift: 0 22px 40px -10px rgba(56, 38, 14, 0.3);      /* перетаскивание */
+  --shadow-sheet: 0 -18px 40px -12px rgba(56, 38, 14, 0.26);
+  --shadow-accent: 0 8px 20px -6px rgba(201, 130, 31, 0.38);
+}
+
+/* ═══ ТЁМНЫЕ РОЛИ — касса и кухня ═════════════════════════════════════
+   Касса часто стоит у окна: светлый фон бликует, поэтому тёмная —
+   единственная тема здесь. На кухне ink на bg даёт 9:1 (нужно 7:1). */
+[data-theme="dark"] {
+  --bg: var(--graphite-850);
+  --surface: var(--graphite-750);
+  --surface-sunk: var(--graphite-800);
+  --surface-raised: var(--graphite-700);
+  --surface-hover: var(--graphite-650);
+  --overlay: rgba(10, 12, 13, 0.72);
+
+  --line: var(--graphite-600);
+  --line-strong: var(--graphite-500);
+  --line-soft: var(--graphite-700);
+
+  --ink: var(--cream-200);
+  --ink-dim: var(--cream-350);      /* #b3ada2 давал 4,2:1 на --surface — ниже порога */
+  --ink-faint: var(--cream-600);
+  --ink-label: var(--cream-300);   /* 6,8:1 на --surface: кухня смотрит с трёх метров */
+  --ink-on-accent: var(--brass-ink);
+  --ink-on-fill: var(--brass-ink);
+
+  --accent: var(--brass-500);
+  --accent-hover: var(--brass-300);
+  --accent-quiet: rgba(232, 163, 61, 0.12);
+  /* На графите латунь уже контрастна: «сильные» роли светлее, не темнее */
+  --accent-strong: var(--brass-500);
+  --ink-on-warm: var(--brass-300);
+  --ok-strong: var(--sage-300);
+  --danger-strong: var(--clay-400);
+
+  --ok: var(--sage-500);
+  --ok-quiet: rgba(127, 169, 143, 0.14);
+  --warn: var(--brass-600);
+  --warn-quiet: rgba(207, 139, 40, 0.18);
+  --danger: var(--clay-500);
+  --danger-quiet: rgba(169, 74, 60, 0.28);
+  --info: var(--haze-500);
+  --info-quiet: rgba(127, 157, 189, 0.16);
+
+  /* Просрочка на кухне: меняется фон карточки целиком, без мигания */
+  --danger-surface: #2b1c19;
+  --danger-surface-head: #3a231e;
+  --danger-surface-line: #6e3a30;
+  --danger-surface-btn: #4a2a23;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 4px 12px -2px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 32px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 22px 40px -10px rgba(0, 0, 0, 0.6);
+  --shadow-sheet: 0 -24px 48px -12px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 10px 24px -8px rgba(232, 163, 61, 0.5);
+}
+
+/* ═══ ПЕСОЧНАЯ БУМАГА — витрина гостя ═════════════════════════════════ */
+[data-theme="sand"] {
+  --bg: var(--sand-050);
+  --surface: var(--paper-000);
+  --surface-sunk: var(--sand-100);
+  --line: var(--sand-300);
+  --line-soft: var(--sand-200);
+  --line-strong: #d8d0c1;
+  --ink: var(--sand-900);
+  --ink-dim: var(--sand-600);
+  --ink-faint: #a3998a;
+  --ink-label: var(--sand-600);
+  --ink-on-accent: #fdfbf7;
+  --ink-on-fill: var(--brass-ink);
+  --accent: #b8761c;
+  --accent-hover: #9c6314;
+  --accent-quiet: #f6e8cf;
+  --accent-strong: #8f5c12;
+  --ink-on-warm: #7a4e10;
+  --ok-strong: #1f7a5c;
+  --danger-strong: #8f3a2c;
+  --price: #8f5c12;                 /* латунная цена: 6,1:1 на песке */
+  --ok: var(--sage-800);
+  --ok-quiet: var(--sage-200);
+  --danger: #9c3c2a;
+  --danger-quiet: var(--clay-100);
+  --overlay: rgba(23, 21, 18, 0.82);
+  --shadow-1: 0 1px 2px rgba(56, 38, 14, 0.07);
+  --shadow-2: 0 4px 12px -2px rgba(56, 38, 14, 0.1);
+  --shadow-3: 0 16px 32px -8px rgba(56, 38, 14, 0.16);
+  --shadow-sheet: 0 -12px 20px -10px rgba(56, 38, 14, 0.12);
+}
+
+/* Гость в вечернем зале не должен слепнуть от белого экрана */
+@media (prefers-color-scheme: dark) {
+  [data-theme="sand"] {
+    --bg: #171512;
+    --surface: #201d1a;
+    --surface-sunk: #2a251f;
+    --line: #3a3631;
+    --line-soft: #2f2b26;
+    --line-strong: #4a453e;
+    --ink: #ece7df;
+    --ink-dim: #a39c8f;
+    --ink-faint: #6f665a;
+    --ink-label: #a39c8f;
+    --ink-on-accent: var(--brass-ink);
+    --accent: var(--brass-500);
+    --accent-hover: var(--brass-300);
+    --accent-quiet: rgba(232, 163, 61, 0.14);
+    --accent-strong: var(--brass-500);
+    --ink-on-warm: var(--brass-300);
+    --ok-strong: #7fcfa8;
+    --danger-strong: var(--clay-300);
+    --price: var(--brass-500);
+    --ok: #7fcfa8;
+    --ok-quiet: rgba(79, 174, 138, 0.18);
+    --danger: var(--clay-300);
+    --danger-quiet: rgba(169, 74, 60, 0.26);
+    --shadow-sheet: 0 -12px 20px -10px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ═══ СОВМЕСТИМОСТЬ ═══════════════════════════════════════════════════
+   Старые имена из apps/pos/src/tokens.css и apps/*/src/*.css живут
+   как псевдонимы новых ролей: девять диалогов кассы, схема зала
+   и таблицы офиса продолжают работать без правок разметки.
+   Значения совпадают с прежними: --tap 56px, --accent #e8a33d
+   в тёмной теме, --ok #7fa98f, --r 10px.
+   Атрибут data-theme стоит на <html>, поэтому var() здесь
+   разрешается уже в значениях выбранной темы. */
+:root {
+  --surface-2: var(--surface-raised);   /* было: #2c3438 */
+  --accent-ink: var(--ink-on-accent);   /* было: #1d1405 / #fff */
+  --mono: var(--font-mono);
+  --r: var(--radius-md);                /* было: 10px */
+  --paper: var(--surface);              /* витрина: часть стилей звала так */
+  --bad: var(--danger);                 /* панель платформы */
+  --head: var(--graphite-850);          /* панель платформы: тёмная шапка */
+}
+
+/* ═══ БАЗА ════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--text-16);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
+/* Клавиатура должна видеть, где она находится: обвод только при Tab */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Суммы: 1 234 567 ₸ не сдвигает колонку и не ломает вёрстку */
+.money,
+[data-money] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Плейсхолдер — инструкция, а не декор: тот же порог, что у текста */
+::placeholder { color: var(--ink-label); opacity: 1; }
+
+/* Надзаголовок раздела */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-11);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* ═══ ДОСТУПНОСТЬ ═════════════════════════════════════════════════════
+   Анимация утомляет к концу смены и мешает людям с вестибулярными
+   нарушениями. На кухне мигание запрещено отдельно: повар смотрит
+   на экран восемь часов. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══ ПЕЧАТЬ ══════════════════════════════════════════════════════════
+   У витрины и офиса есть печатные виды: фон уходит, текст чёрный. */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-sunk: #ffffff;
+    --surface-raised: #ffffff;
+    --ink: #000000;
+    --ink-dim: #444444;
+    --line: #bbbbbb;
+    --shadow-1: none;
+    --shadow-2: none;
+    --shadow-3: none;
+  }
+  body { background: #fff; color: #000; }
+}
