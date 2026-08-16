@@ -280,8 +280,8 @@ const RULES = [
   // ── Платформа: партнёры и деньги ───────────────────────────────────
   { file: 'server/src/platform/platform.module.ts', must: "Подтверждает только владелец платформы",
     why: 'Главное правило донора: партнёр доводит клиента до работы, деньги включает владелец — одна точка на всю систему' },
-  { file: 'server/src/platform/platform.module.ts', must: "p_role = 'super' OR tc.partner_id",
-    why: 'Партнёр видит только своих: чужие обороты и телефоны владельцев — не его дело' },
+  { file: 'db/migrations/052_platform.sql', must: "p_role = 'super' OR tc.partner_id = p_user",
+    why: 'Партнёр видит только своих. Правило живёт в функции базы, а не в коде: забыть добавить условие в новый запрос невозможно' },
   { file: 'db/migrations/052_platform.sql', must: 'greatest(coalesce(v_from, now()), now())',
     why: 'Досрочная оплата не сжигает остаток: иначе заплативший заранее теряет дни и больше никогда не платит вперёд' },
   { file: 'db/migrations/052_platform.sql', must: "coalesce(tc.is_demo, false) = false",
