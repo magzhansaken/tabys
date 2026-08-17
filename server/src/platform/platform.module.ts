@@ -334,10 +334,14 @@ export class PlatformService {
     const p = (await this.q(`SELECT * FROM tenant_payment WHERE id = $1`, [paymentId])).rows[0];
     if (!p) throw new BadRequestException('Оплата не найдена');
 
-    const bp = p.partner_id
-      ? Number((await this.q(`SELECT commission_bp FROM platform_user WHERE id = $1`,
-          [p.partner_id])).rows[0]?.commission_bp ?? 0)
-      : 0;
+    // Имя партнёра и его процент — в последствиях они нужны словами:
+    // «Партнёру · Ерлан (15%) → 3 750 ₸» читается, а «партнёру 3 750»
+    // заставляет вспоминать, кому именно.
+    const pr = p.partner_id
+      ? (await this.q(`SELECT full_name, commission_bp FROM platform_user WHERE id = $1`,
+          [p.partner_id])).rows[0]
+      : null;
+    const bp = Number(pr?.commission_bp ?? 0);
     const partnerShare = Math.round(Number(p.amount) * bp / 10000);
 
     // Дату считаем той же функцией, что и при подтверждении, — но в
@@ -361,6 +365,10 @@ export class PlatformService {
       amount: money(Number(p.amount)),
       months: Number(p.months),
       partnerPercent: bp / 100,
+      partnerName: pr?.full_name ?? null,
+      client: (await this.q(
+        `SELECT name FROM platform_clients('super', NULL, NULL) WHERE id = $1`,
+        [p.account_id])).rows[0]?.name ?? null,
     };
   }
 

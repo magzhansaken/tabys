@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
 import { RowMenu } from '../ui/RowMenu';
+import { PayForm } from '../ui/PayForm';
 import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
@@ -44,6 +45,9 @@ export default function Clients({ me }: { me: Me }) {
   const [menu, setMenu] = useState<string | null>(null);
   const [shown, setShown] = useState<{ title: string; value: string; note: string } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  // Кнопка «Оплата» открывает окно отметки: партнёр получил деньги —
+  // отмечает здесь, доступ продлевает владелец платформы.
+  const [paying, setPaying] = useState<any>(null);
 
   const ask = useAsk();
   const toast = useToast();
@@ -154,6 +158,11 @@ export default function Clients({ me }: { me: Me }) {
         <BulkPanel rows={data.rows} selected={selected}
           onClear={() => setSelected([])}
           onDone={() => { dropCache(); load(); }} />
+      )}
+
+      {paying && (
+        <PayForm client={paying}
+          onDone={(saved) => { setPaying(null); if (saved) { dropCache(); load(); } }} />
       )}
 
       {err && <div className="err">{err}</div>}
@@ -267,7 +276,8 @@ export default function Clients({ me }: { me: Me }) {
                   <td className="num">{money(r.revenue30d)}</td>
                   <td>{r.partner ?? <span className="nobody">без партнёра</span>}</td>
                   <td className="actions">
-                    <button className="btn small accent">Оплата</button>
+                    <button className="btn small accent"
+                      onClick={() => setPaying(r)}>Оплата</button>
                     <button className="btn small">Карточка</button>
 
                     {/* Меню строки: в строке два действия каждого дня,

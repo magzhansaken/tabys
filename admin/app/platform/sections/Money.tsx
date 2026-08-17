@@ -14,15 +14,16 @@
  */
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
+import { useAsk } from '../ui/Ask';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonMetrics, SkeletonCards, Empty } from '../ui/States';
 
 export default function Money({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
   const [onlyPending, setOnlyPending] = useState(true);
   const [err, setErr] = useState('');
-  const [ask, setAsk] = useState<{ p: any; yes: boolean } | null>(null);
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<any>(null);
+  const [leaving, setLeaving] = useState<Record<string, boolean>>({});
 
   const load = async (pending = onlyPending) => {
     const path = '/payments' + (pending ? '?status=pending' : '');
@@ -31,73 +32,79 @@ export default function Money({ me }: { me: Me }) {
     try {
       const d = await api(path);
       setData(d); putCache(path, d); setErr('');
-    } catch (e: any) { if (!hit) setErr(e.message); }
+    } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  const open = async (p: any, yes: boolean) => {
-    setReason('');
-    if (yes) {
-      try { setPreview(await api(`/payments/${p.id}/preview`)); }
-      catch (e: any) { setErr(e.message); return; }
-    } else setPreview(null);
-    setAsk({ p, yes });
-  };
+  const [busy, setBusy] = useState(false);
 
-  const run = async () => {
-    if (!ask) return;
-    if (!ask.yes && !reason.trim()) { setErr('Напишите причину'); return; }
+  const ask = useAsk();
+  const toast = useToast();
+
+  /**
+   * Решение по оплате. Последствия ПЯТЬЮ строками, как у них: имя
+   * партнёра с процентом читается, а «партнёру 3 750» заставляет
+   * вспоминать, кому именно.
+   */
+  const decide = async (p: any, yes: boolean) => {
+    let pv: any = null;
+    if (yes) {
+      try { pv = await api(`/payments/${p.id}/preview`); }
+      catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
+    }
+
+    const answer = await ask(yes ? {
+      title: 'Подтвердить оплату',
+      sub: 'Доступ клиента продлится сразу. Отменить подтверждение нельзя.',
+      effects: [
+        ['Магазин', p.client],
+        ['Сумма', money(p.amount)],
+        ['Период', `${p.months} мес.`],
+        ['Продлит доступ до', fullDate(pv.paidUntil)],
+        ...(pv.partnerName
+          ? [[`Партнёру · ${pv.partnerName} (${pv.partnerPercent}%)`,
+              money(pv.partnerShare)] as [string, string]]
+          : [['Партнёра нет', 'всё платформе'] as [string, string]]),
+      ],
+      confirmLabel: 'Да, подтвердить',
+    } : {
+      title: 'Отклонить оплату',
+      sub: 'Партнёр увидит причину — напишите так, чтобы было понятно.',
+      effects: [['Магазин', p.client], ['Сумма', money(p.amount)]],
+      reason: { label: 'Причина отказа — её увидит партнёр', required: true,
+                placeholder: 'Деньги не поступили на счёт' },
+      danger: true,
+      confirmLabel: 'Отклонить',
+    });
+
+    if (!answer) return;
+
     setBusy(true);
     try {
-      ask.yes
-        ? await api(`/payments/${ask.p.id}/approve`, { method: 'POST' })
-        : await api(`/payments/${ask.p.id}/reject`, { method: 'POST', body: { reason } });
-      setAsk(null); setPreview(null); setReason(''); dropCache(); await load();
-    } catch (e: any) { setErr(e.message); }
-    finally { setBusy(false); }
+      if (yes) {
+        const r = await api(`/payments/${p.id}/approve`, { method: 'POST' });
+        // Тост с датой, а не «готово»: видно, что именно произошло.
+        toast({ text: `${money(p.amount)} подтверждены · доступ до ${fullDate(r.paidUntil)}` });
+      } else {
+        await api(`/payments/${p.id}/reject`, { method: 'POST', body: { reason: answer.reason } });
+        toast({ text: 'Оплата отклонена, партнёр увидит причину' });
+      }
+      // Карточка уходит плавно — то же движение, что в ленте.
+      setLeaving((prev) => ({ ...prev, [p.id]: true }));
+      setTimeout(async () => { dropCache(); await load(); setLeaving({}); }, 280);
+    } catch (e: any) {
+      toast({ text: humanError(e), kind: 'err' });
+    } finally { setBusy(false); }
   };
 
-  if (err && !data) return <div className="err">{err}</div>;
-  if (!data) return <div className="muted">Загрузка…</div>;
+  if (err && !data) return <Failed text={err} onRetry={() => load()} />;
+  if (!data) return <><SkeletonMetrics count={4} /><SkeletonCards count={3} /></>;
 
   const t = data.totals;
 
   return (
     <>
       {err && <div className="err">{err}</div>}
-
-      {ask && (
-        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
-          <div className="ask-card">
-            <b>{ask.p.client}</b>
-            <p>{money(ask.p.amount)} · {ask.p.months} мес.</p>
-            {ask.yes ? (
-              <>
-                {/* Последствие до нажатия: до какой даты продлит и
-                    сколько достанется партнёру. Считает сервер. */}
-                {preview && (
-                  <p className="pay-note">
-                    продлит до {fullDate(preview.paidUntil)} · партнёру {money(preview.partnerShare)}
-                    {' '}({preview.partnerPercent}%) · платформе {money(preview.platformShare)}
-                  </p>
-                )}
-              </>
-            ) : (
-              <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
-                placeholder="Причина — партнёр должен понять, что не так" />
-            )}
-            <div className="pay-actions">
-              <button className="btn ghost" onClick={() => { setAsk(null); setReason(''); }}>
-                Отмена
-              </button>
-              <button className={`btn ${ask.yes ? 'primary' : 'danger'}`}
-                disabled={busy} onClick={run}>
-                {ask.yes ? 'Да, подтвердить' : 'Отклонить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="cards">
         <div className="card"><span>Записей</span><b>{t.count}</b></div>
@@ -118,16 +125,17 @@ export default function Money({ me }: { me: Me }) {
       </div>
 
       {data.rows.length === 0 ? (
-        <div className="all-clear">
-          <b>{onlyPending ? 'Всё подтверждено' : 'Оплат нет'}</b>
-          <p>{onlyPending
+        <Empty title={onlyPending ? 'Всё подтверждено' : 'Оплат нет'}
+          text={onlyPending
             ? 'Ни одна оплата не ждёт решения.'
-            : 'При этом отборе записей не нашлось.'}</p>
-        </div>
+            : 'При этом отборе записей не нашлось.'}
+          actionLabel={onlyPending ? 'Показать все оплаты' : undefined}
+          onAction={() => { setOnlyPending(false); load(false); }} />
       ) : (
         <div className="pay-grid">
           {data.rows.map((p: any) => (
-            <article key={p.id} className={`pay ${p.status === 'pending' ? 'waiting' : ''}`}>
+            <article key={p.id}
+              className={`pay ${p.status === 'pending' ? 'waiting' : ''} ${leaving[p.id] ? 'leaving' : ''}`}>
               <div className="pay-top">
                 <div className="pay-who">
                   <b>{p.client}</b>
@@ -171,9 +179,9 @@ export default function Money({ me }: { me: Me }) {
               {p.canApprove && (
                 <div className="pay-actions">
                   <button className="btn" disabled={busy}
-                    onClick={() => open(p, false)}>Отклонить…</button>
+                    onClick={() => decide(p, false)}>Отклонить…</button>
                   <button className="btn primary" disabled={busy}
-                    onClick={() => open(p, true)}>Подтвердить…</button>
+                    onClick={() => decide(p, true)}>Подтвердить…</button>
                 </div>
               )}
               {/* Партнёру решение не рисуем: он всё равно не решает. */}

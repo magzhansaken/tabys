@@ -474,6 +474,13 @@ const RULES = [
   { file: 'admin/app/platform/ui/useAssign.ts', must: 'не пересчитываются',
     why: 'Про деньги сказано прямо: доля замораживается при подтверждении, прошлые выплаты не меняются' },
 
+  { file: 'admin/app/platform/ui/PayForm.tsx', must: 'Доступ продлит владелец платформы после проверки',
+    why: 'Партнёр должен понимать, что от его отметки доступ НЕ откроется — иначе скажет клиенту «всё готово» и ошибётся' },
+  { file: 'admin/app/platform/ui/PayForm.tsx', must: 'Math.round(client.monthly)',
+    why: 'Сумма подставляется из тарифа: партнёр не должен вспоминать, сколько платит клиент' },
+  { file: 'admin/app/platform/sections/Money.tsx', must: 'pv.partnerName} (${pv.partnerPercent}%)',
+    why: 'Имя партнёра с процентом в последствиях: «партнёру 3 750» заставляет вспоминать, кому именно' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
