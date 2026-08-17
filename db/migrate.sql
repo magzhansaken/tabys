@@ -126,5 +126,8 @@
 \echo '--- 053 разделы кабинета платформы ---'
 \i db/migrations/053_platform_sections.sql
 
+\echo '--- 054 функции платформы ---'
+\i db/migrations/054_platform_functions.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
