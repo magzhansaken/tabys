@@ -988,3 +988,153 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
    LIMIT 300;
 $$;
 GRANT EXECUTE ON FUNCTION platform_money(text, text, uuid, integer) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 4: «ЗАЯВКИ» — партнёр просит, платформа решает.
+--
+-- Замысел донора взят: одобрение САМО ВЫПОЛНЯЕТ действие, а не просто
+-- ставит отметку. Одобрил вторую кассу — строка счёта появилась.
+-- Иначе владелец одобряет, а сделать забывает, и партнёр звонит через
+-- неделю: «вы же согласились».
+--
+-- СДЕЛАНО ЛУЧШЕ: у решения есть ПРЕДПРОСМОТР — что именно произойдёт,
+-- если одобрить. У донора кнопка «Одобрить» просто делала, и увидеть
+-- последствие можно было только после. С деньгами так нельзя.
+--
+-- ЧЕТЫРЕ ВИДА, все под магазин, а не под ресторан:
+--   device — вторая касса или точка;
+--   tariff — смена тарифа;
+--   grace  — отсрочка платежа;
+--   other  — всё прочее, решается словами.
+-- =====================================================================
+
+/** Что произойдёт, если одобрить. Считает то же, что и одобрение. */
+CREATE OR REPLACE FUNCTION platform_request_preview(p_request uuid)
+RETURNS TABLE (
+  kind text, client text, account_id uuid,
+  what text, effect text, amount bigint, days_left integer)
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE
+  v_r record; v_set record; v_unit bigint := 0; v_days integer := 0;
+  v_pro bigint := 0; v_kind text; v_what text; v_effect text;
+BEGIN
+  SELECT tr.*, a.name AS client_name INTO v_r
+    FROM tenant_request tr JOIN account a ON a.id = tr.account_id
+   WHERE tr.id = p_request;
+  IF v_r.id IS NULL THEN RETURN; END IF;
+
+  SELECT * INTO v_set FROM platform_settings WHERE id;
+
+  -- Сколько дней до конца оплаченного периода: от этого зависит доплата.
+  SELECT ceil(extract(epoch FROM s.paid_until - now()) / 86400)::int INTO v_days
+    FROM subscription s WHERE s.account_id = v_r.account_id;
+  v_days := greatest(coalesce(v_days, 0), 0);
+
+  IF v_r.kind = 'device' THEN
+    v_kind := coalesce(v_r.payload->>'device', 'pos');
+    v_unit := CASE WHEN v_kind = 'store' THEN v_set.price_extra_store
+                   ELSE v_set.price_extra_pos END;
+    -- Правило десяти дней: меньше — доплату не берём вовсе.
+    IF v_days >= 10 THEN v_pro := round(v_unit * v_days / 30.0); END IF;
+    v_what := CASE WHEN v_kind = 'store' THEN 'Вторая точка' ELSE 'Вторая касса' END;
+    v_effect := 'Появится строка счёта на ' || round(v_unit / 100.0) || ' ₸/мес'
+      || CASE WHEN v_pro > 0
+              THEN '. Доплата за остаток периода: ' || round(v_pro / 100.0) || ' ₸'
+              ELSE '. Доплаты нет — до конца периода меньше десяти дней' END;
+
+  ELSIF v_r.kind = 'tariff' THEN
+    v_unit := CASE WHEN coalesce(v_r.payload->>'tier', 'pro') = 'pro'
+                   THEN v_set.price_pro ELSE v_set.price_base END;
+    v_what := 'Смена тарифа на ' || CASE WHEN coalesce(v_r.payload->>'tier','pro') = 'pro'
+                                         THEN '«Стандарт»' ELSE '«Старт»' END;
+    v_effect := 'Основная строка счёта станет ' || round(v_unit / 100.0)
+      || ' ₸/мес. Доплаты за устройства и скидки не изменятся';
+
+  ELSIF v_r.kind = 'grace' THEN
+    v_days := coalesce((v_r.payload->>'days')::int, 7);
+    v_what := 'Отсрочка на ' || v_days || ' дн.';
+    v_effect := 'Срок подписки сдвинется на ' || v_days
+      || ' дн. вперёд. Деньги не поступят — это уступка, а не оплата';
+
+  ELSE
+    v_what := 'Прочее';
+    v_effect := 'Решается словами: система ничего не изменит';
+  END IF;
+
+  RETURN QUERY SELECT v_r.kind, v_r.client_name, v_r.account_id,
+                      v_what, v_effect, v_pro, v_days;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_request_preview(uuid) TO shop_app;
+
+/**
+ * Решение по заявке. Одобрение САМО выполняет действие.
+ *
+ * Всё одной операцией: отметка о решении и само действие. Иначе
+ * возможно состояние «одобрено, но не сделано» — самое неприятное,
+ * потому что все считают, что сделано.
+ */
+CREATE OR REPLACE FUNCTION platform_request_decide(
+  p_request uuid, p_actor uuid, p_approve boolean, p_note text)
+RETURNS TABLE (account_id uuid, kind text, effect text)
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE
+  v_r record; v_set record; v_unit bigint; v_kind text; v_days integer;
+  v_effect text := ''; v_n integer;
+BEGIN
+  SELECT * INTO v_r FROM tenant_request WHERE id = p_request FOR UPDATE;
+  IF v_r.id IS NULL THEN RAISE EXCEPTION 'Заявка не найдена'; END IF;
+  IF v_r.status <> 'pending' THEN RAISE EXCEPTION 'Заявка уже решена'; END IF;
+
+  UPDATE tenant_request
+     SET status = CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END,
+         decision_note = p_note, decided_by = p_actor, decided_at = now()
+   WHERE id = p_request;
+
+  IF NOT p_approve THEN
+    RETURN QUERY SELECT v_r.account_id, v_r.kind, 'Отказано'::text;
+    RETURN;
+  END IF;
+
+  SELECT * INTO v_set FROM platform_settings WHERE id;
+
+  IF v_r.kind = 'device' THEN
+    v_kind := coalesce(v_r.payload->>'device', 'pos');
+    v_unit := CASE WHEN v_kind = 'store' THEN v_set.price_extra_store
+                   ELSE v_set.price_extra_pos END;
+    SELECT count(*) + 2 INTO v_n FROM plan_line pl
+     WHERE pl.account_id = v_r.account_id AND pl.kind = v_kind AND pl.ends_at IS NULL;
+    INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+    VALUES (v_r.account_id, v_kind,
+            CASE WHEN v_kind = 'store' THEN 'Точка №' ELSE 'Касса №' END || v_n, 1, v_unit);
+    v_effect := 'Строка счёта добавлена';
+
+  ELSIF v_r.kind = 'tariff' THEN
+    v_unit := CASE WHEN coalesce(v_r.payload->>'tier','pro') = 'pro'
+                   THEN v_set.price_pro ELSE v_set.price_base END;
+    -- Только основная строка: доплаты и скидки — отдельные
+    -- договорённости, их менять нельзя.
+    UPDATE plan_line SET ends_at = now()
+     WHERE plan_line.account_id = v_r.account_id AND plan_line.kind = 'base'
+       AND plan_line.ends_at IS NULL;
+    INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
+    VALUES (v_r.account_id, 'base', 'Тариф', 1, v_unit);
+    v_effect := 'Тариф изменён';
+
+  ELSIF v_r.kind = 'grace' THEN
+    v_days := coalesce((v_r.payload->>'days')::int, 7);
+    UPDATE subscription
+       SET paid_until = greatest(coalesce(paid_until, now()), now())
+                        + (v_days || ' days')::interval,
+           status = 'active'
+     WHERE subscription.account_id = v_r.account_id;
+    UPDATE account SET status = 'active'
+     WHERE id = v_r.account_id AND status <> 'active';
+    v_effect := 'Отсрочка на ' || v_days || ' дн. дана';
+
+  ELSE
+    v_effect := 'Отмечено решённым';
+  END IF;
+
+  RETURN QUERY SELECT v_r.account_id, v_r.kind, v_effect;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_request_decide(uuid, uuid, boolean, text) TO shop_app;

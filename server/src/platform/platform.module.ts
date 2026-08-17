@@ -555,21 +555,55 @@ export class PlatformService {
       [status ?? null, ctx.role, ctx.userId])).rows;
   }
 
-  /** Решение по заявке. Отказ требует причины — как и с оплатой. */
+  /**
+   * Что произойдёт, если одобрить заявку.
+   *
+   * У донора кнопка «Одобрить» просто делала, и увидеть последствие
+   * можно было только после. С деньгами так нельзя: одобряя вторую
+   * кассу, владелец должен видеть, что клиенту прилетит доплата.
+   *
+   * Считает тем же кодом, что и само одобрение — предпросмотр не может
+   * разойтись с делом.
+   */
+  async requestPreview(ctx: PlatformCtx, id: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Решает владелец платформы');
+    const r = (await this.q(`SELECT * FROM platform_request_preview($1)`, [id])).rows[0];
+    if (!r) throw new BadRequestException('Заявка не найдена');
+    return {
+      kind: r.kind, client: r.client, accountId: r.account_id,
+      what: r.what, effect: r.effect,
+      proRata: money(Number(r.amount ?? 0)),
+      daysLeft: r.days_left,
+    };
+  }
+
+  /**
+   * Решение по заявке. Одобрение САМО выполняет действие, а не просто
+   * ставит отметку: одобрил вторую кассу — строка счёта появилась.
+   *
+   * Иначе возможно состояние «одобрено, но не сделано» — самое
+   * неприятное, потому что все считают, что сделано.
+   *
+   * Отказ требует причины: партнёр должен понять, что не так.
+   */
   async decideRequest(ctx: PlatformCtx, id: string, approve: boolean, note?: string) {
     if (ctx.role !== 'super') throw new ForbiddenException('Решает владелец платформы');
     if (!approve && !note?.trim())
       throw new BadRequestException('Напишите причину отказа — партнёр должен понять, что не так');
 
-    const r = await this.q(
-      `UPDATE tenant_request SET status=$2, decision_note=$3, decided_by=$4, decided_at=now()
-        WHERE id=$1 AND status='pending' RETURNING account_id, kind`,
-      [id, approve ? 'approved' : 'rejected', note?.trim() ?? null, ctx.userId]);
-    if (!r.rows[0]) throw new BadRequestException('Заявка не найдена или уже решена');
+    let r: any;
+    try {
+      r = (await this.q(`SELECT * FROM platform_request_decide($1,$2,$3,$4)`,
+        [id, ctx.userId, approve, note?.trim() ?? null])).rows[0];
+    } catch (e: any) {
+      throw new BadRequestException(String(e.message ?? '').replace(/^.*?:\s*/, ''));
+    }
 
     await this.audit(ctx, approve ? 'request_approved' : 'request_rejected',
-      r.rows[0].account_id, { kind: r.rows[0].kind, note });
-    return { ok: true };
+      r.account_id, { kind: r.kind, effect: r.effect, note });
+
+    return { ok: true, effect: r.effect,
+      note: approve ? `${r.effect}. Клиент увидит изменение в своём кабинете` : 'Отказано' };
   }
 
   // ── ПРАЙС-ЛИСТ ──────────────────────────────────────────────────────
@@ -1247,6 +1281,12 @@ export class PlatformController {
   createRequest(@Req() r: any, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.createRequest(Pl(r), d);
+  }
+
+  @Public() @Get('requests/:id/preview')
+  requestPreview(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.requestPreview(Pl(r), id);
   }
 
   @Public() @Post('requests/:id/decide')

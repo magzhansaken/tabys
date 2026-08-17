@@ -485,6 +485,81 @@ const shop = async (name, owner) => {
        '★ Партнёру кнопка подтверждения не показывается');
   }
 
+  // ---------- РАЗДЕЛ 4: «ЗАЯВКИ» ----------
+  // Партнёр просит, платформа решает. Одобрение САМО выполняет
+  // действие, а не просто ставит отметку.
+  {
+    // Заявка на вторую кассу
+    let v = await j('POST', '/platform/requests',
+      { accountId: id1, kind: 'device', comment: 'Открыли вторую точку',
+        payload: { device: 'pos' } }, PARTNER);
+    const devReq = v.d.id;
+    ok(v.d?.status === 'pending', '★ Партнёр подал заявку на устройство');
+
+    // ПРЕДПРОСМОТР — чего у донора нет. Кнопка «Одобрить» просто
+    // делала, и увидеть последствие можно было только после.
+    v = await j('GET', `/platform/requests/${devReq}/preview`, null, SUPER);
+    ok(/строка счёта/i.test(v.d?.effect ?? ''),
+       `★ Предпросмотр объясняет последствие: «${v.d?.effect}»`);
+    ok(typeof v.d?.proRata === 'number',
+       `И называет доплату за остаток периода: ${v.d?.proRata} ₸`);
+
+    v = await j('GET', `/platform/requests/${devReq}/preview`, null, PARTNER);
+    ok(v.status === 403, 'Партнёру предпросмотр не нужен — решает не он');
+
+    // ОДОБРЕНИЕ ВЫПОЛНЯЕТ ДЕЙСТВИЕ. Иначе возможно «одобрено, но не
+    // сделано» — самое неприятное, потому что все считают, что сделано.
+    const before = (await j('GET', `/platform/clients/${id1}/lines`, null, SUPER)).d.length;
+    v = await j('POST', `/platform/requests/${devReq}/decide`, { approve: true }, SUPER);
+    ok(/Строка счёта добавлена/.test(v.d?.effect ?? ''), `★ ${v.d?.note}`);
+
+    const after = (await j('GET', `/platform/clients/${id1}/lines`, null, SUPER)).d;
+    ok(after.length === before + 1 && after.some((x) => x.kind === 'pos'),
+       '★ Строка счёта появилась САМА — одобрение не оставляет работы на потом');
+
+    // ОТСРОЧКА двигает срок.
+    v = await j('POST', '/platform/requests',
+      { accountId: id1, kind: 'grace', comment: 'Оплатит после праздников',
+        payload: { days: 7 } }, PARTNER);
+    const graceReq = v.d.id;
+
+    v = await j('GET', `/platform/requests/${graceReq}/preview`, null, SUPER);
+    ok(/уступка, а не оплата/.test(v.d?.effect ?? ''),
+       '★ Предпросмотр отсрочки честно говорит: деньги не поступят');
+
+    const dBefore = (await j('GET', '/platform/clients', null, SUPER))
+      .d.rows.find((r) => r.id === id1)?.daysLeft;
+    await j('POST', `/platform/requests/${graceReq}/decide`, { approve: true }, SUPER);
+    const dAfter = (await j('GET', '/platform/clients', null, SUPER))
+      .d.rows.find((r) => r.id === id1)?.daysLeft;
+    ok(dAfter >= dBefore + 6,
+       `★ Отсрочка сдвинула срок: было ${dBefore} дн., стало ${dAfter}`);
+
+    // ОТКАЗ требует причины.
+    v = await j('POST', '/platform/requests',
+      { accountId: id1, kind: 'other', comment: 'Просто вопрос' }, PARTNER);
+    const otherReq = v.d.id;
+    v = await j('POST', `/platform/requests/${otherReq}/decide`, { approve: false }, SUPER);
+    ok(v.status === 400 && /причину/.test(v.d?.message ?? ''),
+       '★ Отказ без причины отбит — партнёр должен понять, что не так');
+
+    v = await j('POST', `/platform/requests/${otherReq}/decide`,
+      { approve: false, note: 'Обсудим на встрече' }, SUPER);
+    ok(v.d?.ok, 'С причиной отказ проходит');
+
+    // Повторное решение отбито: заявка уже решена.
+    v = await j('POST', `/platform/requests/${otherReq}/decide`,
+      { approve: true, note: 'передумал' }, SUPER);
+    ok(v.status === 400 && /уже решена/.test(v.d?.message ?? ''),
+       'Повторное решение по той же заявке отбито');
+
+    // Партнёр не решает.
+    v = await j('POST', '/platform/requests',
+      { accountId: id1, kind: 'device', payload: { device: 'store' } }, PARTNER);
+    v = await j('POST', `/platform/requests/${v.d.id}/decide`, { approve: true }, PARTNER);
+    ok(v.status === 403, '★ Партнёр подаёт заявки, но не решает по ним');
+  }
+
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
   // Дописано по сверке с донором: у них 39 методов, у нас было 30.
   {
