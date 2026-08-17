@@ -16,6 +16,8 @@
 import { useEffect, useState } from 'react';
 import { api, readSession, saveSession, clearSession, type Me } from './lib';
 import './style/admin.css';
+import { AskHost } from './ui/Ask';
+import { ToastHost } from './ui/Toast';
 
 import Today from './sections/Today';
 import Clients from './sections/Clients';
@@ -107,6 +109,9 @@ export default function PlatformPage() {
     .map((w) => w[0]).join('').toUpperCase();
 
   return (
+    /* Лист подтверждения и тосты — на всё приложение: любой раздел
+       зовёт их через useAsk() и useToast(), не заводя своих. */
+    <ToastHost><AskHost>
     <div className="shell">
       <aside className="side">
         <div className="side-brand">
@@ -188,6 +193,7 @@ export default function PlatformPage() {
         ))}
       </nav>
     </div>
+    </AskHost></ToastHost>
   );
 }
 

@@ -456,6 +456,15 @@ const RULES = [
   { file: 'db/migrations/058_owner_role_fix.sql', must: 'role_system_code_uniq',
     why: 'Занять системный код своей ролью больше нельзя: следующий упрётся в запрет, а не сломает регистрацию через неделю' },
 
+  { file: 'admin/app/platform/ui/Ask.tsx', must: 'mustEqual',
+    why: 'Подтверждение НАБОРОМ названия: пока человек набирает, он успевает подумать — приём донора для необратимых действий' },
+  { file: 'admin/app/platform/ui/Toast.tsx', must: 'toast.undo ? 9000 : 5000',
+    why: 'Тост с отменой живёт дольше: столько нужно, чтобы прочитать и успеть передумать' },
+  { file: 'admin/app/platform/ui/States.tsx', must: 'Данные не потеряны',
+    why: 'Отказ загрузки говорит, что данные целы: человек боится, что его правка пропала' },
+  { file: 'admin/app/platform/sections/Today.tsx', must: 'setLeaving',
+    why: 'Карточка уходит плавно, а не пропадает рывком: видно, что действие сработало именно с ней' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

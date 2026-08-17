@@ -11,7 +11,11 @@
  * Отличается только дело: магазины вместо заведений.
  */
 import { useEffect, useState } from 'react';
-import { api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
+import { useAsk } from '../ui/Ask';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonCards } from '../ui/States';
 
 type Item = {
   id: string; kind: string; accountId: string; client: string;
@@ -25,8 +29,12 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [ask, setAsk] = useState<{ item: Item; yes: boolean } | null>(null);
-  const [reason, setReason] = useState('');
+  // Карточка уходит плавно, а не пропадает рывком: видно, что действие
+  // сработало именно с ней. Их приём.
+  const [leaving, setLeaving] = useState<Record<string, boolean>>({});
+
+  const ask = useAsk();
+  const toast = useToast();
 
   const load = async () => {
     const hit = cached('/today');
@@ -34,62 +42,82 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
     try {
       const d = await api('/today');
       setData(d); putCache('/today', d); setErr('');
-    } catch (e: any) { if (!hit) setErr(e.message); }
+    } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
   const isSuper = me.role === 'super';
 
-  const run = async () => {
-    if (!ask) return;
-    const { item: it, yes } = ask;
-    if (!yes && !reason.trim()) { setErr('Напишите причину — партнёр должен понять, что не так'); return; }
+  /**
+   * Решение по делу из ленты. Всё через их лист подтверждения:
+   * последствия парами, причина отказа полем, Escape возвращает.
+   */
+  const decide = async (it: Item, yes: boolean) => {
+    const isPay = it.kind === 'payment';
+    const isReq = it.kind === 'request';
+
+    // Последствия парами «что → сколько» — их приём: читаются глазами
+    // перед решением, а не после.
+    const effects: [string, string][] = [
+      ['Магазин', it.client],
+      ...(it.amount != null ? [['Сумма', money(it.amount)] as [string, string]] : []),
+      ...(it.effect ? [['Что будет', it.effect] as [string, string]] : []),
+    ];
+
+    const r = await ask(yes ? {
+      title: isPay ? 'Подтвердить оплату' : isReq ? 'Одобрить заявку' : 'Открыть доступ',
+      sub: isPay
+        ? 'Доступ клиента продлится сразу. Отменить подтверждение нельзя.'
+        : isReq
+          ? 'Действие выполнится сразу: строка счёта или срок изменятся.'
+          : 'Клиент получит пробный период на 14 дней.',
+      effects,
+      confirmLabel: isPay ? 'Да, подтвердить' : 'Да, одобрить',
+    } : {
+      title: isPay ? 'Отклонить оплату' : isReq ? 'Отказать по заявке' : 'Отклонить регистрацию',
+      sub: 'Тот, кого это касается, увидит причину — напишите так, чтобы было понятно.',
+      effects: [['Магазин', it.client]],
+      reason: { label: 'Причина', required: true,
+                placeholder: isPay ? 'Деньги не поступили на счёт' : 'Обсудим на встрече' },
+      danger: true,
+      confirmLabel: 'Отклонить',
+    });
+
+    if (!r) return;                        // человек отменил — молча
+
     setBusy(it.id);
     try {
-      if (it.kind === 'payment') {
+      if (isPay) {
         yes ? await api(`/payments/${it.paymentId}/approve`, { method: 'POST' })
-            : await api(`/payments/${it.paymentId}/reject`, { method: 'POST', body: { reason } });
-      } else if (it.kind === 'request') {
+            : await api(`/payments/${it.paymentId}/reject`, { method: 'POST', body: { reason: r.reason } });
+      } else if (isReq) {
         await api(`/requests/${it.requestId}/decide`,
-          { method: 'POST', body: { approve: yes, note: reason || undefined } });
-      } else if (it.kind === 'signup') {
+          { method: 'POST', body: { approve: yes, note: r.reason || undefined } });
+      } else {
         yes ? await api(`/signups/${it.accountId}/approve`, { method: 'POST', body: { trialDays: 14 } })
-            : await api(`/signups/${it.accountId}/reject`, { method: 'POST', body: { reason } });
+            : await api(`/signups/${it.accountId}/reject`, { method: 'POST', body: { reason: r.reason } });
       }
-      setAsk(null); setReason(''); dropCache(); await load();
-    } catch (e: any) { setErr(e.message); }
-    finally { setBusy(null); }
+      // Ответ на действие. Без него человек жмёт второй раз — их урок.
+      toast({ text: yes
+        ? `${it.client}: ${it.effect ?? 'готово'}`
+        : `${it.client}: отклонено` });
+      // Сначала уход, потом перезагрузка: иначе карточка исчезнет
+      // рывком и непонятно, та ли это была.
+      setLeaving((p) => ({ ...p, [it.id]: true }));
+      setTimeout(async () => { dropCache(); await load(); setLeaving({}); }, 260);
+    } catch (e: any) {
+      toast({ text: humanError(e), kind: 'err' });
+    } finally { setBusy(null); }
   };
 
-  if (err && !data) return <div className="err">{err}</div>;
-  if (!data) return <div className="muted">Загрузка…</div>;
+  // Их состояния: скелетон показывает форму будущего содержимого,
+  // а отказ говорит, что данные целы.
+  if (err && !data) return <Failed text={err} onRetry={load} />;
+  if (!data) return <SkeletonCards count={3} height={104} />;
 
   return (
     <>
       {err && <div className="err">{err}</div>}
-
-      {/* Их окно подтверждения: последствие крупно, две кнопки. */}
-      {ask && (
-        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
-          <div className="ask-card">
-            <b>{ask.item.client}</b>
-            <p>{ask.item.what}</p>
-            {ask.yes
-              ? <p className="pay-note">{ask.item.effect ?? 'Подтвердить?'}</p>
-              : <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
-                  placeholder="Причина — партнёр должен понять, что не так" />}
-            <div className="queue-actions">
-              <button className="btn small ghost" onClick={() => { setAsk(null); setReason(''); }}>
-                Отмена
-              </button>
-              <button className={`btn small ${ask.yes ? 'primary' : 'danger'}`}
-                disabled={busy === ask.item.id} onClick={run}>
-                {ask.yes ? 'Да, подтвердить' : 'Отклонить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {data.total === 0 ? (
         <div className="all-clear">
@@ -111,7 +139,8 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
 
           <div className="queue-list">
             {g.items.map((item: Item) => (
-              <article key={item.id} className={`queue-item ${g.key}`}>
+              <article key={item.id}
+                className={`queue-item ${g.key} ${leaving[item.id] ? 'leaving' : ''}`}>
                 <div className="queue-main">
                   <button className="link-name" onClick={() => goTo('clients')}>
                     {item.client}
@@ -132,25 +161,25 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
                   {isSuper && item.kind === 'payment' && (
                     <>
                       <button className="btn small" disabled={busy === item.id}
-                        onClick={() => setAsk({ item, yes: false })}>Отклонить…</button>
+                        onClick={() => decide(item, false)}>Отклонить…</button>
                       <button className="btn small primary" disabled={busy === item.id}
-                        onClick={() => setAsk({ item, yes: true })}>Подтвердить…</button>
+                        onClick={() => decide(item, true)}>Подтвердить…</button>
                     </>
                   )}
                   {isSuper && item.kind === 'request' && (
                     <>
                       <button className="btn small" disabled={busy === item.id}
-                        onClick={() => setAsk({ item, yes: false })}>Отказать…</button>
+                        onClick={() => decide(item, false)}>Отказать…</button>
                       <button className="btn small primary" disabled={busy === item.id}
-                        onClick={() => setAsk({ item, yes: true })}>Одобрить…</button>
+                        onClick={() => decide(item, true)}>Одобрить…</button>
                     </>
                   )}
                   {isSuper && item.kind === 'signup' && (
                     <>
                       <button className="btn small"
-                        onClick={() => setAsk({ item, yes: false })}>Отклонить…</button>
+                        onClick={() => decide(item, false)}>Отклонить…</button>
                       <button className="btn small primary"
-                        onClick={() => setAsk({ item, yes: true })}>Одобрить…</button>
+                        onClick={() => decide(item, true)}>Одобрить…</button>
                     </>
                   )}
                   {/* Партнёру решение не рисуем: он всё равно не решает,

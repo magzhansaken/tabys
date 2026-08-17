@@ -1417,3 +1417,13 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 /* Молчание больше недели: сделка умирает не от отказа, а от того, что
    о ней забыли. У них этого не было — добавлено их же переменными. */
 .sub.touched.cold { color: var(--ink-on-warm); }
+
+/* Уход карточки из ленты «Сегодня». В их файле описаны только оплаты и
+   заявки — лента у них уходила иначе. Тем же движением. */
+.queue-item.leaving {
+  animation: queue-leave 280ms var(--ease) forwards;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue-item.leaving { animation-duration: 1ms; }
+}
