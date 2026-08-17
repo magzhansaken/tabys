@@ -410,7 +410,7 @@ const RULES = [
   { file: 'admin/app/platform/sections/Today.tsx', must: 'dropCache()',
     why: 'После действия память сбрасывается: подтвердили оплату — устарели и деньги, и клиенты, и сводка' },
 
-  { file: 'admin/app/platform/page.tsx', must: 'max-width: 860px',
+  { file: 'admin/app/platform/style/admin.css', must: 'max-width: 860px',
     why: 'На телефоне меню уезжает вниз полосой: боковое в 246 px там съело бы две трети экрана' },
   { file: 'admin/app/platform/page.tsx', must: 'counts[t.key] ?',
     why: 'Счётчик с нулём не рисуется: он обучает себя игнорировать, а счётчик — единственная причина открыть раздел прямо сейчас' },
@@ -426,8 +426,13 @@ const RULES = [
     why: 'Четыре порядка, как у донора: где горит, кто дорог, кто живёт, и по названию — когда ищешь конкретного' },
   { file: 'admin/app/platform/sections/Clients.tsx', must: 'Выручка 30 дн.',
     why: 'Выручка магазина — главный столбец: он отвечает, живёт ли клиент. Продаж нет — продлевать не будет' },
-  { file: 'admin/app/platform/sections/Clients.tsx', must: "groups.sort((a, b) => (a.key === '—' ? -1",
+  { file: 'admin/app/platform/sections/Clients.tsx', must: ".sort((a, b) => (a.key === '—' ? -1",
     why: 'Ничьи клиенты первыми: это те, кем никто не занимается, и они теряются первыми' },
+
+  { file: 'admin/app/platform/style/admin.css', must: 'ВЗЯТ ЦЕЛИКОМ из кабинета',
+    why: 'Оформление платформы — их файл целиком, а не пересказ: дважды повторял по кускам, и оба раза выходило похоже, но отличимо' },
+  { file: 'admin/app/platform/page.tsx', must: 'className="side-nav"',
+    why: 'Разметка их классами: shell, side, frame, topbar, tabbar — иначе их файл оформления работать не будет' },
 
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
