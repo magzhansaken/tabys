@@ -738,3 +738,125 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
   ORDER BY 2, 10;
 $$;
 GRANT EXECUTE ON FUNCTION platform_today(text, uuid) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 2: «КЛИЕНТЫ» — список с отборами и карточка.
+--
+-- Замысел донора взят: карточка — СТРАНИЦА, а не окно-тупик. У них
+-- раньше было модальное окно, которое показывало всё и не давало
+-- сделать ничего: единственная кнопка «Закрыть». Изучил клиента —
+-- закрывай и ищи заново.
+--
+-- СДЕЛАНО ИНАЧЕ: отбор и подсчёты — в базе, а не в браузере. У донора
+-- список приходил целиком и фильтровался на стороне кабинета: при
+-- сотне клиентов это лишние сотни строк по сети на каждое нажатие
+-- «показать просроченных».
+-- =====================================================================
+
+/**
+ * Список клиентов с отбором. Один запрос вместо «привези всё и
+ * отфильтруй у себя».
+ *
+ * p_filter: all | active | expiring | expired | trial | demo
+ * p_partner: NULL = все, иначе только этого партнёра
+ */
+CREATE OR REPLACE FUNCTION platform_clients_filtered(
+  p_role text, p_user uuid,
+  p_q text DEFAULT NULL, p_filter text DEFAULT 'all', p_partner uuid DEFAULT NULL)
+RETURNS TABLE (
+  id uuid, name text, phone text, status text, city text,
+  owner_name text, owner_phone text, deal_stage text, is_demo boolean,
+  partner_id uuid, partner_name text, partner_bp integer,
+  paid_until timestamptz, days_left integer,
+  tariff_name text, monthly bigint,
+  revenue_30d numeric, stores bigint, registers bigint,
+  created_at timestamptz,
+  -- Заметка и дата касания: без них воронка показывает этап, но не
+  -- помнит, о чём говорили. Через две недели «показали» ничего не значит.
+  deal_note text, touched_at timestamptz,
+  total_count bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  WITH base AS (
+    SELECT a.id, a.name, a.phone, a.status::text AS status, a.created_at,
+           tc.city, tc.owner_name, tc.owner_phone, tc.deal_stage,
+           tc.deal_note, tc.touched_at,
+           coalesce(tc.is_demo, false) AS is_demo,
+           tc.partner_id, pu.full_name AS partner_name,
+           coalesce(pu.commission_bp, 0) AS partner_bp,
+           s.paid_until,
+           CASE WHEN s.paid_until IS NULL THEN NULL
+                ELSE ceil(extract(epoch FROM s.paid_until - now()) / 86400)::int END AS days_left,
+           t.name AS tariff_name,
+           -- Месячная цена: из строк счёта, если они есть; иначе из
+           -- тарифа. Клиент видит одну сумму, платформа — ту же.
+           coalesce(
+             (SELECT sum(pl.unit_price * pl.qty) FROM plan_line pl
+               WHERE pl.account_id = a.id AND pl.ends_at IS NULL),
+             coalesce(t.price_month, 0) * 100)::bigint AS monthly,
+           coalesce((SELECT sum(sl.total) FROM sale sl
+              WHERE sl.account_id = a.id AND sl.return_of_id IS NULL
+                AND sl.created_at > now() - interval '30 days'), 0) AS revenue_30d,
+           (SELECT count(*) FROM store st WHERE st.account_id = a.id) AS stores,
+           (SELECT count(*) FROM cash_register cr WHERE cr.account_id = a.id) AS registers
+      FROM account a
+      LEFT JOIN tenant_card tc ON tc.account_id = a.id
+      LEFT JOIN platform_user pu ON pu.id = tc.partner_id
+      LEFT JOIN subscription s ON s.account_id = a.id
+      LEFT JOIN tariff t ON t.id = s.tariff_id
+     WHERE a.deleted_at IS NULL
+       AND (p_role = 'super' OR tc.partner_id = p_user)
+       AND (p_partner IS NULL OR tc.partner_id = p_partner)
+       AND (p_q IS NULL OR p_q = '' OR
+            a.name ILIKE '%'||p_q||'%' OR tc.owner_name ILIKE '%'||p_q||'%'
+            OR tc.city ILIKE '%'||p_q||'%'
+            OR phone_tail(a.phone) = phone_tail(p_q)
+            OR phone_tail(tc.owner_phone) = phone_tail(p_q))
+  ), picked AS (
+    SELECT * FROM base
+     WHERE CASE p_filter
+             WHEN 'active'   THEN days_left >= 0 AND NOT is_demo
+             WHEN 'expiring' THEN days_left BETWEEN 0 AND 7 AND NOT is_demo
+             WHEN 'expired'  THEN days_left < 0 AND NOT is_demo
+             WHEN 'trial'    THEN status = 'trial' AND NOT is_demo
+             WHEN 'demo'     THEN is_demo
+             ELSE true
+           END
+  )
+  SELECT p.id, p.name, p.phone, p.status, p.city,
+         p.owner_name, p.owner_phone, p.deal_stage, p.is_demo,
+         p.partner_id, p.partner_name, p.partner_bp,
+         p.paid_until, p.days_left, p.tariff_name, p.monthly,
+         p.revenue_30d, p.stores, p.registers, p.created_at,
+         p.deal_note, p.touched_at,
+         count(*) OVER () AS total_count
+    FROM picked p
+   -- Порядок: сначала те, где горит. Просроченные, потом истекающие,
+   -- потом остальные по свежести. Владелец читает сверху.
+   ORDER BY (p.days_left IS NULL), p.days_left NULLS LAST, p.created_at DESC
+   LIMIT 500;
+$$;
+GRANT EXECUTE ON FUNCTION platform_clients_filtered(text, uuid, text, text, uuid) TO shop_app;
+
+/** Счётчики для вкладок отбора: сколько в каждой. */
+CREATE OR REPLACE FUNCTION platform_clients_counts(p_role text, p_user uuid)
+RETURNS TABLE (all_n bigint, active_n bigint, expiring_n bigint,
+               expired_n bigint, trial_n bigint, demo_n bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  WITH b AS (
+    SELECT coalesce(tc.is_demo, false) AS is_demo, a.status::text AS st,
+           CASE WHEN s.paid_until IS NULL THEN NULL
+                ELSE ceil(extract(epoch FROM s.paid_until - now()) / 86400)::int END AS d
+      FROM account a
+      LEFT JOIN tenant_card tc ON tc.account_id = a.id
+      LEFT JOIN subscription s ON s.account_id = a.id
+     WHERE a.deleted_at IS NULL AND (p_role = 'super' OR tc.partner_id = p_user)
+  )
+  SELECT count(*),
+         count(*) FILTER (WHERE d >= 0 AND NOT is_demo),
+         count(*) FILTER (WHERE d BETWEEN 0 AND 7 AND NOT is_demo),
+         count(*) FILTER (WHERE d < 0 AND NOT is_demo),
+         count(*) FILTER (WHERE st = 'trial' AND NOT is_demo),
+         count(*) FILTER (WHERE is_demo)
+    FROM b;
+$$;
+GRANT EXECUTE ON FUNCTION platform_clients_counts(text, uuid) TO shop_app;

@@ -123,8 +123,25 @@ const toTheirs = (path: string, data: any): any => {
         status: x.status ? String(x.status).toUpperCase() : undefined }
     : x;
 
-  // Список клиентов — со сводкой, как ждёт кабинет.
-  if (path.startsWith('/tenants') && Array.isArray(data)) return withTotals(data.map(fix));
+  // Список клиентов. Сервер теперь сам считает счётчики отборов —
+  // приводим их к именам, которых ждёт кабинет.
+  if (path.startsWith('/tenants')) {
+    if (Array.isArray(data)) return withTotals(data.map(fix));   // старый вид, на всякий
+    const rows = (data.rows ?? []).map(fix);
+    const c = data.counts ?? {};
+    return {
+      rows,
+      totals: {
+        all: c.all ?? rows.length,
+        active: c.active ?? 0,
+        pending: c.trial ?? 0,
+        expired: c.expired ?? 0,
+        // Доход в месяц: в тиынах, кабинет делит на сто при показе.
+        mrr: rows.filter((r: any) => !r.isDemo && (r.daysLeft ?? -1) >= 0)
+          .reduce((a: number, r: any) => a + Math.round(Number(r.monthly ?? 0) * 100), 0),
+      },
+    };
+  }
 
   // Заявки с сайта кабинет ждёт как { rows }, у нас — массив.
   if (path.startsWith('/leads')) return { rows: Array.isArray(data) ? data.map(fix) : [] };

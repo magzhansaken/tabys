@@ -85,10 +85,10 @@ const shop = async (name, owner) => {
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: pid }, SUPER);
 
   r = await j('GET', '/platform/clients', null, SUPER);
-  ok((r.d ?? []).length >= 2, `★ Владелец платформы видит всех: ${r.d?.length}`);
+  ok((r.d?.rows ?? []).length >= 2, `★ Владелец платформы видит всех: ${r.d?.rows?.length}`);
 
   r = await j('GET', '/platform/clients', null, PARTNER);
-  ok((r.d ?? []).length === 1 && r.d[0].id === id1,
+  ok((r.d?.rows ?? []).length === 1 && r.d.rows[0].id === id1,
      '★ Партнёр видит ТОЛЬКО своих — чужие обороты и телефоны не его дело');
 
   // ---------- ОПЛАТА ----------
@@ -122,7 +122,7 @@ const shop = async (name, owner) => {
   ok(r.status === 403, 'Партнёру предпросмотр не показывается — он всё равно не подтверждает');
 
   // ---------- ПОДТВЕРЖДЕНИЕ ----------
-  const before = (await j('GET', '/platform/clients', null, SUPER)).d.find((c) => c.id === id1);
+  const before = (await j('GET', '/platform/clients', null, SUPER)).d.rows.find((c) => c.id === id1);
   r = await j('POST', `/platform/payments/${payId}/approve`, null, SUPER);
   ok(r.d?.ok, `★ Владелец подтвердил: ${r.d?.note}`);
   ok(r.d?.partnerShare === 1035,
@@ -135,7 +135,7 @@ const shop = async (name, owner) => {
   // Досрочная оплата не сжигает остаток: считаем от конца пробного,
   // а не от сегодня. Иначе заплативший заранее теряет дни и больше
   // никогда не платит вперёд.
-  const after = (await j('GET', '/platform/clients', null, SUPER)).d.find((c) => c.id === id1);
+  const after = (await j('GET', '/platform/clients', null, SUPER)).d.rows.find((c) => c.id === id1);
   ok(after.daysLeft > before.daysLeft + 80,
      `★ Досрочная оплата НЕ сожгла остаток: было ${before.daysLeft} дн., стало ${after.daysLeft}`);
 
@@ -271,7 +271,7 @@ const shop = async (name, owner) => {
   await j('PATCH', `/platform/clients/${id1}`,
     { dealStage: 'demo', dealNote: 'Показал кассу, думает до пятницы' }, PARTNER);
   r = await j('GET', '/platform/clients', null, PARTNER);
-  const card = r.d[0];
+  const card = r.d.rows[0];
   ok(card?.dealNote === 'Показал кассу, думает до пятницы',
      '★ Заметка видна в списке: без неё через две недели «показали» ничего не значит');
   ok(!!card?.touchedAt, 'Дата последнего касания есть');
@@ -384,6 +384,59 @@ const shop = async (name, owner) => {
     ok(all.every((x) => x.can.approve === false && x.can.decide === false),
        '★ Партнёру денежные решения НЕ показываются — рисовать «нельзя» нечестно');
     ok(all.every((x) => x.can.call === true), 'Но позвонить клиенту он может всегда');
+  }
+
+  // ---------- РАЗДЕЛ 2: «КЛИЕНТЫ» ----------
+  // Список с отборами и счётчиками. Отбор в БАЗЕ, а не в браузере: у
+  // донора список приходил целиком и фильтровался у себя — при сотне
+  // клиентов это лишние сотни строк по сети на каждое нажатие.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    ok(Array.isArray(v.d?.rows) && v.d?.counts,
+       `★ Список со счётчиками: всего ${v.d?.counts?.all}`);
+    ok(typeof v.d.counts.expired === 'number' && typeof v.d.counts.expiring === 'number',
+       'Счётчики отборов приходят вместе со списком — цифра и содержимое не разойдутся');
+
+    // Порядок: где горит — сверху. Владелец читает сверху и до конца
+    // обычно не доходит.
+    const withDays = v.d.rows.filter((r) => r.daysLeft != null);
+    const sorted = withDays.every((r, i) =>
+      i === 0 || withDays[i - 1].daysLeft <= r.daysLeft);
+    ok(sorted, '★ Порядок по срочности: просроченные сверху, спокойные внизу');
+
+    // Отборы
+    v = await j('GET', '/platform/clients?filter=expired', null, SUPER);
+    ok(v.d.rows.every((r) => r.expired), '★ Отбор «просрочены» даёт только просроченных');
+
+    v = await j('GET', '/platform/clients?filter=expiring', null, SUPER);
+    ok(v.d.rows.every((r) => r.expiringSoon),
+       '★ Отбор «кончается» — только те, кому платить в течение недели');
+
+    v = await j('GET', '/platform/clients?filter=demo', null, SUPER);
+    ok(v.d.rows.every((r) => r.isDemo), 'Отбор «учебные» отделён от боевых');
+
+    // Поиск по телефону в любом виде: люди пишут то +7, то 8, то без.
+    const withPhone = (await j('GET', '/platform/clients', null, SUPER))
+      .d.rows.find((r) => r.ownerPhone);
+    if (withPhone) {
+      const tail = String(withPhone.ownerPhone).replace(/\D/g, '').slice(-10);
+      for (const form of ['+7' + tail, '8' + tail, tail]) {
+        v = await j('GET', `/platform/clients?q=${encodeURIComponent(form)}`, null, SUPER);
+        ok(v.d.rows.some((r) => r.id === withPhone.id),
+           `★ Поиск по телефону «${form}» находит того же клиента`);
+      }
+    }
+
+    // Месячная сумма берётся из строк счёта, если они есть: клиент
+    // видит одну цифру, платформа — ту же.
+    v = await j('GET', '/platform/clients', null, SUPER);
+    ok(v.d.rows.every((r) => typeof r.monthly === 'number'),
+       'У каждого клиента видна месячная сумма');
+
+    // Партнёр видит только своих — и в счётчиках тоже.
+    v = await j('GET', '/platform/clients', null, PARTNER);
+    ok(v.d.counts.all === v.d.rows.length && v.d.rows.every((r) => r.partnerId === pid),
+       '★ У партнёра и список, и счётчики — только по своим клиентам');
   }
 
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------

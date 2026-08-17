@@ -351,6 +351,12 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: "approve: r.kind === 'payment' && ctx.role === 'super'",
     why: 'Партнёру денежные кнопки не рисуются: мёртвая кнопка «нельзя» хуже отсутствующей' },
 
+  // ── Раздел «Клиенты» ───────────────────────────────────────────────
+  { file: 'db/migrations/052_platform.sql', must: 'platform_clients_filtered',
+    why: 'Отбор в базе, а не в браузере: при сотне клиентов лишние сотни строк по сети на каждое нажатие' },
+  { file: 'db/migrations/052_platform.sql', must: 'ORDER BY (p.days_left IS NULL), p.days_left',
+    why: 'Порядок по срочности: просроченные сверху — владелец читает сверху и до конца не доходит' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

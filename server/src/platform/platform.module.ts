@@ -131,35 +131,56 @@ export class PlatformService {
    * клиент»: если система у него не работает, продлевать он не будет,
    * и звонить надо сейчас, а не когда кончится срок.
    */
-  async clients(ctx: PlatformCtx, q?: string) {
-    // Через функцию с обходом изоляции: account, sale и store закрыты
-    // правилом «только свой магазин», и платформа без этого видит
-    // пустой список — молча, без ошибки. Фильтр по партнёру тоже
-    // внутри функции: правило «видит только своих» должно жить в одном
-    // месте, иначе однажды забудут добавить условие в новый запрос.
-    const rows = (await this.q(
-      `SELECT * FROM platform_clients($1, $2, $3)`,
-      [ctx.role, ctx.userId, q?.trim() || null])).rows;
+  /**
+   * Список клиентов с отбором и счётчиками — одним ответом.
+   *
+   * ОТБОР В БАЗЕ, а не в браузере. У донора список приходил целиком и
+   * фильтровался на стороне кабинета: при сотне клиентов это лишние
+   * сотни строк по сети на каждое нажатие «показать просроченных».
+   *
+   * Счётчики приходят вместе со списком: цифра на вкладке и её
+   * содержимое считаются в одном месте и не могут разойтись.
+   */
+  async clients(ctx: PlatformCtx, opts: {
+    q?: string; filter?: string; partnerId?: string;
+  } = {}) {
+    const filters = ['all', 'active', 'expiring', 'expired', 'trial', 'demo'];
+    const filter = filters.includes(opts.filter ?? '') ? opts.filter : 'all';
 
-    return rows.map((r: any) => {
-      const days = r.paid_until
-        ? Math.ceil((new Date(r.paid_until).getTime() - Date.now()) / 86400000) : null;
-      return {
+    const [rows, counts] = await Promise.all([
+      this.q(`SELECT * FROM platform_clients_filtered($1,$2,$3,$4,$5)`,
+        [ctx.role, ctx.userId, opts.q?.trim() || null, filter, opts.partnerId || null]),
+      this.q(`SELECT * FROM platform_clients_counts($1,$2)`, [ctx.role, ctx.userId]),
+    ]);
+
+    const c = counts.rows[0] ?? {};
+    return {
+      rows: rows.rows.map((r: any) => ({
         id: r.id, name: r.name, phone: r.phone, city: r.city,
         owner: r.owner_name, ownerPhone: r.owner_phone,
-        status: r.status, subStatus: r.sub_status,
-        tariff: r.tariff_name, partner: r.partner_name, partnerId: r.partner_id,
-        dealStage: r.deal_stage, isDemo: r.is_demo,
-        dealNote: r.deal_note, touchedAt: r.touched_at,
-        paidUntil: r.paid_until, daysLeft: days,
-        // Подсвечиваем за неделю: у донора именно так, и это тот срок,
-        // когда звонок ещё уместен, а не выглядит выбиванием долга.
-        expiringSoon: days != null && days <= 7 && days >= 0,
-        expired: days != null && days < 0,
+        status: r.status, tariff: r.tariff_name,
+        partner: r.partner_name, partnerId: r.partner_id,
+        partnerPercent: Number(r.partner_bp) / 100,
+        dealStage: r.deal_stage, dealNote: r.deal_note, touchedAt: r.touched_at,
+        isDemo: r.is_demo,
+        paidUntil: r.paid_until, daysLeft: r.days_left,
+        monthly: money(Number(r.monthly)),
+        // Подсветка: за неделю — предупреждение, после срока — тревога.
+        // Именно эти два состояния решают, звонить сегодня или нет.
+        expiringSoon: r.days_left != null && r.days_left >= 0 && r.days_left <= 7,
+        expired: r.days_left != null && r.days_left < 0,
         revenue30d: Math.round(Number(r.revenue_30d)),
         stores: Number(r.stores), registers: Number(r.registers),
-      };
-    });
+        createdAt: r.created_at,
+      })),
+      total: Number(rows.rows[0]?.total_count ?? 0),
+      counts: {
+        all: Number(c.all_n ?? 0), active: Number(c.active_n ?? 0),
+        expiring: Number(c.expiring_n ?? 0), expired: Number(c.expired_n ?? 0),
+        trial: Number(c.trial_n ?? 0), demo: Number(c.demo_n ?? 0),
+      },
+      filter,
+    };
   }
 
   // ── СВОДКА ──────────────────────────────────────────────────────────
@@ -1091,9 +1112,10 @@ export class PlatformController {
   login(@Body() d: any) { return this.svc.login(d?.email, d?.password); }
 
   @Public() @Get('clients')
-  clients(@Req() r: any, @Query('q') q?: string) {
+  clients(@Req() r: any, @Query('q') q?: string,
+          @Query('filter') filter?: string, @Query('partnerId') partnerId?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.clients(Pl(r), q);
+    return this.svc.clients(Pl(r), { q, filter, partnerId });
   }
 
   @Public() @Get('today')
