@@ -434,6 +434,9 @@ const RULES = [
   { file: 'admin/app/platform/page.tsx', must: 'className="side-nav"',
     why: 'Разметка их классами: shell, side, frame, topbar, tabbar — иначе их файл оформления работать не будет' },
 
+  { file: 'admin/app/platform/style/admin.css', must: 'ВНУТРИ ПЛАТФОРМЫ ДЕЙСТВУЮТ ИХ ПРАВИЛА',
+    why: 'Наш общий слой ставит свой шрифт и размеры на всё приложение: их файл лежал целиком, а работал наполовину' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
