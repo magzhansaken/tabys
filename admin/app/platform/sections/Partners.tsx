@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react';
 import { C, Card, Btn, Input, Field, ErrLine, EmptyState, RevealOnce } from '../../../lib/ui';
-import { api, money, dateTime, type Me } from '../lib';
+import { P, api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
 
 export default function Partners({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
@@ -20,14 +20,21 @@ export default function Partners({ me }: { me: Me }) {
   const [created, setCreated] = useState<string | null>(null);
   const [offPreview, setOffPreview] = useState<any>(null);
 
-  const load = async () => {
-    try { setData(await api('/partners')); setErr(''); }
-    catch (e: any) { setErr(e.message); }
+  const load = async (silent = false) => {
+    // Показываем известное сразу, свежее подъезжает в фоне: пустой
+    // экран при каждом входе ощущался как «всё тормозит», хотя сервер
+    // отвечает за 10-20 миллисекунд.
+    const hit = cached('/partners');
+    if (hit && !silent) setData(hit.data);
+    try {
+      const d = await api('/partners');
+      setData(d); putCache('/partners', d); setErr('');
+    } catch (e: any) { if (!hit) setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
 
   if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: C.dim, padding: 20 }}>Загрузка…</div>;
+  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -36,15 +43,15 @@ export default function Partners({ me }: { me: Me }) {
       <Card>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 13, color: C.dim }}>Партнёров</div>
+            <div style={{ fontSize: 13, color: P.dim }}>Партнёров</div>
             <div style={{ fontSize: 22, fontWeight: 600 }}>{data.totals.partners}</div>
           </div>
           <div>
-            <div style={{ fontSize: 13, color: C.dim }}>Привели за 30 дней</div>
+            <div style={{ fontSize: 13, color: P.dim }}>Привели за 30 дней</div>
             <div style={{ fontSize: 22, fontWeight: 600 }}>{money(data.totals.brought)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 13, color: C.dim }}>К выплате</div>
+            <div style={{ fontSize: 13, color: P.dim }}>К выплате</div>
             <div style={{ fontSize: 22, fontWeight: 600 }}>{money(data.totals.paidOut)}</div>
           </div>
           <Btn primary style={{ marginLeft: 'auto' }}
@@ -94,14 +101,14 @@ export default function Partners({ me }: { me: Me }) {
         <Card title="Что произойдёт при отключении">
           <div style={{ fontSize: 15 }}>{offPreview.effect}</div>
           {offPreview.activeClients > 0 && (
-            <div style={{ fontSize: 14, color: C.dim, marginTop: 6 }}>
+            <div style={{ fontSize: 14, color: P.dim, marginTop: 6 }}>
               Работающих клиентов: {offPreview.activeClients} · дают {money(offPreview.mrr)}/мес
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <Btn danger onClick={async () => {
               const id = offPreview.id; setOffPreview(null);
-              try { await api(`/partners/${id}`, { method: 'PATCH', body: { isActive: false } }); await load(); }
+              try { await api(`/partners/${id}`, { method: 'PATCH', body: { isActive: false } }); dropCache(); await load(); }
               catch (e: any) { setErr(e.message); }
             }}>Да, закрыть вход</Btn>
             <Btn onClick={() => setOffPreview(null)}>Отмена</Btn>
@@ -114,13 +121,13 @@ export default function Partners({ me }: { me: Me }) {
         : data.rows.map((p: any) => (
           <Card key={p.id} style={{ opacity: p.isActive ? 1 : 0.6 }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 17 }}>{p.name}</b>
-              <span style={{ fontSize: 14, color: C.dim }}>{p.email}</span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: C.accent }}>
+              <b style={{ fontSize: 17, fontFamily: P.display, fontWeight: 400 }}>{p.name}</b>
+              <span style={{ fontSize: 14, color: P.dim }}>{p.email}</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: P.accent }}>
                 {p.commissionPercent}%
               </span>
               {!p.isActive && (
-                <span style={{ fontSize: 13, color: C.red }}>вход закрыт</span>
+                <span style={{ fontSize: 13, color: P.danger }}>вход закрыт</span>
               )}
             </div>
 
@@ -136,7 +143,7 @@ export default function Partners({ me }: { me: Me }) {
                 sub="будущий доход" />
             </div>
 
-            <div style={{ fontSize: 13, color: p.inactive || p.neverLoggedIn ? C.amber : C.dim,
+            <div style={{ fontSize: 13, color: p.inactive || p.neverLoggedIn ? P.accentSoft : P.dim,
               marginTop: 8 }}>
               {p.neverLoggedIn ? 'ни разу не заходил'
                 : p.inactive ? `не заходил ${p.daysSilent} дн. — возможно, перестал работать`
@@ -151,7 +158,7 @@ export default function Partners({ me }: { me: Me }) {
                 }}>Закрыть вход</Btn>
               ) : (
                 <Btn onClick={async () => {
-                  try { await api(`/partners/${p.id}`, { method: 'PATCH', body: { isActive: true } }); await load(); }
+                  try { await api(`/partners/${p.id}`, { method: 'PATCH', body: { isActive: true } }); dropCache(); await load(); }
                   catch (e: any) { setErr(e.message); }
                 }}>Открыть вход</Btn>
               )}
@@ -165,9 +172,9 @@ export default function Partners({ me }: { me: Me }) {
 function Num({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: C.dim }}>{title}</div>
+      <div style={{ fontSize: 12, color: P.dim }}>{title}</div>
       <div style={{ fontSize: 18, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: C.dim }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 12, color: P.dim }}>{sub}</div>}
     </div>
   );
 }

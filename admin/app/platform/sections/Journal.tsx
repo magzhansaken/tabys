@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { C, Card, Btn, ErrLine, EmptyState } from '../../../lib/ui';
-import { api, money, dateTime, type Me } from '../lib';
+import { P, api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
 
 const WEIGHT = [
   { key: 'all',    label: 'Все' },
@@ -42,7 +42,7 @@ export default function Journal({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  const tone = (w: string) => w === 'money' ? C.accent : w === 'access' ? C.red : C.line;
+  const tone = (w: string) => w === 'money' ? P.accent : w === 'access' ? P.danger : P.line;
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -54,9 +54,9 @@ export default function Journal({ me }: { me: Me }) {
             onClick={() => { setWeight(w.key); setRows([]); load(w.key); }}
             style={{
               minHeight: 38, padding: '0 14px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${weight === w.key ? C.accent : C.line}`,
-              background: weight === w.key ? C.accent : C.card,
-              color: weight === w.key ? '#fff' : C.text,
+              border: `1px solid ${weight === w.key ? P.accent : P.line}`,
+              background: weight === w.key ? P.accent : P.card,
+              color: weight === w.key ? '#fff' : P.ink,
             }}>{w.label}</button>
         ))}
       </div>
@@ -69,18 +69,18 @@ export default function Journal({ me }: { me: Me }) {
               {rows.map((r: any) => (
                 <div key={r.id} style={{
                   display: 'flex', gap: 12, padding: '9px 0', alignItems: 'baseline',
-                  borderBottom: `1px solid ${C.line}`, fontSize: 14, flexWrap: 'wrap',
+                  borderBottom: `1px solid ${P.line}`, fontSize: 14, flexWrap: 'wrap',
                 }}>
                   <span style={{
                     width: 3, alignSelf: 'stretch', background: tone(r.weight),
                     borderRadius: 2, flexShrink: 0,
                   }} />
-                  <span style={{ fontSize: 13, color: C.dim, minWidth: 100,
+                  <span style={{ fontSize: 13, color: P.dim, minWidth: 100,
                     fontVariantNumeric: 'tabular-nums' }}>{dateTime(r.at)}</span>
                   <span style={{ fontWeight: r.weight === 'money' ? 600 : 400 }}>{r.title}</span>
-                  {r.client && <span style={{ color: C.dim }}>· {r.client}</span>}
-                  {r.detail && <span style={{ color: C.dim, fontSize: 13 }}>· {r.detail}</span>}
-                  <span style={{ marginLeft: 'auto', fontSize: 13, color: C.dim }}>{r.actor}</span>
+                  {r.client && <span style={{ color: P.dim }}>· {r.client}</span>}
+                  {r.detail && <span style={{ color: P.dim, fontSize: 13 }}>· {r.detail}</span>}
+                  <span style={{ marginLeft: 'auto', fontSize: 13, color: P.dim }}>{r.actor}</span>
                   {r.amount != null && (
                     <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                       {money(r.amount)}

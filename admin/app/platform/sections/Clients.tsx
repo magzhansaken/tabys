@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { C, Card, Btn, Input, Field, Select, ErrLine, EmptyState, Status } from '../../../lib/ui';
-import { api, money, fullDate, daysWord, type Me } from '../lib';
+import { P, api, cached, putCache, dropCache, money, fullDate, daysWord, type Me } from '../lib';
 
 type Row = {
   id: string; name: string; phone: string; city: string | null;
@@ -41,18 +41,25 @@ export default function Clients({ me }: { me: Me }) {
   const [err, setErr] = useState('');
 
   const load = async (f = filter, search = q) => {
+    const p = new URLSearchParams();
+    if (f !== 'all') p.set('filter', f);
+    if (search.trim()) p.set('q', search.trim());
+    const path = '/clients?' + p.toString();
+
+    // Известное показываем сразу — переключение отбора не должно
+    // очищать экран. Ключ памяти включает отбор и поиск: у каждого
+    // сочетания свой ответ.
+    const hit = cached(path);
+    if (hit) setData(hit.data);
     try {
-      const p = new URLSearchParams();
-      if (f !== 'all') p.set('filter', f);
-      if (search.trim()) p.set('q', search.trim());
-      setData(await api('/clients?' + p.toString()));
-      setErr('');
-    } catch (e: any) { setErr(e.message); }
+      const d = await api(path);
+      setData(d); putCache(path, d); setErr('');
+    } catch (e: any) { if (!hit) setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
 
   if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: C.dim, padding: 20 }}>Загрузка…</div>;
+  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
 
   const c = data.counts;
 
@@ -68,9 +75,9 @@ export default function Clients({ me }: { me: Me }) {
             onClick={() => { setFilter(f.key); load(f.key, q); }}
             style={{
               minHeight: 38, padding: '0 12px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${filter === f.key ? C.accent : C.line}`,
-              background: filter === f.key ? C.accent : C.card,
-              color: filter === f.key ? '#fff' : C.text,
+              border: `1px solid ${filter === f.key ? P.accent : P.line}`,
+              background: filter === f.key ? P.accent : P.card,
+              color: filter === f.key ? '#fff' : P.ink,
             }}>
             {f.label} <b>{c[f.key]}</b>
           </button>
@@ -107,27 +114,27 @@ function ClientRow({ r, me, open, onToggle, onChanged }: {
 
   // Подсветка строки: просрочен — тревога, кончается — предупреждение.
   // Эти два состояния решают, звонить сегодня или нет.
-  const edge = r.expired ? C.red : r.expiringSoon ? C.amber : C.line;
+  const edge = r.expired ? P.danger : r.expiringSoon ? P.accentSoft : P.line;
 
   return (
     <Card style={{ borderLeft: `3px solid ${edge}` }}>
       <div onClick={onToggle} style={{ cursor: 'pointer', display: 'grid', gap: 6 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-          <b style={{ fontSize: 17 }}>{r.name}</b>
+          <b style={{ fontSize: 17, fontFamily: P.display, fontWeight: 400 }}>{r.name}</b>
           {r.isDemo && <Status value="demo" kind="tenant" />}
-          <span style={{ fontSize: 14, color: C.dim }}>{r.city}</span>
+          <span style={{ fontSize: 14, color: P.dim }}>{r.city}</span>
           <span style={{ marginLeft: 'auto', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>
             {money(r.monthly)}/мес
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 14, color: C.dim }}>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 14, color: P.dim }}>
           <span>{r.owner ?? '—'}</span>
           {r.ownerPhone && (
             <a href={`tel:${r.ownerPhone}`} onClick={(e) => e.stopPropagation()}
-              style={{ color: C.accent, textDecoration: 'none' }}>{r.ownerPhone}</a>
+              style={{ color: P.accent, textDecoration: 'none' }}>{r.ownerPhone}</a>
           )}
-          <span style={{ color: r.expired ? C.red : r.expiringSoon ? C.amber : C.dim }}>
+          <span style={{ color: r.expired ? P.danger : r.expiringSoon ? P.accentSoft : P.dim }}>
             {r.paidUntil ? `оплачено до ${fullDate(r.paidUntil)} · ${daysWord(r.daysLeft)}` : 'без подписки'}
           </span>
           {/* Выручка за 30 дней — главный столбец: он отвечает, живёт ли
@@ -140,9 +147,9 @@ function ClientRow({ r, me, open, onToggle, onChanged }: {
       </div>
 
       {open && (
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${P.line}` }}>
           {err && <ErrLine err={err} />}
-          {!card ? <div style={{ color: C.dim }}>Загрузка карточки…</div> : (
+          {!card ? <div style={{ color: P.dim }}>Загрузка карточки…</div> : (
             <div style={{ display: 'grid', gap: 14 }}>
               {/* Состав счёта строками: клиент добавил кассу — цена
                   выросла на понятную величину, а не стала другой цифрой. */}
@@ -151,19 +158,19 @@ function ClientRow({ r, me, open, onToggle, onChanged }: {
                   Счёт · {money(card.monthly)}/мес
                 </div>
                 {card.lines.length === 0
-                  ? <div style={{ fontSize: 14, color: C.dim }}>Строк нет — платит по тарифу</div>
+                  ? <div style={{ fontSize: 14, color: P.dim }}>Строк нет — платит по тарифу</div>
                   : card.lines.filter((l: any) => l.active).map((l: any) => (
                     <div key={l.id} style={{ display: 'flex', fontSize: 14, padding: '3px 0' }}>
                       <span>{l.title}</span>
                       <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums',
-                        color: l.price < 0 ? C.accent : C.text }}>
+                        color: l.price < 0 ? P.accent : P.ink }}>
                         {money(l.price)}{l.qty > 1 ? ` × ${l.qty}` : ''}
                       </span>
                     </div>
                   ))}
               </div>
 
-              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: C.dim, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 14, color: P.dim, flexWrap: 'wrap' }}>
                 <span>точек: {card.stores}</span>
                 <span>касс: {card.registers}</span>
                 <span>оплат: {card.payments.length}</span>
@@ -171,22 +178,22 @@ function ClientRow({ r, me, open, onToggle, onChanged }: {
               </div>
 
               {pass && (
-                <div style={{ background: C.bg, border: `1px solid ${C.amber}`,
+                <div style={{ background: P.bg, border: `1px solid ${P.accentSoft}`,
                   borderRadius: 10, padding: 12 }}>
                   <div style={{ fontSize: 14, marginBottom: 4 }}>Новый пароль владельцу:</div>
                   <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: 1 }}>{pass}</div>
-                  <div style={{ fontSize: 13, color: C.dim, marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: P.dim, marginTop: 4 }}>
                     Показан один раз — продиктуйте владельцу сейчас
                   </div>
                 </div>
               )}
 
               {code && (
-                <div style={{ background: C.bg, border: `1px solid ${C.accent}`,
+                <div style={{ background: P.bg, border: `1px solid ${P.accent}`,
                   borderRadius: 10, padding: 12 }}>
                   <div style={{ fontSize: 14, marginBottom: 4 }}>Код привязки кассы:</div>
                   <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: 3 }}>{code.code}</div>
-                  <div style={{ fontSize: 13, color: C.dim, marginTop: 4 }}>{code.note}</div>
+                  <div style={{ fontSize: 13, color: P.dim, marginTop: 4 }}>{code.note}</div>
                 </div>
               )}
 

@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { C, Card, Btn, Input, Field, BaseStyles, ErrLine } from '../../lib/ui';
-import { api, readSession, saveSession, clearSession, type Me } from './lib';
+import { P, api, readSession, saveSession, clearSession, type Me } from './lib';
 
 import Today from './sections/Today';
 import Clients from './sections/Clients';
@@ -59,16 +59,21 @@ export default function PlatformPage() {
   return (
     <>
       <BaseStyles />
-      <div style={{ minHeight: '100vh', background: C.bg }}>
+      <div style={{ minHeight: '100vh', background: P.bg }}>
         {/* Шапка: кто вошёл и под какой ролью. Роль важна — от неё
             зависит, что человек может, и путаница здесь дорога. */}
         <header style={{
-          background: C.card, borderBottom: `1px solid ${C.line}`,
+          background: P.card, borderBottom: `1px solid ${P.line}`,
           padding: '12px 20px', display: 'flex', alignItems: 'center',
           gap: 16, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 10,
         }}>
-          <div style={{ fontSize: 17, fontWeight: 600, color: C.accent, whiteSpace: 'nowrap' }}>
-            Табыс · Платформа
+          {/* Заголовок с засечками — приём соседнего проекта. Он делает
+              платформу заметно «другим местом», чем кабинет магазина:
+              зашёл и сразу видно, что ты сверху над магазинами, а не
+              внутри своего. */}
+          <div style={{ fontFamily: P.display, fontSize: 20, color: P.accentSoft,
+            whiteSpace: 'nowrap', letterSpacing: '.01em' }}>
+            Табыс <span style={{ color: P.faint }}>·</span> Платформа
           </div>
 
           <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
@@ -77,9 +82,9 @@ export default function PlatformPage() {
                 style={{
                   minHeight: 40, padding: '0 14px', borderRadius: 10, fontSize: 15,
                   cursor: 'pointer', whiteSpace: 'nowrap',
-                  border: `1px solid ${tab === t.key ? C.accent : 'transparent'}`,
-                  background: tab === t.key ? C.accent : 'transparent',
-                  color: tab === t.key ? '#fff' : C.text,
+                  border: `1px solid ${tab === t.key ? P.accent : 'transparent'}`,
+                  background: tab === t.key ? P.accent : 'transparent',
+                  color: tab === t.key ? '#fff' : P.ink,
                   fontWeight: tab === t.key ? 600 : 400,
                 }}>
                 {label(t)}
@@ -90,7 +95,7 @@ export default function PlatformPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
             <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{me.name}</div>
-              <div style={{ fontSize: 12, color: C.dim }}>
+              <div style={{ fontSize: 12, color: P.dim }}>
                 {me.role === 'super' ? 'владелец платформы' : 'партнёр'}
               </div>
             </div>
@@ -137,11 +142,11 @@ function Login({ onIn }: { onIn: (m: Me) => void }) {
     <>
       <BaseStyles />
       <div style={{
-        minHeight: '100vh', background: C.bg,
+        minHeight: '100vh', background: P.bg,
         display: 'grid', placeItems: 'center', padding: 16,
       }}>
         <Card title="Платформа Табыс" style={{ maxWidth: 400, width: '100%' }}>
-          <p style={{ fontSize: 14, color: C.dim, marginTop: 0 }}>
+          <p style={{ fontSize: 14, color: P.dim, marginTop: 0 }}>
             Вход для владельца сервиса и партнёров. Кабинет магазина — по другому адресу.
           </p>
           <div style={{ display: 'grid', gap: 12 }}>

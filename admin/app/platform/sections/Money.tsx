@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { C, Card, Btn, Input, ErrLine, EmptyState, Status } from '../../../lib/ui';
-import { api, money, fullDate, dateTime, type Me } from '../lib';
+import { P, api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
 
 const FILTERS = [
   { key: 'all',      label: 'Все' },
@@ -29,15 +29,18 @@ export default function Money({ me }: { me: Me }) {
   const [reason, setReason] = useState('');
 
   const load = async (s = status) => {
+    const path = '/payments' + (s === 'all' ? '' : `?status=${s}`);
+    const hit = cached(path);
+    if (hit) setData(hit.data);
     try {
-      setData(await api('/payments' + (s === 'all' ? '' : `?status=${s}`)));
-      setErr('');
-    } catch (e: any) { setErr(e.message); }
+      const d = await api(path);
+      setData(d); putCache(path, d); setErr('');
+    } catch (e: any) { if (!hit) setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
 
   if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: C.dim, padding: 20 }}>Загрузка…</div>;
+  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
 
   const t = data.totals;
 
@@ -54,7 +57,7 @@ export default function Money({ me }: { me: Me }) {
           <Sum title="Партнёрам" value={money(t.partnerShare)} />
           <Sum title="Платформе" value={money(t.platformShare)} />
         </div>
-        <div style={{ fontSize: 13, color: C.dim, marginTop: 8 }}>
+        <div style={{ fontSize: 13, color: P.dim, marginTop: 8 }}>
           В доход идут только подтверждённые: ждущие и отклонённые — это ещё не деньги
         </div>
       </Card>
@@ -64,9 +67,9 @@ export default function Money({ me }: { me: Me }) {
           <button key={f.key} onClick={() => { setStatus(f.key); load(f.key); }}
             style={{
               minHeight: 38, padding: '0 14px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${status === f.key ? C.accent : C.line}`,
-              background: status === f.key ? C.accent : C.card,
-              color: status === f.key ? '#fff' : C.text,
+              border: `1px solid ${status === f.key ? P.accent : P.line}`,
+              background: status === f.key ? P.accent : P.card,
+              color: status === f.key ? '#fff' : P.ink,
             }}>{f.label}</button>
         ))}
       </div>
@@ -76,7 +79,7 @@ export default function Money({ me }: { me: Me }) {
           <div style={{ display: 'grid', gap: 6, fontSize: 15 }}>
             <div>{money(preview.amount)} за {preview.months} мес.</div>
             <div>Доступ продлится до <b>{fullDate(preview.paidUntil)}</b></div>
-            <div style={{ color: C.dim }}>
+            <div style={{ color: P.dim }}>
               Партнёру {money(preview.partnerShare)} ({preview.partnerPercent}%) ·
               платформе {money(preview.platformShare)}
             </div>
@@ -84,7 +87,7 @@ export default function Money({ me }: { me: Me }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <Btn primary onClick={async () => {
               const id = preview.id; setPreview(null);
-              try { await api(`/payments/${id}/approve`, { method: 'POST' }); await load(); }
+              try { await api(`/payments/${id}/approve`, { method: 'POST' }); dropCache(); await load(); }
               catch (e: any) { setErr(e.message); }
             }}>Да, подтвердить</Btn>
             <Btn onClick={() => setPreview(null)}>Отмена</Btn>
@@ -96,16 +99,16 @@ export default function Money({ me }: { me: Me }) {
         ? <EmptyState text="Оплат нет. При этом отборе записей не нашлось." />
         : data.rows.map((p: any) => (
           <Card key={p.id} style={{
-            borderLeft: `3px solid ${p.status === 'pending' ? C.amber
-              : p.status === 'approved' ? C.accent : C.red}` }}>
+            borderLeft: `3px solid ${p.status === 'pending' ? P.accentSoft
+              : p.status === 'approved' ? P.accent : P.danger}` }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 16 }}>{p.client}</b>
+              <b style={{ fontSize: 16.5, fontFamily: P.display, fontWeight: 400 }}>{p.client}</b>
               <Status value={p.status} kind="pay" />
               <span style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 600,
                 fontVariantNumeric: 'tabular-nums' }}>{money(p.amount)}</span>
             </div>
 
-            <div style={{ fontSize: 14, color: C.dim, marginTop: 4,
+            <div style={{ fontSize: 14, color: P.dim, marginTop: 4,
               display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <span>{p.months} мес. · {p.method}</span>
               <span>{dateTime(p.createdAt)}</span>
@@ -122,7 +125,7 @@ export default function Money({ me }: { me: Me }) {
 
             {p.comment && <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 4 }}>«{p.comment}»</div>}
             {p.rejectReason && (
-              <div style={{ fontSize: 14, color: C.red, marginTop: 4 }}>
+              <div style={{ fontSize: 14, color: P.danger, marginTop: 4 }}>
                 Отклонена: {p.rejectReason}
               </div>
             )}
@@ -136,7 +139,7 @@ export default function Money({ me }: { me: Me }) {
                     if (!reason.trim()) { setErr('Напишите причину'); return; }
                     try {
                       await api(`/payments/${p.id}/reject`, { method: 'POST', body: { reason } });
-                      setRejecting(null); setReason(''); await load();
+                      setRejecting(null); setReason(''); dropCache(); await load();
                     } catch (e: any) { setErr(e.message); }
                   }}>Отклонить</Btn>
                   <Btn onClick={() => { setRejecting(null); setReason(''); }}>Отмена</Btn>
@@ -160,7 +163,7 @@ export default function Money({ me }: { me: Me }) {
 function Sum({ title, value, big }: { title: string; value: string; big?: boolean }) {
   return (
     <div>
-      <div style={{ fontSize: 13, color: C.dim }}>{title}</div>
+      <div style={{ fontSize: 13, color: P.dim }}>{title}</div>
       <div style={{ fontSize: big ? 26 : 20, fontWeight: 600,
         fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
