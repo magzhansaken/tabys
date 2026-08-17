@@ -1,31 +1,29 @@
 'use client';
 /**
- * РАЗДЕЛ 6: «ПАРТНЁРЫ» — кто продаёт и сколько заработал.
+ * РАЗДЕЛ 6: «ПАРТНЁРЫ».
  *
- * «Привёл денег» и «заработал» показаны рядом и это разные числа:
- * партнёр с комиссией 10% может приносить платформе больше, чем с 15%.
+ * Разметка из их main.tsx: grid partners, cards, toolbar, btn primary,
+ * sub, num, badge st-*.
  *
- * Отключение показывает последствие: сколько клиентов останется без
- * сопровождения.
+ * Их столбцы: Имя, Почта, Клиентов, Доля партнёра, Заработал 30 дн.,
+ * Был в системе. Добавлено сверх них: ПРИВЁЛ ДЕНЕГ — это другое число,
+ * и оно важнее заработка: партнёр с малой комиссией может приносить
+ * платформе больше.
  */
 import { useEffect, useState } from 'react';
-import { C, Card, Btn, Input, Field, ErrLine, EmptyState, RevealOnce } from '../../../lib/ui';
-import { P, api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
 
 export default function Partners({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', commissionPercent: 15 });
-  const [created, setCreated] = useState<string | null>(null);
-  const [offPreview, setOffPreview] = useState<any>(null);
+  const [shown, setShown] = useState<{ title: string; value: string; note: string } | null>(null);
+  const [offAsk, setOffAsk] = useState<any>(null);
 
-  const load = async (silent = false) => {
-    // Показываем известное сразу, свежее подъезжает в фоне: пустой
-    // экран при каждом входе ощущался как «всё тормозит», хотя сервер
-    // отвечает за 10-20 миллисекунд.
+  const load = async () => {
     const hit = cached('/partners');
-    if (hit && !silent) setData(hit.data);
+    if (hit) setData(hit.data);
     try {
       const d = await api('/partners');
       setData(d); putCache('/partners', d); setErr('');
@@ -33,148 +31,163 @@ export default function Partners({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
+  if (err && !data) return <div className="err">{err}</div>;
+  if (!data) return <div className="muted">Загрузка…</div>;
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {err && <ErrLine err={err} />}
+    <>
+      {err && <div className="err">{err}</div>}
 
-      <Card>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 13, color: P.dim }}>Партнёров</div>
-            <div style={{ fontSize: 22, fontWeight: 600 }}>{data.totals.partners}</div>
+      {shown && (
+        <div className="reveal" onClick={() => setShown(null)}>
+          <div className="reveal-card">
+            <span>{shown.title}</span>
+            <b>{shown.value}</b>
+            <i>{shown.note}</i>
           </div>
-          <div>
-            <div style={{ fontSize: 13, color: P.dim }}>Привели за 30 дней</div>
-            <div style={{ fontSize: 22, fontWeight: 600 }}>{money(data.totals.brought)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, color: P.dim }}>К выплате</div>
-            <div style={{ fontSize: 22, fontWeight: 600 }}>{money(data.totals.paidOut)}</div>
-          </div>
-          <Btn primary style={{ marginLeft: 'auto' }}
-            onClick={() => setAdding(!adding)}>Завести партнёра</Btn>
         </div>
-      </Card>
+      )}
+
+      {offAsk && (
+        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setOffAsk(null); }}>
+          <div className="ask-card">
+            <b>{offAsk.name}</b>
+            {/* Опасное действие показывает последствие до нажатия. */}
+            <p className="pay-note">{offAsk.effect}</p>
+            {offAsk.activeClients > 0 && (
+              <p>Работающих клиентов: {offAsk.activeClients} · дают {money(offAsk.mrr)}/мес</p>
+            )}
+            <div className="pay-actions">
+              <button className="btn ghost" onClick={() => setOffAsk(null)}>Отмена</button>
+              <button className="btn danger" onClick={async () => {
+                const id = offAsk.id; setOffAsk(null);
+                try {
+                  await api(`/partners/${id}`, { method: 'PATCH', body: { isActive: false } });
+                  dropCache(); await load();
+                } catch (e: any) { setErr(e.message); }
+              }}>Да, закрыть вход</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="cards">
+        <div className="card"><span>Партнёров</span><b>{data.totals.partners}</b></div>
+        <div className="card money"><span>Привели за 30 дн.</span><b>{money(data.totals.brought)}</b></div>
+        <div className="card"><span>К выплате</span><b>{money(data.totals.paidOut)}</b></div>
+      </div>
+
+      <div className="toolbar">
+        <button className="btn primary" onClick={() => setAdding(!adding)}>
+          {adding ? 'Отмена' : '+ Новый партнёр'}
+        </button>
+      </div>
 
       {adding && (
-        <Card title="Новый партнёр">
-          <div style={{ display: 'grid', gap: 10, maxWidth: 420 }}>
-            <Field label="Имя">
-              <Input value={form.name} onChange={(e: any) => setForm({ ...form, name: e.target.value })} />
-            </Field>
-            <Field label="Почта">
-              <Input value={form.email} type="email"
-                onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
-            </Field>
-            <Field label="Пароль" hint="от 8 знаков — передайте партнёру лично">
-              <Input value={form.password} type="text"
-                onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
-            </Field>
-            <Field label="Комиссия, %" hint="доля с каждой подтверждённой оплаты его клиентов">
-              <Input value={String(form.commissionPercent)} inputMode="numeric"
-                onChange={(e: any) => setForm({ ...form, commissionPercent: Number(e.target.value) || 0 })} />
-            </Field>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn primary onClick={async () => {
+        <div className="pay-grid">
+          <article className="pay">
+            <div className="pay-top"><div className="pay-who"><b>Новый партнёр</b></div></div>
+            <label className="sub">Имя</label>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label className="sub">Почта</label>
+            <input value={form.email} type="email"
+              onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <label className="sub">Пароль — от 8 знаков, передайте лично</label>
+            <input value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <label className="sub">Доля партнёра, % — с каждой подтверждённой оплаты его клиентов</label>
+            <input value={String(form.commissionPercent)} inputMode="numeric"
+              onChange={(e) => setForm({ ...form, commissionPercent: Number(e.target.value) || 0 })} />
+            <div className="pay-actions">
+              <button className="btn primary" onClick={async () => {
                 try {
-                  const r = await api('/partners', { method: 'POST', body: form });
-                  setCreated(form.password); setAdding(false);
+                  await api('/partners', { method: 'POST', body: form });
+                  setShown({ title: 'Пароль партнёра', value: form.password,
+                    note: 'Показан один раз — передайте лично. В базе хранится отпечатком.' });
+                  setAdding(false);
                   setForm({ name: '', email: '', password: '', commissionPercent: 15 });
-                  await load();
+                  dropCache(); await load();
                 } catch (e: any) { setErr(e.message); }
-              }}>Завести</Btn>
-              <Btn onClick={() => setAdding(false)}>Отмена</Btn>
+              }}>Завести</button>
             </div>
-          </div>
-        </Card>
+          </article>
+        </div>
       )}
 
-      {created && (
-        <RevealOnce title="Пароль партнёра" value={created}
-          note="Показан один раз — передайте лично. В базе хранится отпечатком." />
-      )}
-
-      {offPreview && (
-        <Card title="Что произойдёт при отключении">
-          <div style={{ fontSize: 15 }}>{offPreview.effect}</div>
-          {offPreview.activeClients > 0 && (
-            <div style={{ fontSize: 14, color: P.dim, marginTop: 6 }}>
-              Работающих клиентов: {offPreview.activeClients} · дают {money(offPreview.mrr)}/мес
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <Btn danger onClick={async () => {
-              const id = offPreview.id; setOffPreview(null);
-              try { await api(`/partners/${id}`, { method: 'PATCH', body: { isActive: false } }); dropCache(); await load(); }
-              catch (e: any) { setErr(e.message); }
-            }}>Да, закрыть вход</Btn>
-            <Btn onClick={() => setOffPreview(null)}>Отмена</Btn>
-          </div>
-        </Card>
-      )}
-
-      {data.rows.length === 0
-        ? <EmptyState text="Партнёров нет. Заведите первого — он сможет вести своих клиентов." />
-        : data.rows.map((p: any) => (
-          <Card key={p.id} style={{ opacity: p.isActive ? 1 : 0.6 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 17, fontFamily: P.display, fontWeight: 400 }}>{p.name}</b>
-              <span style={{ fontSize: 14, color: P.dim }}>{p.email}</span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: P.accent }}>
-                {p.commissionPercent}%
-              </span>
-              {!p.isActive && (
-                <span style={{ fontSize: 13, color: P.danger }}>вход закрыт</span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10 }}>
-              <Num title="Клиентов" value={`${p.clients}`}
-                sub={`работают ${p.activeClients}${p.lostClients ? `, ушло ${p.lostClients}` : ''}`} />
+      {data.rows.length === 0 ? (
+        <div className="all-clear">
+          <b>Партнёров нет</b>
+          <p>Заведите первого — он сможет вести своих клиентов.</p>
+        </div>
+      ) : (
+        <table className="grid partners">
+          <thead>
+            <tr>
+              <th>Имя</th>
+              <th>Почта</th>
+              <th className="num">Клиентов</th>
+              <th className="num">Доля партнёра</th>
               {/* Привёл и заработал — разные числа, и первое важнее. */}
-              <Num title="Привёл за 30 дн." value={money(p.brought)}
-                sub={`всего ${money(p.broughtTotal)}`} />
-              <Num title="Заработал" value={money(p.earned)}
-                sub={`всего ${money(p.earnedTotal)}`} />
-              <Num title="Его клиенты дают" value={`${money(p.mrr)}/мес`}
-                sub="будущий доход" />
-            </div>
-
-            <div style={{ fontSize: 13, color: p.inactive || p.neverLoggedIn ? P.accentSoft : P.dim,
-              marginTop: 8 }}>
-              {p.neverLoggedIn ? 'ни разу не заходил'
-                : p.inactive ? `не заходил ${p.daysSilent} дн. — возможно, перестал работать`
-                : `заходил ${dateTime(p.lastLoginAt)}`}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              {p.isActive ? (
-                <Btn onClick={async () => {
-                  try { setOffPreview({ ...(await api(`/partners/${p.id}/off-preview`)), id: p.id }); }
-                  catch (e: any) { setErr(e.message); }
-                }}>Закрыть вход</Btn>
-              ) : (
-                <Btn onClick={async () => {
-                  try { await api(`/partners/${p.id}`, { method: 'PATCH', body: { isActive: true } }); dropCache(); await load(); }
-                  catch (e: any) { setErr(e.message); }
-                }}>Открыть вход</Btn>
-              )}
-            </div>
-          </Card>
-        ))}
-    </div>
-  );
-}
-
-function Num({ title, value, sub }: { title: string; value: string; sub?: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 12, color: P.dim }}>{title}</div>
-      <div style={{ fontSize: 18, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: P.dim }}>{sub}</div>}
-    </div>
+              <th className="num">Привёл 30 дн.</th>
+              <th className="num">Заработал 30 дн.</th>
+              <th>Был в системе</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((p: any) => (
+              <tr key={p.id}>
+                <td>
+                  {p.name}
+                  {!p.isActive && <div className="sub">вход закрыт</div>}
+                </td>
+                <td>
+                  {p.email}
+                  {p.phone && <div className="sub">{p.phone}</div>}
+                </td>
+                <td className="num">
+                  {p.clients}
+                  <div className="sub">
+                    работают {p.activeClients}
+                    {p.lostClients ? `, ушло ${p.lostClients}` : ''}
+                  </div>
+                </td>
+                <td className="num">{p.commissionPercent}%</td>
+                <td className="num">
+                  {money(p.brought)}
+                  <div className="sub">всего {money(p.broughtTotal)}</div>
+                </td>
+                <td className="num">
+                  {money(p.earned)}
+                  <div className="sub">клиенты дают {money(p.mrr)}/мес</div>
+                </td>
+                <td>
+                  {p.neverLoggedIn
+                    ? <span className="badge st-expired"><i className="dot" />ни разу</span>
+                    : p.inactive
+                      ? <span className="badge st-pending"><i className="dot" />{p.daysSilent} дн. назад</span>
+                      : dateTime(p.lastLoginAt)}
+                </td>
+                <td className="actions">
+                  {p.isActive ? (
+                    <button className="btn small" onClick={async () => {
+                      try { setOffAsk({ ...(await api(`/partners/${p.id}/off-preview`)), id: p.id }); }
+                      catch (e: any) { setErr(e.message); }
+                    }}>Закрыть вход</button>
+                  ) : (
+                    <button className="btn small" onClick={async () => {
+                      try {
+                        await api(`/partners/${p.id}`, { method: 'PATCH', body: { isActive: true } });
+                        dropCache(); await load();
+                      } catch (e: any) { setErr(e.message); }
+                    }}>Открыть вход</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
   );
 }

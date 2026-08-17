@@ -25,9 +25,10 @@ import Funnel from './sections/Funnel';
 import Partners from './sections/Partners';
 import Summary from './sections/Summary';
 import Journal from './sections/Journal';
+import Settings from './sections/Settings';
 
 type TabKey = 'today' | 'clients' | 'money' | 'requests'
-  | 'funnel' | 'partners' | 'summary' | 'journal';
+  | 'funnel' | 'partners' | 'summary' | 'journal' | 'settings';
 
 const TABS: { key: TabKey; label: string; partnerLabel?: string; superOnly?: boolean }[] = [
   { key: 'today',    label: 'Сегодня' },
@@ -38,6 +39,10 @@ const TABS: { key: TabKey; label: string; partnerLabel?: string; superOnly?: boo
   { key: 'partners', label: 'Партнёры', superOnly: true },
   { key: 'summary',  label: 'Сводка',   superOnly: true },
   { key: 'journal',  label: 'Журнал',   partnerLabel: 'Мои события' },
+  // Настройки последними и только владельцу: цены и реквизиты — самое
+  // опасное место платформы, и оно не должно стоять между разделами,
+  // куда заходят каждый день.
+  { key: 'settings', label: 'Настройки', superOnly: true },
 ];
 
 const THEME_KEY = 'tabys.platform.theme';
@@ -169,6 +174,7 @@ export default function PlatformPage() {
           {tab === 'partners' && <Partners me={me} />}
           {tab === 'summary'  && <Summary me={me} />}
           {tab === 'journal'  && <Journal me={me} />}
+          {tab === 'settings' && <Settings me={me} />}
         </main>
       </div>
 

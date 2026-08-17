@@ -1,29 +1,34 @@
 'use client';
 /**
- * РАЗДЕЛ 4: «ЗАЯВКИ» — партнёр просит, платформа решает.
+ * РАЗДЕЛ 4: «ЗАЯВКИ».
+ *
+ * Разметка из их main.tsx: req-list, req, waiting, req-head, req-what,
+ * req-why, req-state, badge st-*, dot, pay-note, pay-actions, toolbar,
+ * check, sub.
  *
  * Одобрение САМО выполняет действие: одобрил вторую кассу — строка
- * счёта появилась. Перед этим показывается последствие: одобряя, надо
- * видеть, что клиенту прилетит доплата.
+ * счёта появилась. Перед этим показывается последствие — у них кнопка
+ * просто делала.
  */
 import { useEffect, useState } from 'react';
-import { C, Card, Btn, Input, ErrLine, EmptyState, Status } from '../../../lib/ui';
-import { P, api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, dateTime, type Me } from '../lib';
 
 const KIND: Record<string, string> = {
-  device: 'Устройство', tariff: 'Смена тарифа', grace: 'Отсрочка', other: 'Прочее',
+  device: 'Просит устройство', tariff: 'Просит смену тарифа',
+  grace: 'Просит отсрочку', other: 'Прочее',
 };
 
 export default function Requests({ me }: { me: Me }) {
   const [rows, setRows] = useState<any[] | null>(null);
-  const [status, setStatus] = useState('pending');
+  const [onlyPending, setOnlyPending] = useState(true);
   const [err, setErr] = useState('');
+  const [ask, setAsk] = useState<{ r: any; yes: boolean } | null>(null);
   const [preview, setPreview] = useState<any>(null);
-  const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const load = async (s = status) => {
-    const path = '/requests' + (s === 'all' ? '' : `?status=${s}`);
+  const load = async (pending = onlyPending) => {
+    const path = '/requests' + (pending ? '?status=pending' : '');
     const hit = cached(path);
     if (hit) setRows(hit.data);
     try {
@@ -33,97 +38,119 @@ export default function Requests({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !rows) return <ErrLine err={err} />;
-  if (!rows) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
+  const open = async (r: any, yes: boolean) => {
+    setReason('');
+    if (yes) {
+      try { setPreview(await api(`/requests/${r.id}/preview`)); }
+      catch (e: any) { setErr(e.message); return; }
+    } else setPreview(null);
+    setAsk({ r, yes });
+  };
+
+  const run = async () => {
+    if (!ask) return;
+    if (!ask.yes && !reason.trim()) { setErr('Напишите причину отказа'); return; }
+    setBusy(true);
+    try {
+      await api(`/requests/${ask.r.id}/decide`,
+        { method: 'POST', body: { approve: ask.yes, note: reason || undefined } });
+      setAsk(null); setPreview(null); setReason(''); dropCache(); await load();
+    } catch (e: any) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (err && !rows) return <div className="err">{err}</div>;
+  if (!rows) return <div className="muted">Загрузка…</div>;
+
+  const isSuper = me.role === 'super';
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {err && <ErrLine err={err} />}
+    <>
+      {err && <div className="err">{err}</div>}
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {[['pending', 'Ждут решения'], ['all', 'Все']].map(([k, l]) => (
-          <button key={k} onClick={() => { setStatus(k); load(k); }}
-            style={{
-              minHeight: 38, padding: '0 14px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${status === k ? P.accent : P.line}`,
-              background: status === k ? P.accent : P.card,
-              color: status === k ? '#fff' : P.ink,
-            }}>{l}</button>
-        ))}
-      </div>
-
-      {preview && (
-        <Card title="Что произойдёт, если одобрить">
-          <div style={{ display: 'grid', gap: 6, fontSize: 15 }}>
-            <div><b>{preview.client}</b> · {preview.what}</div>
-            <div style={{ color: P.dim }}>{preview.effect}</div>
+      {ask && (
+        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
+          <div className="ask-card">
+            <b>{ask.r.client}</b>
+            <p>{KIND[ask.r.kind] ?? ask.r.kind}</p>
+            {ask.yes ? (
+              /* Что именно произойдёт: одобрение выполняет действие,
+                 а не ставит отметку. */
+              preview && <p className="pay-note">{preview.effect}</p>
+            ) : (
+              <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
+                placeholder="Причина отказа — партнёр должен понять, что не так" />
+            )}
+            <div className="pay-actions">
+              <button className="btn ghost" onClick={() => { setAsk(null); setReason(''); }}>
+                Отмена
+              </button>
+              <button className={`btn ${ask.yes ? 'primary' : 'danger'}`}
+                disabled={busy} onClick={run}>
+                {ask.yes ? 'Да, одобрить' : 'Отказать'}
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <Btn primary onClick={async () => {
-              const id = preview.id; setPreview(null);
-              try { await api(`/requests/${id}/decide`, { method: 'POST', body: { approve: true } }); dropCache(); await load(); }
-              catch (e: any) { setErr(e.message); }
-            }}>Да, одобрить</Btn>
-            <Btn onClick={() => setPreview(null)}>Отмена</Btn>
-          </div>
-        </Card>
+        </div>
       )}
 
-      {rows.length === 0
-        ? <EmptyState text="Заявок нет. status === 'pending' ? 'Всё решено — ничего не ждёт ответа.' : 'Записей не нашлось.'" />
-        : rows.map((r: any) => (
-          <Card key={r.id} style={{
-            borderLeft: `3px solid ${r.status === 'pending' ? P.accentSoft
-              : r.status === 'approved' ? P.accent : P.danger}` }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 16.5, fontFamily: P.display, fontWeight: 400 }}>{r.client}</b>
-              <span style={{ fontSize: 15 }}>{KIND[r.kind] ?? r.kind}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 13, color: P.dim }}>
-                {dateTime(r.created_at)}
-              </span>
-            </div>
+      <div className="toolbar">
+        <label className="check">
+          <input type="checkbox" checked={onlyPending}
+            onChange={(e) => { setOnlyPending(e.target.checked); load(e.target.checked); }} />
+          Только ждущие решения
+        </label>
+      </div>
 
-            {r.comment && <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 4 }}>«{r.comment}»</div>}
-            <div style={{ fontSize: 13, color: P.dim, marginTop: 4 }}>
-              подал: {r.author ?? '—'}
-              {r.decision_note && ` · решение: ${r.decision_note}`}
-            </div>
+      {rows.length === 0 ? (
+        <div className="all-clear">
+          <b>{onlyPending ? 'Всё решено' : 'Заявок нет'}</b>
+          <p>{onlyPending
+            ? 'Ни одна заявка не ждёт ответа.'
+            : 'При этом отборе записей не нашлось.'}</p>
+        </div>
+      ) : (
+        <div className="req-list">
+          {rows.map((r: any) => (
+            <article key={r.id} className={`req ${r.status === 'pending' ? 'waiting' : ''}`}>
+              <div className="req-head">
+                <b>{r.client}</b>
+                <span className="sub">{r.author ?? '—'} · {dateTime(r.created_at)}</span>
+              </div>
 
-            {r.status === 'pending' && me.role === 'super' && (rejecting === r.id ? (
-              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-                <Input value={reason} onChange={(e: any) => setReason(e.target.value)}
-                  placeholder="Причина отказа — партнёр должен понять, что не так" autoFocus />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn danger onClick={async () => {
-                    if (!reason.trim()) { setErr('Напишите причину'); return; }
-                    try {
-                      await api(`/requests/${r.id}/decide`,
-                        { method: 'POST', body: { approve: false, note: reason } });
-                      setRejecting(null); setReason(''); dropCache(); await load();
-                    } catch (e: any) { setErr(e.message); }
-                  }}>Отказать</Btn>
-                  <Btn onClick={() => { setRejecting(null); setReason(''); }}>Отмена</Btn>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <Btn primary onClick={async () => {
-                  try { setPreview({ ...(await api(`/requests/${r.id}/preview`)), id: r.id }); }
-                  catch (e: any) { setErr(e.message); }
-                }}>Одобрить</Btn>
-                <Btn onClick={() => setRejecting(r.id)}>Отказать</Btn>
-              </div>
-            ))}
+              <div className="req-what">{KIND[r.kind] ?? r.kind}</div>
+              {r.comment && <div className="req-why">{r.comment}</div>}
 
-            {/* Партнёру решение не показывается: он всё равно не решает,
-                а мёртвая кнопка хуже отсутствующей. */}
-            {r.status === 'pending' && me.role === 'partner' && (
-              <div style={{ fontSize: 13, color: P.accentSoft, marginTop: 8 }}>
-                Ждёт решения платформы
+              <div className="req-state">
+                {r.status === 'pending' && (
+                  <span className="badge st-pending"><i className="dot" />ждёт решения</span>
+                )}
+                {r.status === 'approved' && (
+                  <span className="badge st-active"><i className="dot" />одобрено</span>
+                )}
+                {r.status === 'rejected' && (
+                  <span className="badge st-expired"><i className="dot" />отказано</span>
+                )}
+                {r.decision_note && <span className="pay-note">{r.decision_note}</span>}
+
+                {r.status === 'pending' && isSuper && (
+                  <div className="pay-actions">
+                    <button className="btn" disabled={busy}
+                      onClick={() => open(r, false)}>Отказать…</button>
+                    <button className="btn primary" disabled={busy}
+                      onClick={() => open(r, true)}>Одобрить…</button>
+                  </div>
+                )}
+                {/* Партнёру решение не рисуем: мёртвая кнопка хуже
+                    отсутствующей. */}
+                {r.status === 'pending' && !isSuper && (
+                  <span className="sub waiting-note">Ждёт решения платформы</span>
+                )}
               </div>
-            )}
-          </Card>
-        ))}
-    </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

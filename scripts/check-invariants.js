@@ -444,6 +444,13 @@ const RULES = [
   { file: 'admin/app/platform/sections/Summary.tsx', must: 'className="chart-box"',
     why: 'Два графика рядом в их сетке chart-grid, а не по одному' },
 
+  { file: 'admin/app/platform/sections/Money.tsx', must: 'className="pay-grid"',
+    why: 'Деньги сеткой карточек, а не таблицей: у оплаты мало полей и они разной длины — в таблице половина ячеек пустует' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'className="cp-frame"',
+    why: 'Живой предпросмотр экрана клиента рядом с полями: иначе понять, что получилось, можно только зайдя клиентом' },
+  { file: 'admin/app/platform/page.tsx', must: "key: 'settings', label: 'Настройки', superOnly: true",
+    why: 'Настройки последними и только владельцу: цены и реквизиты — самое опасное место платформы' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

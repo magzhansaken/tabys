@@ -1,35 +1,31 @@
 'use client';
 /**
- * РАЗДЕЛ 3: «ДЕНЬГИ» — оплаты с итогами.
+ * РАЗДЕЛ 3: «ДЕНЬГИ».
  *
- * Итоги считаются по тем же строкам, что показаны: при отборе «ждут»
- * доход ноль, а не итог по всем. Ждущие и отклонённые — это ещё не
- * деньги.
+ * Разметка из их main.tsx: pay-grid, pay, waiting, pay-top, pay-who,
+ * pay-amount, pay-state, badge st-*, dot, pay-note, pay-comment,
+ * pay-actions, toolbar, check, sub.
  *
- * Оплаченный отрезок записан при подтверждении и не пересчитывается:
- * это ответ на вопрос «за что я платил».
+ * У них это НЕ таблица, а сетка карточек: у оплаты мало полей и они
+ * разной длины — в таблице половина ячеек пустует.
+ *
+ * Итоги считаются по показанным строкам: при отборе «ждут» доход ноль,
+ * а не итог по всем. Ждущие — это ещё не деньги.
  */
 import { useEffect, useState } from 'react';
-import { C, Card, Btn, Input, ErrLine, EmptyState, Status } from '../../../lib/ui';
-import { P, api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
-
-const FILTERS = [
-  { key: 'all',      label: 'Все' },
-  { key: 'pending',  label: 'Ждут' },
-  { key: 'approved', label: 'Подтверждены' },
-  { key: 'rejected', label: 'Отклонены' },
-];
+import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
 
 export default function Money({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
-  const [status, setStatus] = useState('all');
+  const [onlyPending, setOnlyPending] = useState(true);
   const [err, setErr] = useState('');
-  const [preview, setPreview] = useState<any>(null);
-  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [ask, setAsk] = useState<{ p: any; yes: boolean } | null>(null);
   const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<any>(null);
 
-  const load = async (s = status) => {
-    const path = '/payments' + (s === 'all' ? '' : `?status=${s}`);
+  const load = async (pending = onlyPending) => {
+    const path = '/payments' + (pending ? '?status=pending' : '');
     const hit = cached(path);
     if (hit) setData(hit.data);
     try {
@@ -39,133 +35,157 @@ export default function Money({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
+  const open = async (p: any, yes: boolean) => {
+    setReason('');
+    if (yes) {
+      try { setPreview(await api(`/payments/${p.id}/preview`)); }
+      catch (e: any) { setErr(e.message); return; }
+    } else setPreview(null);
+    setAsk({ p, yes });
+  };
+
+  const run = async () => {
+    if (!ask) return;
+    if (!ask.yes && !reason.trim()) { setErr('Напишите причину'); return; }
+    setBusy(true);
+    try {
+      ask.yes
+        ? await api(`/payments/${ask.p.id}/approve`, { method: 'POST' })
+        : await api(`/payments/${ask.p.id}/reject`, { method: 'POST', body: { reason } });
+      setAsk(null); setPreview(null); setReason(''); dropCache(); await load();
+    } catch (e: any) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (err && !data) return <div className="err">{err}</div>;
+  if (!data) return <div className="muted">Загрузка…</div>;
 
   const t = data.totals;
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {err && <ErrLine err={err} />}
+    <>
+      {err && <div className="err">{err}</div>}
 
-      {/* Итоги — по показанным строкам. Подпись говорит, что именно
-          посчитано, иначе цифра без отбора вводит в заблуждение. */}
-      <Card>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <Sum title="Записей" value={String(t.count)} />
-          <Sum title="Подтверждено" value={money(t.amount)} big />
-          <Sum title="Партнёрам" value={money(t.partnerShare)} />
-          <Sum title="Платформе" value={money(t.platformShare)} />
-        </div>
-        <div style={{ fontSize: 13, color: P.dim, marginTop: 8 }}>
-          В доход идут только подтверждённые: ждущие и отклонённые — это ещё не деньги
-        </div>
-      </Card>
-
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {FILTERS.map((f) => (
-          <button key={f.key} onClick={() => { setStatus(f.key); load(f.key); }}
-            style={{
-              minHeight: 38, padding: '0 14px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${status === f.key ? P.accent : P.line}`,
-              background: status === f.key ? P.accent : P.card,
-              color: status === f.key ? '#fff' : P.ink,
-            }}>{f.label}</button>
-        ))}
-      </div>
-
-      {preview && (
-        <Card title="Что произойдёт, если подтвердить">
-          <div style={{ display: 'grid', gap: 6, fontSize: 15 }}>
-            <div>{money(preview.amount)} за {preview.months} мес.</div>
-            <div>Доступ продлится до <b>{fullDate(preview.paidUntil)}</b></div>
-            <div style={{ color: P.dim }}>
-              Партнёру {money(preview.partnerShare)} ({preview.partnerPercent}%) ·
-              платформе {money(preview.platformShare)}
+      {ask && (
+        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
+          <div className="ask-card">
+            <b>{ask.p.client}</b>
+            <p>{money(ask.p.amount)} · {ask.p.months} мес.</p>
+            {ask.yes ? (
+              <>
+                {/* Последствие до нажатия: до какой даты продлит и
+                    сколько достанется партнёру. Считает сервер. */}
+                {preview && (
+                  <p className="pay-note">
+                    продлит до {fullDate(preview.paidUntil)} · партнёру {money(preview.partnerShare)}
+                    {' '}({preview.partnerPercent}%) · платформе {money(preview.platformShare)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
+                placeholder="Причина — партнёр должен понять, что не так" />
+            )}
+            <div className="pay-actions">
+              <button className="btn ghost" onClick={() => { setAsk(null); setReason(''); }}>
+                Отмена
+              </button>
+              <button className={`btn ${ask.yes ? 'primary' : 'danger'}`}
+                disabled={busy} onClick={run}>
+                {ask.yes ? 'Да, подтвердить' : 'Отклонить'}
+              </button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <Btn primary onClick={async () => {
-              const id = preview.id; setPreview(null);
-              try { await api(`/payments/${id}/approve`, { method: 'POST' }); dropCache(); await load(); }
-              catch (e: any) { setErr(e.message); }
-            }}>Да, подтвердить</Btn>
-            <Btn onClick={() => setPreview(null)}>Отмена</Btn>
-          </div>
-        </Card>
+        </div>
       )}
 
-      {data.rows.length === 0
-        ? <EmptyState text="Оплат нет. При этом отборе записей не нашлось." />
-        : data.rows.map((p: any) => (
-          <Card key={p.id} style={{
-            borderLeft: `3px solid ${p.status === 'pending' ? P.accentSoft
-              : p.status === 'approved' ? P.accent : P.danger}` }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <b style={{ fontSize: 16.5, fontFamily: P.display, fontWeight: 400 }}>{p.client}</b>
-              <Status value={p.status} kind="pay" />
-              <span style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 600,
-                fontVariantNumeric: 'tabular-nums' }}>{money(p.amount)}</span>
-            </div>
+      <div className="cards">
+        <div className="card"><span>Записей</span><b>{t.count}</b></div>
+        <div className="card money"><span>Подтверждено</span><b>{money(t.amount)}</b></div>
+        <div className="card"><span>Партнёрам</span><b>{money(t.partnerShare)}</b></div>
+        <div className="card ok"><span>Платформе</span><b>{money(t.platformShare)}</b></div>
+      </div>
 
-            <div style={{ fontSize: 14, color: P.dim, marginTop: 4,
-              display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <span>{p.months} мес. · {p.method}</span>
-              <span>{dateTime(p.createdAt)}</span>
-              {p.partner && <span>партнёр: {p.partner}</span>}
-              {/* Отрезок записан при подтверждении — это ответ на
-                  вопрос «за что я платил», он не меняется потом. */}
-              {p.periodFrom && (
-                <span>за {fullDate(p.periodFrom)} — {fullDate(p.periodTo)}</span>
-              )}
-              {p.status === 'approved' && (
-                <span>партнёру {money(p.partnerShare)} · платформе {money(p.platformShare)}</span>
-              )}
-            </div>
+      <div className="toolbar">
+        <label className="check">
+          <input type="checkbox" checked={onlyPending}
+            onChange={(e) => { setOnlyPending(e.target.checked); load(e.target.checked); }} />
+          Только ждущие подтверждения
+        </label>
+        <span className="sub">
+          В доход идут только подтверждённые: ждущие и отклонённые — это ещё не деньги
+        </span>
+      </div>
 
-            {p.comment && <div style={{ fontSize: 14, fontStyle: 'italic', marginTop: 4 }}>«{p.comment}»</div>}
-            {p.rejectReason && (
-              <div style={{ fontSize: 14, color: P.danger, marginTop: 4 }}>
-                Отклонена: {p.rejectReason}
-              </div>
-            )}
-
-            {p.canApprove && (rejecting === p.id ? (
-              <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-                <Input value={reason} onChange={(e: any) => setReason(e.target.value)}
-                  placeholder="Причина отказа — партнёр должен понять, что не так" autoFocus />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn danger onClick={async () => {
-                    if (!reason.trim()) { setErr('Напишите причину'); return; }
-                    try {
-                      await api(`/payments/${p.id}/reject`, { method: 'POST', body: { reason } });
-                      setRejecting(null); setReason(''); dropCache(); await load();
-                    } catch (e: any) { setErr(e.message); }
-                  }}>Отклонить</Btn>
-                  <Btn onClick={() => { setRejecting(null); setReason(''); }}>Отмена</Btn>
+      {data.rows.length === 0 ? (
+        <div className="all-clear">
+          <b>{onlyPending ? 'Всё подтверждено' : 'Оплат нет'}</b>
+          <p>{onlyPending
+            ? 'Ни одна оплата не ждёт решения.'
+            : 'При этом отборе записей не нашлось.'}</p>
+        </div>
+      ) : (
+        <div className="pay-grid">
+          {data.rows.map((p: any) => (
+            <article key={p.id} className={`pay ${p.status === 'pending' ? 'waiting' : ''}`}>
+              <div className="pay-top">
+                <div className="pay-who">
+                  <b>{p.client}</b>
+                  <div className="sub">
+                    {p.method} · отметил {p.partner ?? 'клиент'} · {dateTime(p.createdAt)}
+                  </div>
+                </div>
+                <div className="pay-amount">
+                  <b>{money(p.amount)}</b>
+                  <div className="sub">{p.months} мес.</div>
                 </div>
               </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <Btn primary onClick={async () => {
-                  try { setPreview({ ...(await api(`/payments/${p.id}/preview`)), id: p.id }); }
-                  catch (e: any) { setErr(e.message); }
-                }}>Подтвердить</Btn>
-                <Btn onClick={() => setRejecting(p.id)}>Отклонить</Btn>
-              </div>
-            ))}
-          </Card>
-        ))}
-    </div>
-  );
-}
 
-function Sum({ title, value, big }: { title: string; value: string; big?: boolean }) {
-  return (
-    <div>
-      <div style={{ fontSize: 13, color: P.dim }}>{title}</div>
-      <div style={{ fontSize: big ? 26 : 20, fontWeight: 600,
-        fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-    </div>
+              <div className="pay-state">
+                {p.status === 'pending' && (
+                  <span className="badge st-pending"><i className="dot" />ждёт подтверждения</span>
+                )}
+                {p.status === 'approved' && (
+                  <span className="badge st-active"><i className="dot" />подтверждена</span>
+                )}
+                {p.status === 'rejected' && (
+                  <span className="badge st-expired"><i className="dot" />отклонена</span>
+                )}
+
+                {/* Оплаченный отрезок записан при подтверждении и не
+                    пересчитывается: это ответ на вопрос «за что я
+                    платил», он не меняется от того, что было потом. */}
+                {p.status === 'approved' && p.periodFrom && (
+                  <span className="pay-note">
+                    за {fullDate(p.periodFrom)} — {fullDate(p.periodTo)} ·
+                    {' '}партнёру {money(p.partnerShare)} · платформе {money(p.platformShare)}
+                  </span>
+                )}
+                {p.status === 'rejected' && p.rejectReason && (
+                  <span className="pay-note">{p.rejectReason}</span>
+                )}
+              </div>
+
+              {p.comment && <div className="pay-comment">{p.comment}</div>}
+
+              {p.canApprove && (
+                <div className="pay-actions">
+                  <button className="btn" disabled={busy}
+                    onClick={() => open(p, false)}>Отклонить…</button>
+                  <button className="btn primary" disabled={busy}
+                    onClick={() => open(p, true)}>Подтвердить…</button>
+                </div>
+              )}
+              {/* Партнёру решение не рисуем: он всё равно не решает. */}
+              {p.status === 'pending' && !p.canApprove && (
+                <div className="pay-actions">
+                  <span className="sub waiting-note">Ждёт решения платформы</span>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
