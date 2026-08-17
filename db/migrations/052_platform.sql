@@ -1360,3 +1360,103 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
     FROM platform_user pu WHERE pu.id = p_partner;
 $$;
 GRANT EXECUTE ON FUNCTION platform_partner_off_preview(uuid) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 7: «СВОДКА» — где мы сейчас и куда движемся.
+--
+-- Замысел донора верный: живые таблицы знают только «сейчас». Чтобы
+-- ответить «месяц назад было лучше или хуже», нужны снимки по дням.
+--
+-- НАЙДЕНА СЛАБОСТЬ: у них снимок писался ПРИ ОТКРЫТИИ ЭКРАНА. Не
+-- заходил в сводку неделю — недели в истории нет. Уехал в отпуск —
+-- в графике дыра, и понять, что происходило, уже нельзя.
+--
+-- У НАС ДВА ИСТОЧНИКА:
+--   1. Снимок пишет запускальщик раз в сутки — независимо от того,
+--      открывал кто-то экран или нет.
+--   2. Деньги по дням берутся из самих оплат, а не из снимков: платежи
+--      никуда не деваются, и этот ряд восстановим за любой день, даже
+--      если снимка нет.
+--
+-- Так дыра в снимках портит только счётчики клиентов, но не деньги —
+-- а деньги важнее.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS platform_daily (
+  day           date PRIMARY KEY,
+  tenants       integer NOT NULL DEFAULT 0,   -- всего боевых магазинов
+  active        integer NOT NULL DEFAULT 0,   -- с оплаченным сроком
+  trial         integer NOT NULL DEFAULT 0,   -- на пробном
+  expired       integer NOT NULL DEFAULT 0,   -- срок вышел
+  mrr           bigint  NOT NULL DEFAULT 0,   -- доход в месяц, тиыны
+  taken_at      timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT, UPDATE ON platform_daily TO shop_app;
+
+/** Снять срез на сегодня. Зовётся запускальщиком раз в сутки. */
+CREATE OR REPLACE FUNCTION platform_snapshot()
+RETURNS void
+SECURITY DEFINER SET search_path = public LANGUAGE sql AS $$
+  INSERT INTO platform_daily (day, tenants, active, trial, expired, mrr, taken_at)
+  SELECT current_date,
+         count(*),
+         count(*) FILTER (WHERE s.paid_until > now()),
+         count(*) FILTER (WHERE a.status = 'trial'),
+         count(*) FILTER (WHERE s.paid_until <= now()),
+         coalesce(sum(coalesce(
+           (SELECT sum(pl.unit_price * pl.qty) FROM plan_line pl
+             WHERE pl.account_id = a.id AND pl.ends_at IS NULL),
+           coalesce(t.price_month, 0) * 100))
+           FILTER (WHERE s.paid_until > now()), 0),
+         now()
+    FROM account a
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN subscription s ON s.account_id = a.id
+    LEFT JOIN tariff t ON t.id = s.tariff_id
+   WHERE a.deleted_at IS NULL AND coalesce(tc.is_demo, false) = false
+  ON CONFLICT (day) DO UPDATE SET
+    tenants = EXCLUDED.tenants, active = EXCLUDED.active,
+    trial = EXCLUDED.trial, expired = EXCLUDED.expired,
+    mrr = EXCLUDED.mrr, taken_at = now();
+$$;
+GRANT EXECUTE ON FUNCTION platform_snapshot() TO shop_app;
+
+/**
+ * Сводка за период: ряд по дням и итоги.
+ *
+ * Деньги по дням — ИЗ САМИХ ОПЛАТ, а не из снимков: платежи никуда не
+ * деваются, и этот ряд восстановим за любой день. Дыра в снимках
+ * портит счётчики клиентов, но не деньги.
+ *
+ * Дни без событий тоже в ряду: пропуск в графике читается как сбой, а
+ * не как «в тот день ничего не платили».
+ */
+CREATE OR REPLACE FUNCTION platform_summary_series(p_days integer DEFAULT 30)
+RETURNS TABLE (
+  day date, tenants integer, active integer, trial integer, expired integer,
+  mrr bigint, paid_count integer, paid_amount bigint, partner_share bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  WITH days AS (
+    SELECT generate_series(current_date - (p_days - 1), current_date, '1 day')::date AS d
+  ), pays AS (
+    SELECT tp.approved_at::date AS d,
+           count(*)::int AS cnt,
+           sum(tp.amount) AS amt,
+           sum(tp.partner_share) AS shr
+      FROM tenant_payment tp
+      LEFT JOIN tenant_card tc ON tc.account_id = tp.account_id
+     WHERE tp.status = 'approved'
+       AND tp.approved_at >= current_date - (p_days - 1)
+       AND coalesce(tc.is_demo, false) = false
+     GROUP BY 1
+  )
+  SELECT d.d,
+         coalesce(pd.tenants, 0), coalesce(pd.active, 0),
+         coalesce(pd.trial, 0), coalesce(pd.expired, 0),
+         coalesce(pd.mrr, 0),
+         coalesce(p.cnt, 0), coalesce(p.amt, 0), coalesce(p.shr, 0)
+    FROM days d
+    LEFT JOIN platform_daily pd ON pd.day = d.d
+    LEFT JOIN pays p ON p.d = d.d
+   ORDER BY d.d;
+$$;
+GRANT EXECUTE ON FUNCTION platform_summary_series(integer) TO shop_app;

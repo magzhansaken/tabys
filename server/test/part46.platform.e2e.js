@@ -265,7 +265,7 @@ const shop = async (name, owner) => {
 
   // ---------- СВОДКА ПО ДНЯМ ----------
   r = await j('GET', '/platform/metrics?days=30', null, SUPER);
-  ok(Array.isArray(r.d), `★ Сводка по дням: ${r.d?.length} дней с оплатами`);
+  ok(Array.isArray(r.d?.series), `★ Сводка: ряд из ${r.d?.series?.length} дней`);
 
   // ---------- ВОРОНКА: ЗАМЕТКА И ДАТА КАСАНИЯ ----------
   await j('PATCH', `/platform/clients/${id1}`,
@@ -665,6 +665,51 @@ const shop = async (name, owner) => {
 
     v = await j('GET', '/platform/partners', null, PARTNER);
     ok(v.status === 403, 'Партнёр список партнёров не видит');
+  }
+
+  // ---------- РАЗДЕЛ 7: «СВОДКА» ----------
+  // Живые таблицы знают только «сейчас». Для «месяц назад было лучше
+  // или хуже» нужны снимки по дням.
+  {
+    // Снимок обычно пишет запускальщик раз в сутки; в тестах он
+    // выключен, поэтому зовём вручную.
+    await db.query('SELECT platform_snapshot()');
+
+    let v = await j('GET', '/platform/metrics?days=30', null, SUPER);
+    ok(Array.isArray(v.d?.series) && v.d.series.length === 30,
+       `★ Ряд ровно за 30 дней: ${v.d?.series?.length}`);
+
+    // Дни без событий тоже в ряду: пропуск в графике читается как
+    // сбой, а не как «в тот день ничего не платили».
+    const dates = v.d.series.map((d) => String(d.day).slice(0, 10));
+    ok(new Set(dates).size === dates.length, 'Без повторов дат');
+    ok(v.d.series.every((d) => typeof d.amount === 'number'),
+       '★ Дни без оплат тоже в ряду — дыра в графике читается как сбой');
+
+    ok(v.d?.now && typeof v.d.now.active === 'number',
+       `★ Сейчас: клиентов ${v.d.now.tenants}, работают ${v.d.now.active}, доход ${v.d.now.mrr} ₸/мес`);
+
+    ok(v.d?.period && v.d.period.amount > 0,
+       `★ За период: ${v.d.period.payments} оплат на ${v.d.period.amount} ₸`);
+    ok(v.d.period.partnerShare + v.d.period.platformShare === v.d.period.amount,
+       'Доли партнёров и платформы в сумме дают весь приход');
+
+    // Цифра без сравнения ничего не значит: «пришло 140 тысяч» — это
+    // много или мало?
+    ok('change' in v.d && 'prevAmount' in v.d.change,
+       `★ Есть сравнение с прошлым периодом: ${v.d.change.amount >= 0 ? '+' : ''}${v.d.change.amount} ₸`);
+
+    // Деньги по дням берутся из оплат, а не из снимков: они
+    // восстановимы за любой день, даже если снимка нет.
+    const paidDays = v.d.series.filter((d) => d.amount > 0);
+    ok(paidDays.length > 0,
+       `★ Деньги по дням есть даже без снимков: ${paidDays.length} дней с оплатами`);
+
+    v = await j('GET', '/platform/metrics?days=7', null, SUPER);
+    ok(v.d.series.length === 7, 'Период настраивается: 7 дней');
+
+    v = await j('GET', '/platform/metrics', null, PARTNER);
+    ok(v.status === 403, 'Партнёр общую сводку не видит');
   }
 
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------

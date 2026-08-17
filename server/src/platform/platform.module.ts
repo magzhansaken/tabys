@@ -770,26 +770,85 @@ export class PlatformService {
       : 'Пометка снята — магазин снова участвует в деньгах и сводках' };
   }
 
-  // ── СВОДКА ПО ДНЯМ ──────────────────────────────────────────────────
-  /** Как менялись деньги и число клиентов. Демо исключены. */
+  // ── РАЗДЕЛ «СВОДКА» ─────────────────────────────────────────────────
+  /**
+   * Где мы сейчас и куда движемся.
+   *
+   * Замысел донора верный: живые таблицы знают только «сейчас», для
+   * «месяц назад было лучше или хуже» нужны снимки по дням.
+   *
+   * НАЙДЕНА ИХ СЛАБОСТЬ: снимок писался ПРИ ОТКРЫТИИ ЭКРАНА. Не
+   * заходил неделю — недели в истории нет. Уехал в отпуск — в графике
+   * дыра, и понять, что происходило, уже нельзя.
+   *
+   * У нас снимок пишет запускальщик раз в сутки, а деньги по дням
+   * берутся из самих оплат — они восстановимы за любой день, даже если
+   * снимка нет. Дыра портит счётчики клиентов, но не деньги.
+   */
   async metrics(ctx: PlatformCtx, days = 30) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
     const n = Math.min(365, Math.max(7, Math.floor(Number(days))));
-    return (await this.q(
-      `SELECT date_trunc('day', tp.approved_at)::date AS day,
-              sum(tp.amount) AS amount,
-              sum(tp.partner_share) AS partner_share,
-              count(*)::int AS payments
+
+    const rows = (await this.q(`SELECT * FROM platform_summary_series($1)`, [n])).rows;
+
+    const series = rows.map((r: any) => ({
+      day: r.day,
+      tenants: Number(r.tenants), active: Number(r.active),
+      trial: Number(r.trial), expired: Number(r.expired),
+      mrr: money(Number(r.mrr)),
+      payments: Number(r.paid_count),
+      amount: money(Number(r.paid_amount)),
+      partnerShare: money(Number(r.partner_share)),
+    }));
+
+    const sum = (k: string) => series.reduce((a: number, d: any) => a + d[k], 0);
+    const last: any = series[series.length - 1] ?? {};
+
+    // Сравнение с прошлым таким же периодом: цифра без сравнения ничего
+    // не значит. «Пришло 140 тысяч» — это много или мало?
+    const prev = (await this.q(
+      `SELECT coalesce(sum(tp.amount), 0) AS amt, count(*)::int AS cnt
          FROM tenant_payment tp
          LEFT JOIN tenant_card tc ON tc.account_id = tp.account_id
-        WHERE tp.status = 'approved' AND tp.approved_at > now() - ($1 || ' days')::interval
-          AND coalesce(tc.is_demo, false) = false
-        GROUP BY 1 ORDER BY 1`, [n])).rows
-      .map((r: any) => ({ day: r.day, amount: money(Number(r.amount)),
-                          partnerShare: money(Number(r.partner_share)), payments: r.payments }));
+        WHERE tp.status = 'approved'
+          AND tp.approved_at >= current_date - ($1 * 2 - 1)
+          AND tp.approved_at <  current_date - ($1 - 1)
+          AND coalesce(tc.is_demo, false) = false`, [n])).rows[0];
+
+    const nowAmount = sum('amount');
+    const prevAmount = money(Number(prev.amt));
+
+    return {
+      series,
+      days: n,
+      now: {
+        tenants: last.tenants ?? 0, active: last.active ?? 0,
+        trial: last.trial ?? 0, expired: last.expired ?? 0,
+        mrr: last.mrr ?? 0,
+      },
+      period: {
+        amount: nowAmount,
+        payments: sum('payments'),
+        partnerShare: sum('partnerShare'),
+        platformShare: nowAmount - sum('partnerShare'),
+      },
+      // Рост или падение к прошлому такому же периоду. Направление
+      // важнее величины: 140 тысяч при падении на треть — плохая
+      // новость, при росте вдвое — хорошая.
+      change: {
+        amount: nowAmount - prevAmount,
+        percent: prevAmount > 0
+          ? Math.round((nowAmount - prevAmount) / prevAmount * 100) : null,
+        prevAmount,
+      },
+      // Если снимков нет вовсе — сказать об этом, а не рисовать нули.
+      // Пустой график читается как «дела плохи», хотя дело в другом.
+      note: series.every((d: any) => d.tenants === 0)
+        ? 'Снимки по дням ещё не собраны — счётчики клиентов появятся завтра. Деньги показаны за все дни.'
+        : null,
+    };
   }
 
-  // ── ТРИ ДЕЙСТВИЯ, КОТОРЫХ ЖДЁТ ПЕРЕНЕСЁННЫЙ КАБИНЕТ ─────────────────
   /**
    * Сбросить пароль владельцу магазина.
    *
