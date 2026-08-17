@@ -1460,3 +1460,136 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
    ORDER BY d.d;
 $$;
 GRANT EXECUTE ON FUNCTION platform_summary_series(integer) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 8: «ЖУРНАЛ» — кто что сделал.
+--
+-- Три мысли донора взяты, все верные:
+--   отбор делает сервер — партнёру записи по чужим клиентам не
+--     приходят вовсе, а не прячутся при отрисовке;
+--   листание по времени последней показанной записи, а не по номеру
+--     страницы: журнал растёт, и номера страниц съезжают;
+--   денежные записи весомее прочих — цена ошибки в них другая.
+--
+-- СДЕЛАНО ЛУЧШЕ: запись описывается СЛОВАМИ здесь, а не собирается в
+-- браузере из кода действия и подробностей. У донора кабинет знал
+-- список действий и переводил их сам — появилось новое действие,
+-- кабинет показал его кодом, вроде «tenant_suspended», и человек
+-- гадает, что это было.
+--
+-- Здесь же считается ВЕС записи: деньги, доступ, прочее. Кабинет
+-- показывает по весу, а не решает сам, что важнее.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION platform_journal(
+  p_role text, p_user uuid,
+  p_before timestamptz DEFAULT NULL,
+  p_account uuid DEFAULT NULL,
+  p_actor uuid DEFAULT NULL,
+  p_weight text DEFAULT NULL,
+  p_limit integer DEFAULT 50)
+RETURNS TABLE (
+  id bigint, at timestamptz, actor text, actor_id uuid,
+  action text, title text, detail text, weight text,
+  account_id uuid, client text, amount bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT pa.id, pa.at, pa.actor_name, pa.actor_id, pa.action,
+
+    -- Описание словами. Новое действие без перевода покажется своим
+    -- кодом — но хотя бы один раз и в одном месте, а не в каждом
+    -- кабинете по-разному.
+    CASE pa.action
+      WHEN 'payment_recorded'    THEN 'Отмечена оплата'
+      WHEN 'payment_approved'    THEN 'Оплата подтверждена'
+      WHEN 'payment_rejected'    THEN 'Оплата отклонена'
+      WHEN 'payment_declared'    THEN 'Клиент сообщил об оплате'
+      WHEN 'partner_created'     THEN 'Заведён партнёр'
+      WHEN 'partner_updated'     THEN 'Изменён партнёр'
+      WHEN 'partner_enabled'     THEN 'Партнёру открыт вход'
+      WHEN 'partner_disabled'    THEN 'Партнёру закрыт вход'
+      WHEN 'partner_assigned'    THEN 'Назначен партнёр'
+      WHEN 'tenant_created'      THEN 'Заведён магазин'
+      WHEN 'tenant_deleted'      THEN 'Магазин отключён'
+      WHEN 'tenant_suspended'    THEN 'Магазин заморожен'
+      WHEN 'tenant_enabled'      THEN 'Магазин разморожен'
+      WHEN 'tier_changed'        THEN 'Сменён тариф'
+      WHEN 'plan_line_added'     THEN 'Добавлена строка счёта'
+      WHEN 'plan_line_edited'    THEN 'Изменена строка счёта'
+      WHEN 'plan_line_closed'    THEN 'Закрыта строка счёта'
+      WHEN 'price_book_changed'  THEN 'Изменены цены платформы'
+      WHEN 'pay_settings_changed' THEN 'Изменены реквизиты оплаты'
+      WHEN 'device_added'        THEN 'Подключено устройство'
+      WHEN 'request_created'     THEN 'Подана заявка'
+      WHEN 'request_approved'    THEN 'Заявка одобрена'
+      WHEN 'request_rejected'    THEN 'Заявка отклонена'
+      WHEN 'signup_approved'     THEN 'Одобрена самозапись'
+      WHEN 'signup_rejected'     THEN 'Отклонена самозапись'
+      WHEN 'owner_password_reset' THEN 'Сброшен пароль владельцу'
+      WHEN 'activation_code_taken' THEN 'Взят код активации кассы'
+      WHEN 'funnel_moved'        THEN 'Сдвинута карточка в воронке'
+      WHEN 'marked_demo'         THEN 'Помечен учебным'
+      WHEN 'unmarked_demo'       THEN 'Снята пометка учебного'
+      WHEN 'lead_updated'        THEN 'Обновлена заявка с сайта'
+      WHEN 'billing_reminder'    THEN 'Напоминание о подписке'
+      WHEN 'bulk_grace'          THEN 'Массовая отсрочка'
+      WHEN 'bulk_disable'        THEN 'Массовая заморозка'
+      WHEN 'bulk_enable'         THEN 'Массовая разморозка'
+      ELSE pa.action
+    END,
+
+    -- Подробности одной строкой: что именно поменялось.
+    nullif(concat_ws(' · ',
+      CASE WHEN pa.details ? 'amount'
+           THEN (pa.details->>'amount') || ' ₸' END,
+      CASE WHEN pa.details ? 'months'
+           THEN (pa.details->>'months') || ' мес.' END,
+      CASE WHEN pa.details ? 'partnerShare'
+           THEN 'партнёру ' || (pa.details->>'partnerShare') || ' ₸' END,
+      CASE WHEN pa.details ? 'reason' THEN 'причина: ' || (pa.details->>'reason') END,
+      CASE WHEN pa.details ? 'note' AND pa.details->>'note' <> ''
+           THEN pa.details->>'note' END,
+      CASE WHEN pa.details ? 'title' THEN pa.details->>'title' END,
+      CASE WHEN pa.details ? 'stage' THEN 'этап: ' || (pa.details->>'stage') END,
+      CASE WHEN pa.details ? 'count' THEN 'затронуто: ' || (pa.details->>'count') END,
+      CASE WHEN pa.details ? 'name' THEN pa.details->>'name' END
+    ), ''),
+
+    -- Вес записи. Деньги весомее прочего: цена ошибки в них другая.
+    -- Считаем здесь, чтобы кабинет не решал сам, что важнее.
+    CASE
+      WHEN pa.action LIKE 'payment%' OR pa.action LIKE 'plan_line%'
+        OR pa.action IN ('tier_changed','price_book_changed','device_added',
+                         'pay_settings_changed','bulk_grace')
+        THEN 'money'
+      WHEN pa.action IN ('tenant_deleted','tenant_suspended','owner_password_reset',
+                         'partner_disabled','bulk_disable','signup_rejected')
+        THEN 'access'
+      ELSE 'other'
+    END,
+
+    pa.account_id, a.name,
+    CASE WHEN pa.details ? 'amount'
+         THEN ((pa.details->>'amount')::numeric * 100)::bigint END
+
+    FROM platform_audit pa
+    LEFT JOIN account a ON a.id = pa.account_id
+    LEFT JOIN tenant_card tc ON tc.account_id = pa.account_id
+   WHERE (p_before IS NULL OR pa.at < p_before)
+     AND (p_account IS NULL OR pa.account_id = p_account)
+     AND (p_actor IS NULL OR pa.actor_id = p_actor)
+     -- Партнёру записи по чужим клиентам не приходят ВОВСЕ, а не
+     -- прячутся при отрисовке.
+     AND (p_role = 'super'
+          OR pa.actor_id = p_user
+          OR tc.partner_id = p_user)
+     AND (p_weight IS NULL OR p_weight = 'all' OR
+          p_weight = CASE
+            WHEN pa.action LIKE 'payment%' OR pa.action LIKE 'plan_line%'
+              OR pa.action IN ('tier_changed','price_book_changed','device_added',
+                               'pay_settings_changed','bulk_grace') THEN 'money'
+            WHEN pa.action IN ('tenant_deleted','tenant_suspended','owner_password_reset',
+                               'partner_disabled','bulk_disable','signup_rejected') THEN 'access'
+            ELSE 'other' END)
+   ORDER BY pa.at DESC
+   LIMIT least(greatest(p_limit, 1), 200);
+$$;
+GRANT EXECUTE ON FUNCTION platform_journal(text, uuid, timestamptz, uuid, uuid, text, integer) TO shop_app;

@@ -1323,13 +1323,45 @@ export class PlatformService {
       [ctx.userId, ctx.name, action, accountId, JSON.stringify(details ?? {})]);
   }
 
-  async auditLog(ctx: PlatformCtx, accountId?: string) {
-    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    return (await this.q(
-      `SELECT actor_name, action, account_id, details, at
-         FROM platform_audit
-        WHERE ($1::uuid IS NULL OR account_id = $1)
-        ORDER BY at DESC LIMIT 200`, [accountId ?? null])).rows;
+  /**
+   * Журнал: кто что сделал.
+   *
+   * Три мысли донора взяты: отбор делает сервер (партнёру чужие записи
+   * не приходят вовсе, а не прячутся при отрисовке), листание по
+   * времени последней записи (журнал растёт, и номера страниц
+   * съезжают), денежные записи весомее прочих.
+   *
+   * СДЕЛАНО ЛУЧШЕ: запись описывается словами на сервере. У донора
+   * кабинет знал список действий и переводил сам — появилось новое,
+   * кабинет показал его кодом вроде «tenant_suspended», и человек
+   * гадает, что это было.
+   */
+  async auditLog(ctx: PlatformCtx, opts: {
+    before?: string; accountId?: string; actorId?: string;
+    weight?: string; limit?: number;
+  } = {}) {
+    const rows = (await this.q(
+      `SELECT * FROM platform_journal($1,$2,$3,$4,$5,$6,$7)`,
+      [ctx.role, ctx.userId,
+       opts.before || null, opts.accountId || null, opts.actorId || null,
+       opts.weight || null, Math.min(200, Math.max(1, Number(opts.limit ?? 50)))])).rows;
+
+    return {
+      rows: rows.map((r: any) => ({
+        id: String(r.id), at: r.at,
+        actor: r.actor, actorId: r.actor_id,
+        action: r.action, title: r.title, detail: r.detail,
+        // money — деньги, access — доступ, other — прочее. Кабинет
+        // показывает по весу, а не решает сам, что важнее.
+        weight: r.weight,
+        accountId: r.account_id, client: r.client,
+        amount: r.amount == null ? null : money(Number(r.amount)),
+      })),
+      // Курсор для следующей страницы: время последней записи. Номера
+      // страниц не годятся — журнал растёт, и они съезжают.
+      nextBefore: rows.length ? rows[rows.length - 1].at : null,
+      hasMore: rows.length >= Math.min(200, Math.max(1, Number(opts.limit ?? 50))),
+    };
   }
 }
 
@@ -1663,9 +1695,12 @@ export class PlatformController {
   }
 
   @Public() @Get('audit')
-  audit(@Req() r: any, @Query('accountId') a?: string) {
+  audit(@Req() r: any, @Query('accountId') accountId?: string,
+        @Query('before') before?: string, @Query('actorId') actorId?: string,
+        @Query('weight') weight?: string, @Query('limit') limit?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.auditLog(Pl(r), a);
+    return this.svc.auditLog(Pl(r), { accountId, before, actorId, weight,
+      limit: limit ? Number(limit) : undefined });
   }
 }
 

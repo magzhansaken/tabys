@@ -387,6 +387,12 @@ const RULES = [
   { file: 'db/migrations/052_platform.sql', must: 'generate_series(current_date',
     why: 'Дни без событий тоже в ряду: пропуск в графике читается как сбой, а не как «в тот день не платили»' },
 
+  // ── Раздел «Журнал» ────────────────────────────────────────────────
+  { file: 'db/migrations/052_platform.sql', must: "WHEN 'payment_approved'    THEN 'Оплата подтверждена'",
+    why: 'Записи описываются словами на сервере: у донора кабинет переводил сам, и новое действие показывалось кодом' },
+  { file: 'db/migrations/052_platform.sql', must: 'p_before IS NULL OR pa.at < p_before',
+    why: 'Листание по времени последней записи, а не по номеру страницы: журнал растёт, и номера съезжают' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

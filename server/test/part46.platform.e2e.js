@@ -167,7 +167,7 @@ const shop = async (name, owner) => {
 
   // ---------- ЖУРНАЛ ----------
   r = await j('GET', '/platform/audit', null, SUPER);
-  const acts = (r.d ?? []).map((x) => x.action);
+  const acts = (r.d?.rows ?? []).map((x) => x.action);
   ok(acts.includes('payment_approved') && acts.includes('partner_created'),
      '★ Журнал решений: кто что решил и когда');
 
@@ -710,6 +710,58 @@ const shop = async (name, owner) => {
 
     v = await j('GET', '/platform/metrics', null, PARTNER);
     ok(v.status === 403, 'Партнёр общую сводку не видит');
+  }
+
+  // ---------- РАЗДЕЛ 8: «ЖУРНАЛ» ----------
+  // Кто что сделал. Отбор на сервере, листание по времени, денежные
+  // записи весомее прочих.
+  {
+    let v = await j('GET', '/platform/audit', null, SUPER);
+    ok(Array.isArray(v.d?.rows) && v.d.rows.length > 0,
+       `★ Журнал: ${v.d?.rows?.length} записей`);
+
+    // ОПИСАНИЕ СЛОВАМИ на сервере. У донора кабинет знал список
+    // действий и переводил сам: появилось новое — показал кодом вроде
+    // «tenant_suspended», и человек гадает, что это было.
+    const rec = v.d.rows[0];
+    ok(rec.title && rec.title !== rec.action,
+       `★ Запись описана словами: «${rec.title}» вместо кода «${rec.action}»`);
+
+    // ВЕС: деньги весомее прочего, цена ошибки в них другая.
+    ok(v.d.rows.every((x) => ['money', 'access', 'other'].includes(x.weight)),
+       'У каждой записи есть вес: деньги, доступ или прочее');
+
+    const moneyRows = (await j('GET', '/platform/audit?weight=money', null, SUPER)).d.rows;
+    ok(moneyRows.length > 0 && moneyRows.every((x) => x.weight === 'money'),
+       `★ Отбор «деньги» даёт только денежные: ${moneyRows.length}`);
+
+    const withSum = moneyRows.find((x) => x.amount);
+    if (withSum) ok(withSum.amount > 0,
+      `И сумма рядом: «${withSum.title}» на ${withSum.amount} ₸`);
+
+    // ЛИСТАНИЕ ПО ВРЕМЕНИ, а не по номеру страницы: журнал растёт, и
+    // номера съезжают — вторая страница показала бы то же, что первая.
+    v = await j('GET', '/platform/audit?limit=2', null, SUPER);
+    ok(v.d.rows.length === 2 && v.d.nextBefore,
+       '★ Листание курсором по времени последней записи');
+    const firstIds = v.d.rows.map((x) => x.id);
+
+    v = await j('GET',
+      `/platform/audit?limit=2&before=${encodeURIComponent(v.d.nextBefore)}`, null, SUPER);
+    ok(v.d.rows.every((x) => !firstIds.includes(x.id)),
+       '★ Вторая страница не повторяет первую');
+
+    // Отбор по клиенту — чтобы понять историю одного магазина.
+    v = await j('GET', `/platform/audit?accountId=${id1}`, null, SUPER);
+    ok(v.d.rows.every((x) => x.accountId === id1 || x.accountId == null),
+       'Отбор по клиенту: видна история одного магазина');
+
+    // ПАРТНЁРУ ЧУЖИЕ ЗАПИСИ НЕ ПРИХОДЯТ ВОВСЕ, а не прячутся при
+    // отрисовке: это разница между «не показали» и «не отдали».
+    const superCount = (await j('GET', '/platform/audit?limit=200', null, SUPER)).d.rows.length;
+    const partnerRows = (await j('GET', '/platform/audit?limit=200', null, PARTNER)).d.rows;
+    ok(partnerRows.length < superCount,
+       `★ Партнёру приходит меньше записей: ${partnerRows.length} против ${superCount}`);
   }
 
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
