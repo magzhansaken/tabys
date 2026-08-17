@@ -422,6 +422,13 @@ const RULES = [
   { file: 'db/migrations/055_today_preview.sql', must: "replace(to_char(round(p_tiyn / 100.0), 'FM999G999G999'), ',', ' ')",
     why: 'Разряды пробелом: запятая читается как десятичный знак — «двадцать целых семьсот» вместо двадцати тысяч' },
 
+  { file: 'db/migrations/056_clients_table.sql', must: "WHEN 'due'     THEN NULL",
+    why: 'Четыре порядка, как у донора: где горит, кто дорог, кто живёт, и по названию — когда ищешь конкретного' },
+  { file: 'admin/app/platform/sections/Clients.tsx', must: 'Выручка 30 дн.',
+    why: 'Выручка магазина — главный столбец: он отвечает, живёт ли клиент. Продаж нет — продлевать не будет' },
+  { file: 'admin/app/platform/sections/Clients.tsx', must: "groups.sort((a, b) => (a.key === '—' ? -1",
+    why: 'Ничьи клиенты первыми: это те, кем никто не занимается, и они теряются первыми' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

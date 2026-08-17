@@ -366,8 +366,9 @@ const shop = async (name, owner) => {
     ok(pay && pay.amount > 0 && pay.client && pay.paymentId,
        `★ Оплата в ленте: ${pay?.amount} ₸ от «${pay?.client}» — видно, кого касается`);
     ok(pay?.can?.approve === true, 'Владелец платформы может подтвердить прямо из ленты');
-    ok(pay?.meta && pay.meta.length > 0,
-       `Рядом контакты, чтобы позвонить не выходя из ленты: «${pay?.meta}»`);
+    // Последствие видно БЕЗ нажатия — главное, что взято у донора.
+    ok(!!pay?.effect && /продлит до/.test(pay.effect),
+       `★ Последствие видно без нажатия: «${pay?.effect}»`);
 
     // Порядок групп важен: просроченные первыми, «скоро платить»
     // последними. Владелец читает сверху вниз и до конца не доходит.
@@ -394,8 +395,8 @@ const shop = async (name, owner) => {
     let v = await j('GET', '/platform/clients', null, SUPER);
     ok(Array.isArray(v.d?.rows) && v.d?.counts,
        `★ Список со счётчиками: всего ${v.d?.counts?.all}`);
-    ok(typeof v.d.counts.expired === 'number' && typeof v.d.counts.expiring === 'number',
-       'Счётчики отборов приходят вместе со списком — цифра и содержимое не разойдутся');
+    ok(typeof v.d.counts.expired === 'number' && typeof v.d.stats.mrr === 'number',
+       `Счётчики и пять чисел приходят со списком: доход ${v.d.stats.mrr} ₸`);
 
     // Порядок: где горит — сверху. Владелец читает сверху и до конца
     // обычно не доходит.
@@ -408,12 +409,16 @@ const shop = async (name, owner) => {
     v = await j('GET', '/platform/clients?filter=expired', null, SUPER);
     ok(v.d.rows.every((r) => r.expired), '★ Отбор «просрочены» даёт только просроченных');
 
-    v = await j('GET', '/platform/clients?filter=expiring', null, SUPER);
-    ok(v.d.rows.every((r) => r.expiringSoon),
-       '★ Отбор «кончается» — только те, кому платить в течение недели');
+    v = await j('GET', '/platform/clients?filter=pending_pay', null, SUPER);
+    ok(v.d.rows.every((r) => r.pendingPayments > 0),
+       '★ Отбор «ждут подтверждения» — только те, у кого висит оплата');
 
-    v = await j('GET', '/platform/clients?filter=demo', null, SUPER);
-    ok(v.d.rows.every((r) => r.isDemo), 'Отбор «учебные» отделён от боевых');
+    // Четыре порядка, как у донора: где горит, кто дорог, кто живёт,
+    // и по названию — когда ищешь конкретного.
+    for (const srt of ['due', 'price', 'revenue', 'name']) {
+      v = await j('GET', `/platform/clients?sort=${srt}`, null, SUPER);
+      ok(Array.isArray(v.d.rows), `Порядок «${srt}» работает`);
+    }
 
     // Поиск по телефону в любом виде: люди пишут то +7, то 8, то без.
     const withPhone = (await j('GET', '/platform/clients', null, SUPER))

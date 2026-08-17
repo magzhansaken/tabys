@@ -157,32 +157,47 @@ export class PlatformService {
    * Счётчики приходят вместе со списком: цифра на вкладке и её
    * содержимое считаются в одном месте и не могут разойтись.
    */
+  /**
+   * Клиенты: таблица со счётчиками, отбором, порядком и группировкой.
+   *
+   * Раскладка донора: пять чисел сверху, поиск, четыре порядка, отбор
+   * по партнёру, семь вкладок состояний. Всё считает база одним
+   * заходом — у них порядок и группировка делались в браузере, и при
+   * сотне клиентов это заметно.
+   */
   async clients(ctx: PlatformCtx, opts: {
-    q?: string; filter?: string; partnerId?: string;
+    q?: string; filter?: string; partnerId?: string; sort?: string;
   } = {}) {
-    const filters = ['all', 'active', 'expiring', 'expired', 'trial', 'demo'];
-    const filter = filters.includes(opts.filter ?? '') ? opts.filter : 'all';
+    const states = ['all', 'approval', 'active', 'pending_pay', 'setup', 'expired', 'suspended'];
+    const filter = states.includes(opts.filter ?? '') ? opts.filter! : 'all';
+    const sorts = ['due', 'price', 'revenue', 'name'];
+    const sort = sorts.includes(opts.sort ?? '') ? opts.sort! : 'due';
+    const partner = opts.partnerId || 'all';
 
-    const [rows, counts] = await Promise.all([
-      this.q(`SELECT * FROM platform_clients_filtered($1,$2,$3,$4,$5)`,
-        [ctx.role, ctx.userId, opts.q?.trim() || null, filter, opts.partnerId || null]),
+    const [rows, counts, partners] = await Promise.all([
+      this.q(`SELECT * FROM platform_clients_filtered($1,$2,$3,$4,$5,$6)`,
+        [ctx.role, ctx.userId, opts.q?.trim() || null, filter, partner, sort]),
       this.q(`SELECT * FROM platform_clients_counts($1,$2)`, [ctx.role, ctx.userId]),
+      ctx.role === 'super'
+        ? this.q(`SELECT id, full_name FROM platform_user
+                   WHERE role='partner' AND deleted_at IS NULL ORDER BY full_name`)
+        : Promise.resolve({ rows: [] } as any),
     ]);
 
     const c = counts.rows[0] ?? {};
+
     return {
       rows: rows.rows.map((r: any) => ({
         id: r.id, name: r.name, phone: r.phone, city: r.city,
         owner: r.owner_name, ownerPhone: r.owner_phone,
-        status: r.status, tariff: r.tariff_name,
+        state: r.state, tariff: r.tariff_name,
         partner: r.partner_name, partnerId: r.partner_id,
         partnerPercent: Number(r.partner_bp) / 100,
         dealStage: r.deal_stage, dealNote: r.deal_note, touchedAt: r.touched_at,
         isDemo: r.is_demo,
         paidUntil: r.paid_until, daysLeft: r.days_left,
         monthly: money(Number(r.monthly)),
-        // Подсветка: за неделю — предупреждение, после срока — тревога.
-        // Именно эти два состояния решают, звонить сегодня или нет.
+        pendingPayments: Number(r.pending_payments),
         expiringSoon: r.days_left != null && r.days_left >= 0 && r.days_left <= 7,
         expired: r.days_left != null && r.days_left < 0,
         revenue30d: Math.round(Number(r.revenue_30d)),
@@ -190,12 +205,28 @@ export class PlatformService {
         createdAt: r.created_at,
       })),
       total: Number(rows.rows[0]?.total_count ?? 0),
-      counts: {
-        all: Number(c.all_n ?? 0), active: Number(c.active_n ?? 0),
-        expiring: Number(c.expiring_n ?? 0), expired: Number(c.expired_n ?? 0),
-        trial: Number(c.trial_n ?? 0), demo: Number(c.demo_n ?? 0),
+      // Пять чисел сверху, как у них.
+      stats: {
+        total: Number(c.total ?? 0),
+        active: Number(c.active ?? 0),
+        pendingPay: Number(c.pending_pay ?? 0),
+        expired: Number(c.expired ?? 0),
+        mrr: money(Number(c.mrr ?? 0)),
       },
-      filter,
+      // Счётчики вкладок отбора.
+      counts: {
+        all: Number(c.total ?? 0),
+        approval: Number(c.approval ?? 0),
+        active: Number(c.active ?? 0),
+        pending_pay: Number(c.pending_pay ?? 0),
+        setup: Number(c.setup ?? 0),
+        expired: Number(c.expired ?? 0),
+        suspended: Number(c.suspended ?? 0),
+        demo: Number(c.demo ?? 0),
+        nobody: Number(c.nobody ?? 0),
+      },
+      partners: partners.rows.map((p: any) => ({ id: p.id, name: p.full_name })),
+      filter, sort, partnerId: partner,
     };
   }
 
@@ -1408,10 +1439,10 @@ export class PlatformController {
   login(@Body() d: any) { return this.svc.login(d?.email, d?.password); }
 
   @Public() @Get('clients')
-  clients(@Req() r: any, @Query('q') q?: string,
-          @Query('filter') filter?: string, @Query('partnerId') partnerId?: string) {
+  clients(@Req() r: any, @Query('q') q?: string, @Query('filter') filter?: string,
+          @Query('partnerId') partnerId?: string, @Query('sort') sort?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.clients(Pl(r), { q, filter, partnerId });
+    return this.svc.clients(Pl(r), { q, filter, partnerId, sort });
   }
 
   @Public() @Get('today')

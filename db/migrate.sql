@@ -132,5 +132,11 @@
 \echo '--- 055 последствие в ленте «Сегодня» ---'
 \i db/migrations/055_today_preview.sql
 
+\echo '--- 056 клиенты таблицей ---'
+\i db/migrations/056_clients_table.sql
+
+\echo '--- 056 клиенты таблицей ---'
+\i db/migrations/056_clients_table.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
