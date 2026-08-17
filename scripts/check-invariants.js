@@ -451,6 +451,11 @@ const RULES = [
   { file: 'admin/app/platform/page.tsx', must: "key: 'settings', label: 'Настройки', superOnly: true",
     why: 'Настройки последними и только владельцу: цены и реквизиты — самое опасное место платформы' },
 
+  { file: 'db/migrations/054_platform_functions.sql', must: "code = 'owner' AND account_id IS NULL",
+    why: 'Системные роли ОБЩИЕ: своя роль с тем же кодом ломает регистрацию с сайта — «подзапрос вернул больше одной строки»' },
+  { file: 'db/migrations/058_owner_role_fix.sql', must: 'role_system_code_uniq',
+    why: 'Занять системный код своей ролью больше нельзя: следующий упрётся в запрет, а не сломает регистрацию через неделю' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

@@ -138,5 +138,11 @@
 \echo '--- 056 клиенты таблицей ---'
 \i db/migrations/056_clients_table.sql
 
+\echo '--- 057 запрет повторов кода тарифа ---'
+\i db/migrations/057_tariff_unique.sql
+
+\echo '--- 058 общая роль владельца ---'
+\i db/migrations/058_owner_role_fix.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

@@ -194,10 +194,14 @@ BEGIN
   INSERT INTO account (name, phone, status) VALUES (p_name, p_phone, 'trial')
     RETURNING id INTO v_acc;
 
-  SELECT id INTO v_role FROM role WHERE account_id = v_acc AND code = 'owner';
+  -- Роль владельца берём ОБЩУЮ системную, а не заводим свою: они в
+  -- этой системе одни на всю базу, и регистрация с сайта ищет её
+  -- запросом без привязки к магазину. Своя роль с тем же кодом ломала
+  -- регистрацию — «подзапрос вернул больше одной строки».
+  SELECT id INTO v_role FROM role
+   WHERE code = 'owner' AND account_id IS NULL LIMIT 1;
   IF v_role IS NULL THEN
-    INSERT INTO role (account_id, code, name, is_system)
-    VALUES (v_acc, 'owner', 'Владелец', true) RETURNING id INTO v_role;
+    RAISE EXCEPTION 'Нет системной роли владельца — база не размечена';
   END IF;
 
   -- Владельцу нужен вход и в кабинет, и на кассу. Без can_login_admin

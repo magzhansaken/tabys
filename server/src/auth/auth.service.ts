@@ -109,6 +109,11 @@ export class AuthService {
                                    stores_paid, paid_until)
          SELECT $1, t.id, 'trial', t.price_month, current_date + interval '1 year', 1, current_date + 14
            FROM tariff t WHERE t.code = 'start'
+          -- Ровно одна строка. Без ограничения при двух тарифах с
+          -- одним кодом вставка даёт две записи и падает на
+          -- «подзапрос вернул больше одной строки» — регистрация
+          -- клиента встаёт целиком.
+          ORDER BY t.created_at LIMIT 1
          ON CONFLICT (account_id) DO NOTHING`, [account_id]);
     });
 
