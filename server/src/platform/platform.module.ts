@@ -242,46 +242,30 @@ export class PlatformService {
   async approvePayment(ctx: PlatformCtx, paymentId: string) {
     if (ctx.role !== 'super') throw new ForbiddenException('Подтверждает только владелец платформы');
 
-    const p = (await this.q(
-      `SELECT * FROM tenant_payment WHERE id = $1`, [paymentId])).rows[0];
-    if (!p) throw new BadRequestException('Оплата не найдена');
-    if (p.status !== 'pending') throw new BadRequestException(`Оплата уже ${p.status === 'approved' ? 'подтверждена' : 'отклонена'}`);
+    // Одной операцией в базе: доля партнёра, продление, отрезок,
+    // отметки. Если упадёт посередине — не должно остаться половины:
+    // оплата подтверждена, а доступ не продлён, или наоборот.
+    let r: any;
+    try {
+      r = (await this.q(`SELECT * FROM platform_approve_payment($1,$2)`,
+        [paymentId, ctx.userId])).rows[0];
+    } catch (e: any) {
+      // Сообщения из базы уже человеческие — отдаём как есть.
+      throw new BadRequestException(String(e.message ?? '').replace(/^.*?:\s*/, ''));
+    }
 
-    // Доля партнёра считается и ЗАМОРАЖИВАЕТСЯ сейчас. Поменяют
-    // комиссию позже — прошлые выплаты не пересчитаются задним числом.
-    const bp = p.partner_id
-      ? Number((await this.q(`SELECT commission_bp FROM platform_user WHERE id = $1`,
-          [p.partner_id])).rows[0]?.commission_bp ?? 0)
-      : 0;
-    const partnerShare = Math.round(Number(p.amount) * bp / 10000);
-    const platformShare = Number(p.amount) - partnerShare;
-
-    await this.q(
-      `UPDATE tenant_payment
-          SET status='approved', approved_by=$2, approved_at=now(),
-              partner_bp=$3, partner_share=$4, platform_share=$5
-        WHERE id=$1`,
-      [paymentId, ctx.userId, bp, partnerShare, platformShare]);
-
-    // Продление — через функцию с правом обхода изоляции. Таблица
-    // подписок закрыта правилом «только свой магазин», и платформа,
-    // которая смотрит на магазины сверху, не видит из неё ни строки.
-    // Молча: запрос выполняется, обновляет ноль строк, ошибки нет.
-    //
-    // Правило «досрочная оплата не сжигает остаток» живёт там же, в
-    // функции, а не повторяется здесь — чтобы не разъехалось.
-    const until = new Date((await this.q(
-      `SELECT platform_extend_subscription($1, $2) AS until`,
-      [p.account_id, Number(p.months)])).rows[0].until);
-
-    await this.audit(ctx, 'payment_approved', p.account_id,
-      { amount: money(p.amount), months: p.months, paidUntil: until.toISOString(),
-        partnerShare: money(partnerShare) });
+    await this.audit(ctx, 'payment_approved', null, {
+      amount: money(Number(r.amount)), months: r.months,
+      paidUntil: r.paid_until, partnerShare: money(Number(r.partner_share)),
+    });
 
     return {
-      ok: true, paidUntil: until.toISOString(),
-      partnerShare: money(partnerShare), platformShare: money(platformShare),
-      note: `Доступ продлён до ${until.toLocaleDateString('ru-RU')}`,
+      ok: true,
+      paidUntil: r.paid_until,
+      periodFrom: r.period_from,
+      partnerShare: money(Number(r.partner_share)),
+      platformShare: money(Number(r.platform_share)),
+      note: `Доступ продлён до ${new Date(r.paid_until).toLocaleDateString('ru-RU')}`,
     };
   }
 
@@ -347,14 +331,50 @@ export class PlatformService {
     return { ok: true };
   }
 
-  async payments(ctx: PlatformCtx, status?: string) {
-    // Через функцию с обходом изоляции: запрос соединяется с account,
-    // и без неё список приходит ПУСТЫМ — молча, без ошибки.
-    return (await this.q(
-      `SELECT * FROM platform_payments($1, $2, $3)`,
-      [status ?? null, ctx.role, ctx.userId])).rows
-      .map((r: any) => ({ ...r, amount: money(r.amount),
-        partnerShare: money(r.partner_share), platformShare: money(r.platform_share) }));
+  /**
+   * Деньги: список оплат с итогами.
+   *
+   * ИТОГИ ПО ТЕМ ЖЕ СТРОКАМ, что показываются. У донора сумма сверху
+   * бралась отдельным запросом, и при отборе «ждут подтверждения» она
+   * показывала итог по всем — цифра не совпадала со списком под ней.
+   *
+   * В доход идут только ПОДТВЕРЖДЁННЫЕ: ждущие и отклонённые — это ещё
+   * не деньги.
+   */
+  async payments(ctx: PlatformCtx, opts: { status?: string; days?: number } = {}) {
+    const ok = ['pending', 'approved', 'rejected'];
+    const status = ok.includes(opts.status ?? '') ? opts.status : null;
+    const days = Math.min(365, Math.max(7, Math.floor(Number(opts.days ?? 90))));
+
+    const rows = (await this.q(
+      `SELECT * FROM platform_money($1,$2,$3,$4)`,
+      [status, ctx.role, ctx.userId, days])).rows;
+
+    const t = rows[0] ?? {};
+    return {
+      rows: rows.map((r: any) => ({
+        id: r.id, accountId: r.account_id, client: r.client,
+        partner: r.partner, partnerId: r.partner_id,
+        amount: money(Number(r.amount)), months: r.months,
+        method: r.method, comment: r.comment,
+        status: r.status, rejectReason: r.reject_reason,
+        // Отрезок записан при подтверждении и не пересчитывается: это
+        // ответ на вопрос «за что я платил», он не должен меняться от
+        // того, что случилось потом.
+        periodFrom: r.period_from, periodTo: r.period_to,
+        partnerShare: money(Number(r.partner_share)),
+        platformShare: money(Number(r.platform_share)),
+        createdAt: r.created_at, approvedAt: r.approved_at,
+        canApprove: r.status === 'pending' && ctx.role === 'super',
+      })),
+      totals: {
+        count: Number(t.cnt ?? 0),
+        amount: money(Number(t.sum_amount ?? 0)),
+        partnerShare: money(Number(t.sum_partner ?? 0)),
+        platformShare: money(Number(t.sum_platform ?? 0)),
+      },
+      status: status ?? 'all', days,
+    };
   }
 
   // ── ПАРТНЁРЫ ────────────────────────────────────────────────────────
@@ -1131,9 +1151,9 @@ export class PlatformController {
   }
 
   @Public() @Get('payments')
-  payments(@Req() r: any, @Query('status') s?: string) {
+  payments(@Req() r: any, @Query('status') st?: string, @Query('days') days?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.payments(Pl(r), s);
+    return this.svc.payments(Pl(r), { status: st, days: days ? Number(days) : undefined });
   }
 
   @Public() @Post('payments')

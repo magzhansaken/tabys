@@ -860,3 +860,131 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
     FROM b;
 $$;
 GRANT EXECUTE ON FUNCTION platform_clients_counts(text, uuid) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 3: «ДЕНЬГИ» — оплаты, доли, сводка по деньгам.
+--
+-- СДЕЛАНО ИНАЧЕ, ЧЕМ У ДОНОРА. У них оплаченный отрезок («с какого по
+-- какое») вычислялся пересчётом ВСЕЙ цепочки оплат клиента при каждом
+-- открытии карточки: берут первую подтверждённую, прибавляют месяцы,
+-- потом вторую и так далее.
+--
+-- Что с этим не так: цепочка живая. Одну оплату отклонили задним
+-- числом, другую подтвердили не по порядку — и все отрезки съехали.
+-- Клиент видит «оплачено с 5 марта», хотя платил 12-го.
+--
+-- У нас период записывается В МОМЕНТ ПОДТВЕРЖДЕНИЯ и больше не
+-- меняется. Что было, то было — это ответ на вопрос «за что я платил»,
+-- и он не должен зависеть от того, что случилось потом.
+-- =====================================================================
+ALTER TABLE tenant_payment
+  ADD COLUMN IF NOT EXISTS period_from timestamptz,
+  ADD COLUMN IF NOT EXISTS period_to   timestamptz;
+
+COMMENT ON COLUMN tenant_payment.period_from IS
+  'За какой отрезок заплачено. Пишется при подтверждении и не пересчитывается';
+
+/**
+ * Подтверждение оплаты — одним заходом в базе.
+ *
+ * Считает долю партнёра, продлевает подписку, записывает отрезок,
+ * ставит отметки. Всё в одной операции: если что-то упадёт посередине,
+ * не должно остаться половины — оплата подтверждена, а доступ не
+ * продлён, или наоборот.
+ *
+ * Возвращает всё, что нужно показать: до какой даты продлили, сколько
+ * кому досталось.
+ */
+CREATE OR REPLACE FUNCTION platform_approve_payment(
+  p_payment uuid, p_actor uuid)
+RETURNS TABLE (
+  paid_until timestamptz, period_from timestamptz,
+  partner_share bigint, platform_share bigint, amount bigint, months integer)
+SECURITY DEFINER SET search_path = public LANGUAGE plpgsql AS $$
+DECLARE
+  v_p record; v_bp integer := 0; v_share bigint; v_from timestamptz; v_until timestamptz;
+BEGIN
+  SELECT * INTO v_p FROM tenant_payment WHERE id = p_payment FOR UPDATE;
+  IF v_p.id IS NULL THEN RAISE EXCEPTION 'Оплата не найдена'; END IF;
+  IF v_p.status <> 'pending' THEN
+    RAISE EXCEPTION 'Оплата уже %', CASE WHEN v_p.status = 'approved'
+      THEN 'подтверждена' ELSE 'отклонена' END;
+  END IF;
+
+  -- Доля партнёра замораживается СЕЙЧАС. Поменяют ему комиссию позже —
+  -- прошлые выплаты не пересчитаются задним числом, иначе отчёт за
+  -- прошлый месяц изменится сам собой.
+  IF v_p.partner_id IS NOT NULL THEN
+    SELECT commission_bp INTO v_bp FROM platform_user WHERE id = v_p.partner_id;
+  END IF;
+  v_share := round(v_p.amount * coalesce(v_bp, 0) / 10000.0);
+
+  -- Отрезок: от БОЛЬШЕЙ из дат — сегодня или конец оплаченного
+  -- периода. Досрочная оплата не сжигает остаток.
+  SELECT s.paid_until INTO v_from FROM subscription s WHERE s.account_id = v_p.account_id;
+  v_from := greatest(coalesce(v_from, now()), now());
+  v_until := v_from + (v_p.months || ' months')::interval;
+
+  UPDATE tenant_payment
+     SET status = 'approved', approved_by = p_actor, approved_at = now(),
+         partner_bp = coalesce(v_bp, 0),
+         partner_share = v_share,
+         platform_share = v_p.amount - v_share,
+         period_from = v_from, period_to = v_until
+   WHERE id = p_payment;
+
+  PERFORM platform_extend_subscription(v_p.account_id, v_p.months);
+
+  RETURN QUERY SELECT v_until, v_from, v_share,
+                      v_p.amount - v_share, v_p.amount, v_p.months;
+END; $$;
+GRANT EXECUTE ON FUNCTION platform_approve_payment(uuid, uuid) TO shop_app;
+
+/**
+ * Деньги: список оплат с отбором и итогами.
+ *
+ * Итоги считаются по ТЕМ ЖЕ строкам, что показываются: у донора сумма
+ * сверху бралась отдельным запросом, и при отборе «ждут» она
+ * показывала итог по всем — цифра не совпадала со списком под ней.
+ */
+CREATE OR REPLACE FUNCTION platform_money(
+  p_status text, p_role text, p_user uuid, p_days integer DEFAULT 90)
+RETURNS TABLE (
+  id uuid, account_id uuid, client text, partner text, partner_id uuid,
+  amount bigint, months integer, method text, comment text,
+  status text, reject_reason text,
+  period_from timestamptz, period_to timestamptz,
+  partner_share bigint, platform_share bigint,
+  created_at timestamptz, approved_at timestamptz,
+  sum_amount bigint, sum_partner bigint, sum_platform bigint, cnt bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  WITH picked AS (
+    SELECT tp.*, a.name AS client_name, pu.full_name AS partner_name
+      FROM tenant_payment tp
+      JOIN account a ON a.id = tp.account_id
+      LEFT JOIN platform_user pu ON pu.id = tp.partner_id
+      LEFT JOIN tenant_card tc ON tc.account_id = tp.account_id
+     WHERE (p_status IS NULL OR tp.status::text = p_status)
+       AND (p_role = 'super' OR tp.partner_id = p_user)
+       -- Учебные магазины в деньги не идут никогда.
+       AND coalesce(tc.is_demo, false) = false
+       AND tp.created_at > now() - (p_days || ' days')::interval
+  )
+  SELECT p.id, p.account_id, p.client_name, p.partner_name, p.partner_id,
+         p.amount, p.months, p.method, p.comment,
+         p.status::text, p.reject_reason,
+         p.period_from, p.period_to,
+         p.partner_share, p.platform_share,
+         p.created_at, p.approved_at,
+         -- Итоги только по ПОДТВЕРЖДЁННЫМ: ждущие и отклонённые — это
+         -- ещё не деньги, складывать их в доход нельзя.
+         sum(p.amount) FILTER (WHERE p.status = 'approved') OVER (),
+         sum(p.partner_share) FILTER (WHERE p.status = 'approved') OVER (),
+         sum(p.platform_share) FILTER (WHERE p.status = 'approved') OVER (),
+         count(*) OVER ()
+    FROM picked p
+   -- Ждущие первыми: это то, что требует действия. Остальные по дате.
+   ORDER BY (p.status <> 'pending'), p.created_at DESC
+   LIMIT 300;
+$$;
+GRANT EXECUTE ON FUNCTION platform_money(text, text, uuid, integer) TO shop_app;

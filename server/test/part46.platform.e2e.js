@@ -439,6 +439,52 @@ const shop = async (name, owner) => {
        '★ У партнёра и список, и счётчики — только по своим клиентам');
   }
 
+  // ---------- РАЗДЕЛ 3: «ДЕНЬГИ» ----------
+  // Оплаты с отбором и итогами.
+  {
+    let v = await j('GET', '/platform/payments', null, SUPER);
+    ok(Array.isArray(v.d?.rows) && v.d?.totals,
+       `★ Деньги: ${v.d?.totals?.count} записей, в доход ${v.d?.totals?.amount} ₸`);
+
+    // Ждущие первыми: это то, что требует действия.
+    const first = v.d.rows[0];
+    const anyPending = v.d.rows.some((x) => x.status === 'pending');
+    ok(!anyPending || first.status === 'pending',
+       '★ Ждущие подтверждения — первыми: это единственное, что требует действия');
+
+    // ИТОГИ ПО ТЕМ ЖЕ СТРОКАМ. У донора сумма сверху бралась отдельным
+    // запросом, и при отборе «ждут» показывала итог по всем — цифра не
+    // совпадала со списком под ней.
+    v = await j('GET', '/platform/payments?status=pending', null, SUPER);
+    ok(v.d.totals.amount === 0,
+       '★ У отбора «ждут» доход НОЛЬ: ждущие — это ещё не деньги');
+    ok(v.d.rows.every((x) => x.status === 'pending'), 'И только ждущие в списке');
+
+    v = await j('GET', '/platform/payments?status=rejected', null, SUPER);
+    ok(v.d.totals.amount === 0, 'У отклонённых доход тоже ноль');
+
+    v = await j('GET', '/platform/payments?status=approved', null, SUPER);
+    const sum = v.d.rows.reduce((a, x) => a + x.amount, 0);
+    ok(Math.abs(sum - v.d.totals.amount) < 2,
+       `★ Итог сходится со строками: ${v.d.totals.amount} ₸ = сумма списка`);
+    ok(v.d.rows.every((x) => x.partnerShare + x.platformShare === x.amount),
+       '★ Доли партнёра и платформы в сумме дают ровно платёж — ни тенге не потеряно');
+
+    // ОТРЕЗОК записывается при подтверждении и не пересчитывается. У
+    // донора он вычислялся пересчётом всей цепочки при каждом открытии
+    // карточки: отклонили одну задним числом — все отрезки съехали.
+    const done = v.d.rows.find((x) => x.periodFrom);
+    if (done) {
+      ok(new Date(done.periodTo) > new Date(done.periodFrom),
+         `★ Оплаченный отрезок записан: ${String(done.periodFrom).slice(0, 10)} — ${String(done.periodTo).slice(0, 10)}`);
+    }
+
+    // Партнёр видит только свои оплаты и не может подтверждать.
+    v = await j('GET', '/platform/payments', null, PARTNER);
+    ok(v.d.rows.every((x) => x.canApprove === false),
+       '★ Партнёру кнопка подтверждения не показывается');
+  }
+
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
   // Дописано по сверке с донором: у них 39 методов, у нас было 30.
   {

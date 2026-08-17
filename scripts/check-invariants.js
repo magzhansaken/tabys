@@ -357,6 +357,12 @@ const RULES = [
   { file: 'db/migrations/052_platform.sql', must: 'ORDER BY (p.days_left IS NULL), p.days_left',
     why: 'Порядок по срочности: просроченные сверху — владелец читает сверху и до конца не доходит' },
 
+  // ── Раздел «Деньги» ────────────────────────────────────────────────
+  { file: 'db/migrations/052_platform.sql', must: 'period_from = v_from, period_to = v_until',
+    why: 'Оплаченный отрезок пишется при подтверждении и не пересчитывается: у донора он плыл от любой правки в цепочке' },
+  { file: 'db/migrations/052_platform.sql', must: "FILTER (WHERE p.status = 'approved') OVER ()",
+    why: 'В доход идут только подтверждённые: ждущие и отклонённые — это ещё не деньги' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
