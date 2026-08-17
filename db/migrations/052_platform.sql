@@ -1239,3 +1239,124 @@ SECURITY DEFINER SET search_path = public LANGUAGE sql AS $$
     updated_at = now();
 $$;
 GRANT EXECUTE ON FUNCTION platform_funnel_move(uuid, text, text) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 6: «ПАРТНЁРЫ» — кто продаёт и сколько заработал.
+--
+-- У донора список плоский: имя, комиссия, число клиентов, заработок за
+-- месяц одним числом. Этого мало для решения — а решать здесь надо
+-- одно: кому платить и с кем расставаться.
+--
+-- ДОБАВЛЕНО СВЕРХ ДОНОРА:
+--
+-- 1. К ВЫПЛАТЕ — сколько партнёру причитается за период. У донора
+--    «заработал за 30 дней» смешивал в одну цифру и то, что уже
+--    выплачено, и то, что ещё нет.
+--
+-- 2. ПРИВЁЛ ДЕНЕГ ВСЕГО — за всё время, а не за месяц. Партнёр,
+--    приведший пятерых год назад, ценнее приведшего одного вчера.
+--
+-- 3. СКОЛЬКО КЛИЕНТОВ УШЛО — обратная сторона. Партнёр может заводить
+--    много и терять столько же.
+--
+-- 4. ДАВНО ЛИ ЗАХОДИЛ — партнёр, не заходивший месяц, скорее всего
+--    перестал работать, и его клиенты остались без сопровождения.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION platform_partners_full(p_days integer DEFAULT 30)
+RETURNS TABLE (
+  id uuid, full_name text, email text, phone text,
+  commission_bp integer, is_active boolean,
+  last_login_at timestamptz, created_at timestamptz,
+  clients bigint, active_clients bigint, lost_clients bigint,
+  earned_period bigint, earned_total bigint,
+  brought_period bigint, brought_total bigint,
+  mrr bigint, days_silent integer)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT pu.id, pu.full_name, pu.email, pu.phone,
+         pu.commission_bp, pu.is_active, pu.last_login_at, pu.created_at,
+
+         -- Клиенты: всего, работающих, потерянных. Учебные не в счёт.
+         (SELECT count(*) FROM tenant_card tc
+            JOIN account a ON a.id = tc.account_id
+           WHERE tc.partner_id = pu.id AND NOT coalesce(tc.is_demo, false)
+             AND a.deleted_at IS NULL),
+         (SELECT count(*) FROM tenant_card tc
+            JOIN account a ON a.id = tc.account_id
+            JOIN subscription s ON s.account_id = a.id
+           WHERE tc.partner_id = pu.id AND NOT coalesce(tc.is_demo, false)
+             AND a.deleted_at IS NULL AND s.paid_until > now()),
+         -- Ушедшие: удалённые или просроченные больше месяца. Партнёр
+         -- может заводить много и терять столько же — это видно только
+         -- рядом с первой цифрой.
+         (SELECT count(*) FROM tenant_card tc
+            JOIN account a ON a.id = tc.account_id
+            LEFT JOIN subscription s ON s.account_id = a.id
+           WHERE tc.partner_id = pu.id AND NOT coalesce(tc.is_demo, false)
+             AND (a.deleted_at IS NOT NULL
+                  OR s.paid_until < now() - interval '30 days')),
+
+         -- Заработок партнёра: за период и за всё время.
+         coalesce((SELECT sum(tp.partner_share) FROM tenant_payment tp
+            WHERE tp.partner_id = pu.id AND tp.status = 'approved'
+              AND tp.approved_at > now() - (p_days || ' days')::interval), 0),
+         coalesce((SELECT sum(tp.partner_share) FROM tenant_payment tp
+            WHERE tp.partner_id = pu.id AND tp.status = 'approved'), 0),
+
+         -- Сколько ДЕНЕГ ПРИВЁЛ платформе — это другое число, и оно
+         -- важнее заработка: партнёр с малой комиссией может приносить
+         -- больше, чем с большой.
+         coalesce((SELECT sum(tp.amount) FROM tenant_payment tp
+            WHERE tp.partner_id = pu.id AND tp.status = 'approved'
+              AND tp.approved_at > now() - (p_days || ' days')::interval), 0),
+         coalesce((SELECT sum(tp.amount) FROM tenant_payment tp
+            WHERE tp.partner_id = pu.id AND tp.status = 'approved'), 0),
+
+         -- Сколько его клиенты дают в месяц сейчас: будущий доход.
+         coalesce((SELECT sum(coalesce(
+             (SELECT sum(pl.unit_price * pl.qty) FROM plan_line pl
+               WHERE pl.account_id = a.id AND pl.ends_at IS NULL),
+             coalesce(t.price_month, 0) * 100))
+           FROM tenant_card tc
+           JOIN account a ON a.id = tc.account_id
+           JOIN subscription s ON s.account_id = a.id
+           LEFT JOIN tariff t ON t.id = s.tariff_id
+          WHERE tc.partner_id = pu.id AND NOT coalesce(tc.is_demo, false)
+            AND a.deleted_at IS NULL AND s.paid_until > now()), 0),
+
+         -- Давно ли заходил: не заходивший месяц скорее всего перестал
+         -- работать, а его клиенты остались без сопровождения.
+         CASE WHEN pu.last_login_at IS NULL THEN NULL
+              ELSE extract(day FROM now() - pu.last_login_at)::int END
+
+    FROM platform_user pu
+   WHERE pu.role = 'partner' AND pu.deleted_at IS NULL
+   ORDER BY (SELECT coalesce(sum(tp.amount), 0) FROM tenant_payment tp
+              WHERE tp.partner_id = pu.id AND tp.status = 'approved'
+                AND tp.approved_at > now() - (p_days || ' days')::interval) DESC,
+            pu.created_at DESC;
+$$;
+GRANT EXECUTE ON FUNCTION platform_partners_full(integer) TO shop_app;
+
+/**
+ * Что произойдёт, если отключить партнёра.
+ *
+ * Опасное действие показывает последствие до нажатия: сколько клиентов
+ * останется без сопровождения и на какую сумму в месяц. У донора
+ * кнопка просто отключала.
+ */
+CREATE OR REPLACE FUNCTION platform_partner_off_preview(p_partner uuid)
+RETURNS TABLE (full_name text, clients bigint, active_clients bigint, mrr bigint)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT pu.full_name,
+         (SELECT count(*) FROM tenant_card tc WHERE tc.partner_id = pu.id),
+         (SELECT count(*) FROM tenant_card tc
+            JOIN subscription s ON s.account_id = tc.account_id
+           WHERE tc.partner_id = pu.id AND s.paid_until > now()),
+         coalesce((SELECT sum(coalesce(t.price_month, 0) * 100)
+           FROM tenant_card tc
+           JOIN subscription s ON s.account_id = tc.account_id
+           LEFT JOIN tariff t ON t.id = s.tariff_id
+          WHERE tc.partner_id = pu.id AND s.paid_until > now()), 0)
+    FROM platform_user pu WHERE pu.id = p_partner;
+$$;
+GRANT EXECUTE ON FUNCTION platform_partner_off_preview(uuid) TO shop_app;

@@ -375,6 +375,12 @@ const RULES = [
   { file: 'db/migrations/052_platform.sql', must: 'extract(day FROM now() - tc.touched_at)',
     why: 'Дни молчания — главный столбец воронки: сделка умирает не от отказа, а от того, что о ней забыли' },
 
+  // ── Раздел «Партнёры» ──────────────────────────────────────────────
+  { file: 'db/migrations/052_platform.sql', must: 'brought_period bigint, brought_total bigint',
+    why: 'Привёл денег и заработал — разные числа: партнёр с малой комиссией может приносить платформе больше' },
+  { file: 'server/src/platform/platform.module.ts', must: 'останутся без сопровождения',
+    why: 'Отключение партнёра показывает последствие: его клиенты продолжат работать, но останутся без ведения' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

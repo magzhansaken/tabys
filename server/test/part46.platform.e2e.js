@@ -80,7 +80,7 @@ const shop = async (name, owner) => {
   const id1 = a1.employee.accountId, id2 = a2.employee.accountId;
 
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: null }, SUPER);
-  const partners = (await j('GET', '/platform/partners', null, SUPER)).d;
+  const partners = (await j('GET', '/platform/partners', null, SUPER)).d.rows;
   const pid = partners[0].id;
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: pid }, SUPER);
 
@@ -159,8 +159,8 @@ const shop = async (name, owner) => {
 
   // ---------- ЗАРАБОТОК ПАРТНЁРА ----------
   r = await j('GET', '/platform/partners', null, SUPER);
-  ok(r.d[0].earned30d === 1035, `★ Заработок партнёра за 30 дней: ${r.d[0].earned30d} ₸`);
-  ok(r.d[0].clients === 1, 'Число клиентов партнёра');
+  ok(r.d.rows[0].earned === 1035, `★ Заработок партнёра за 30 дней: ${r.d.rows[0].earned} ₸`);
+  ok(r.d.rows[0].clients === 1, 'Число клиентов партнёра');
 
   r = await j('GET', '/platform/partners', null, PARTNER);
   ok(r.status === 403, 'Партнёр не видит список партнёров');
@@ -608,6 +608,63 @@ const shop = async (name, owner) => {
     v = await j('GET', '/platform/funnel', null, SUPER);
     ok(v.d.stages.flatMap((st) => st.cards).every((c) => c.name !== 'Учебный'),
        'Учебные магазины в воронку не попадают');
+  }
+
+  // ---------- РАЗДЕЛ 6: «ПАРТНЁРЫ» ----------
+  // У донора список плоский: имя, комиссия, число клиентов, заработок
+  // одним числом. Для решения этого мало — решать надо одно: кому
+  // платить и с кем расставаться.
+  {
+    let v = await j('GET', '/platform/partners', null, SUPER);
+    ok(Array.isArray(v.d?.rows) && v.d?.totals,
+       `★ Партнёры: ${v.d?.totals?.partners}, привели ${v.d?.totals?.brought} ₸`);
+
+    const p = v.d.rows[0];
+    // ПРИВЁЛ и ЗАРАБОТАЛ — разные числа, и первое важнее: партнёр с
+    // малой комиссией может приносить платформе больше.
+    ok(typeof p.brought === 'number' && typeof p.earned === 'number' && p.brought >= p.earned,
+       `★ Привёл ${p.brought} ₸, заработал ${p.earned} ₸ — разные числа, и первое важнее`);
+    ok(typeof p.broughtTotal === 'number',
+       'Есть и за всё время: приведший пятерых год назад ценнее приведшего одного вчера');
+
+    // Ушедшие клиенты рядом с заведёнными: партнёр может заводить
+    // много и терять столько же.
+    ok(typeof p.lostClients === 'number',
+       `Ушедшие клиенты видны рядом с активными: ${p.activeClients} работают, ${p.lostClients} ушло`);
+
+    ok(typeof p.mrr === 'number',
+       `★ Сколько его клиенты дают в месяц сейчас: ${p.mrr} ₸ — это будущий доход`);
+
+    ok('neverLoggedIn' in p && 'inactive' in p,
+       'Видно, давно ли заходил: не заходивший месяц скорее всего перестал работать');
+
+    // ПРЕДПРОСМОТР ОТКЛЮЧЕНИЯ — у донора кнопка просто отключала.
+    v = await j('GET', `/platform/partners/${pid}/off-preview`, null, SUPER);
+    ok(/без сопровождения|Клиентов у него нет/.test(v.d?.effect ?? ''),
+       `★ Предпросмотр отключения: «${v.d?.effect}»`);
+    ok(typeof v.d?.activeClients === 'number',
+       'Названо, сколько клиентов останется без партнёра');
+
+    // Отключение закрывает вход, но НЕ трогает клиентов.
+    const before = p.clients;
+    v = await j('PATCH', `/platform/partners/${pid}`, { isActive: false }, SUPER);
+    ok(/Клиенты продолжают работать/.test(v.d?.note ?? ''), 'Сказано, что клиенты не пострадают');
+
+    v = await j('GET', '/platform/partners', null, SUPER);
+    const off = v.d.rows.find((x) => x.id === pid);
+    ok(off.isActive === false && off.clients === before,
+       '★ Вход закрыт, клиенты остались при нём — отключение не наказывает клиентов');
+
+    await j('PATCH', `/platform/partners/${pid}`, { isActive: true }, SUPER);
+
+    // Порядок: кто больше принёс — выше. Владелец читает сверху.
+    v = await j('GET', '/platform/partners', null, SUPER);
+    const brought = v.d.rows.map((x) => x.brought);
+    ok(brought.every((b, i) => i === 0 || brought[i - 1] >= b),
+       '★ Порядок по принесённым деньгам: сверху те, кто кормит платформу');
+
+    v = await j('GET', '/platform/partners', null, PARTNER);
+    ok(v.status === 403, 'Партнёр список партнёров не видит');
   }
 
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------

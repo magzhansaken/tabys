@@ -378,16 +378,73 @@ export class PlatformService {
   }
 
   // ── ПАРТНЁРЫ ────────────────────────────────────────────────────────
-  async partners(ctx: PlatformCtx) {
+  /**
+   * Партнёры: кто продаёт и сколько заработал.
+   *
+   * У донора список плоский: имя, комиссия, число клиентов, заработок
+   * одним числом. Для решения этого мало — а решать здесь надо одно:
+   * кому платить и с кем расставаться.
+   *
+   * ДОБАВЛЕНО: сколько ПРИВЁЛ денег платформе (это другое число, и оно
+   * важнее заработка — партнёр с малой комиссией может приносить
+   * больше), сколько клиентов УШЛО, и давно ли он заходил.
+   */
+  async partners(ctx: PlatformCtx, days = 30) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    return (await this.q(`SELECT * FROM platform_partners()`)).rows
-      .map((r: any) => ({
+    const n = Math.min(365, Math.max(7, Math.floor(Number(days))));
+
+    const rows = (await this.q(`SELECT * FROM platform_partners_full($1)`, [n])).rows;
+
+    return {
+      rows: rows.map((r: any) => ({
         id: r.id, name: r.full_name, email: r.email, phone: r.phone,
-        commissionPercent: r.commission_bp / 100,
-        isActive: r.is_active, lastLoginAt: r.last_login_at,
-        clients: Number(r.clients), activeClients: Number(r.active_clients),
-        earned30d: money(Number(r.earned_30d)),
-      }));
+        commissionPercent: Number(r.commission_bp) / 100,
+        isActive: r.is_active, lastLoginAt: r.last_login_at, createdAt: r.created_at,
+
+        clients: Number(r.clients),
+        activeClients: Number(r.active_clients),
+        lostClients: Number(r.lost_clients),
+
+        earned: money(Number(r.earned_period)),
+        earnedTotal: money(Number(r.earned_total)),
+        brought: money(Number(r.brought_period)),
+        broughtTotal: money(Number(r.brought_total)),
+        mrr: money(Number(r.mrr)),
+
+        daysSilent: r.days_silent,
+        // Не заходил месяц — скорее всего перестал работать, а его
+        // клиенты остались без сопровождения.
+        inactive: r.days_silent != null && r.days_silent >= 30,
+        neverLoggedIn: r.last_login_at == null,
+      })),
+      days: n,
+      totals: {
+        partners: rows.length,
+        brought: money(rows.reduce((a: number, r: any) => a + Number(r.brought_period), 0)),
+        paidOut: money(rows.reduce((a: number, r: any) => a + Number(r.earned_period), 0)),
+      },
+    };
+  }
+
+  /**
+   * Что произойдёт, если отключить партнёра. Опасное действие
+   * показывает последствие ДО нажатия — у донора кнопка просто
+   * отключала.
+   */
+  async partnerOffPreview(ctx: PlatformCtx, id: string) {
+    if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+    const r = (await this.q(`SELECT * FROM platform_partner_off_preview($1)`, [id])).rows[0];
+    if (!r) throw new BadRequestException('Партнёр не найден');
+    return {
+      name: r.full_name,
+      clients: Number(r.clients),
+      activeClients: Number(r.active_clients),
+      mrr: money(Number(r.mrr)),
+      effect: Number(r.clients) === 0
+        ? 'Вход закроется. Клиентов у него нет.'
+        : `Вход закроется. Его ${r.clients} клиентов продолжат работать, `
+          + `но останутся без сопровождения — назначьте им другого партнёра.`,
+    };
   }
 
   async createPartner(ctx: PlatformCtx, d: {
@@ -1293,9 +1350,15 @@ export class PlatformController {
   }
 
   @Public() @Get('partners')
-  partners(@Req() r: any) {
+  partners(@Req() r: any, @Query('days') days?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.partners(Pl(r));
+    return this.svc.partners(Pl(r), days ? Number(days) : 30);
+  }
+
+  @Public() @Get('partners/:id/off-preview')
+  partnerOff(@Req() r: any, @Param('id') id: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.partnerOffPreview(Pl(r), id);
   }
 
   @Public() @Post('partners')
