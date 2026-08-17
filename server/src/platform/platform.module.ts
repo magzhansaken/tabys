@@ -983,6 +983,14 @@ export class PlatformService {
         [accountId, ctx.userId])).rows[0];
       if (!own) throw new ForbiddenException('Это не ваш клиент');
     }
+
+    // Название лежит в другой таблице и закрыто изоляцией — через
+    // функцию. Правка на месте: опечатку гонять через лист
+    // подтверждения незачем, это не деньги.
+    if (d.name?.trim()) {
+      await this.q(`SELECT platform_rename_account($1,$2)`, [accountId, d.name.trim()]);
+    }
+
     await this.q(
       `INSERT INTO tenant_card (account_id, deal_stage, deal_note, city, owner_name, owner_phone, note, touched_at)
        VALUES ($1, coalesce($2,'new'), $3, $4, $5, $6, $7, now())

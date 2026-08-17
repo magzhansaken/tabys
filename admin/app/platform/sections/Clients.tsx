@@ -15,16 +15,17 @@
  */
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
-
-const TABS = [
-  { key: 'all',         label: 'Все' },
-  { key: 'approval',    label: 'Ждут одобрения' },
-  { key: 'active',      label: 'Работают' },
-  { key: 'pending_pay', label: 'Ждут подтверждения' },
-  { key: 'setup',       label: 'Настройка' },
-  { key: 'expired',     label: 'Просрочены' },
-  { key: 'suspended',   label: 'Отключены' },
-];
+import { RowMenu } from '../ui/RowMenu';
+import { BulkPanel } from '../ui/BulkPanel';
+import { InlineText } from '../ui/InlineText';
+import { useAssign } from '../ui/useAssign';
+import { useDeleteTenant } from '../ui/deleteTenant';
+import { useAddDevice } from '../ui/addDevice';
+import { statusView, STATUS_FILTERS, STATUS_FILTERS_PARTNER } from '../ui/status';
+import { useAsk } from '../ui/Ask';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonMetrics, SkeletonTable, Empty } from '../ui/States';
 
 const SORTS = [
   { key: 'due',     label: 'Сначала просроченные' },
@@ -32,16 +33,6 @@ const SORTS = [
   { key: 'revenue', label: 'По выручке магазина' },
   { key: 'name',    label: 'По названию' },
 ];
-
-/** Значки состояний — их классы st-*, оформление в их же файле. */
-const STATE: Record<string, { text: string; cls: string }> = {
-  active:      { text: 'Работает',           cls: 'st-active' },
-  pending_pay: { text: 'Ждёт подтверждения', cls: 'st-pending' },
-  approval:    { text: 'Ждёт одобрения',     cls: 'st-approval' },
-  setup:       { text: 'Настройка',          cls: 'st-setup' },
-  expired:     { text: 'Срок вышел',         cls: 'st-expired' },
-  suspended:   { text: 'Отключён',           cls: 'st-suspended' },
-};
 
 export default function Clients({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
@@ -52,6 +43,13 @@ export default function Clients({ me }: { me: Me }) {
   const [err, setErr] = useState('');
   const [menu, setMenu] = useState<string | null>(null);
   const [shown, setShown] = useState<{ title: string; value: string; note: string } | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const ask = useAsk();
+  const toast = useToast();
+  const assign = useAssign(() => { dropCache(); load(); });
+  const del = useDeleteTenant(() => { dropCache(); load(); });
+  const addDevice = useAddDevice(() => { dropCache(); load(); });
 
   const load = async (f = filter, s = sort, p = partner, search = q) => {
     const u = new URLSearchParams();
@@ -70,8 +68,9 @@ export default function Clients({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <div className="err">{err}</div>;
-  if (!data) return <div className="muted">Загрузка…</div>;
+  // Их состояния: скелетон показывает форму будущего содержимого.
+  if (err && !data) return <Failed text={err} onRetry={() => load()} />;
+  if (!data) return <><SkeletonMetrics count={5} /><SkeletonTable rows={6} cols={7} /></>;
 
   const st = data.stats;
   const c = data.counts;
@@ -137,13 +136,25 @@ export default function Clients({ me }: { me: Me }) {
       </div>
 
       <div className="chips">
-        {TABS.map((t) => (
-          <button key={t.key} className={`chip${filter === t.key ? ' on' : ''}`}
-            onClick={() => { setFilter(t.key); load(t.key, sort, partner, q); }}>
-            {t.label}{c[t.key] ? <b> {c[t.key]}</b> : null}
+        {/* Их порядок: от входящего потока к архиву. Партнёр не
+            одобряет регистрации и не отключает — этих вкладок у него
+            нет вовсе. */}
+        {(isSuper ? STATUS_FILTERS : STATUS_FILTERS_PARTNER).map((t) => (
+          <button key={t.value} className={`chip${filter === t.value ? ' on' : ''}`}
+            onClick={() => { setFilter(t.value); load(t.value, sort, partner, q); }}>
+            {t.label}{c[t.value] ? <b> {c[t.value]}</b> : null}
           </button>
         ))}
       </div>
+
+      {/* Массовые действия: два шага всегда. Сперва сервер отвечает,
+          кого затронет, потом применение — тем же листом, что и
+          одиночное решение. Одинаковые действия выглядят одинаково. */}
+      {isSuper && (
+        <BulkPanel rows={data.rows} selected={selected}
+          onClear={() => setSelected([])}
+          onDone={() => { dropCache(); load(); }} />
+      )}
 
       {err && <div className="err">{err}</div>}
 
@@ -158,10 +169,10 @@ export default function Clients({ me }: { me: Me }) {
       )}
 
       {data.rows.length === 0 ? (
-        <div className="empty">
-          <b>Никого не нашлось</b>
-          <span>Проверьте отбор или поиск. Телефон можно вводить как угодно: +7, 8 или без кода.</span>
-        </div>
+        <Empty title="Никого не нашлось"
+          text="Проверьте отбор или поиск. Телефон можно вводить как угодно: +7, 8 или без кода."
+          actionLabel={filter !== 'all' || q ? 'Показать всех' : undefined}
+          onAction={() => { setFilter('all'); setQ(''); load('all', sort, partner, ''); }} />
       ) : groups.map((g) => (
         <section key={g.key}>
           <div className="partner-strip">
@@ -172,6 +183,7 @@ export default function Clients({ me }: { me: Me }) {
           <table className="grid tenants">
             <thead>
               <tr>
+                {isSuper && <th className="pick" />}
                 <th>Магазин</th>
                 <th>Владелец</th>
                 <th>Статус</th>
@@ -185,8 +197,32 @@ export default function Clients({ me }: { me: Me }) {
             <tbody>
               {g.rows.map((r: any) => (
                 <tr key={r.id}>
+                  {isSuper && (
+                    <td className="pick">
+                      <input type="checkbox" checked={selected.includes(r.id)}
+                        onChange={(e) => setSelected((p) => e.target.checked
+                          ? [...p, r.id] : p.filter((x) => x !== r.id))} />
+                    </td>
+                  )}
                   <td>
-                    <span className="link-name">{r.name}</span>
+                    {/* Правка на месте: опечатку в названии гонять
+                        через лист подтверждения незачем — это не
+                        деньги. Enter сохраняет, Esc возвращает, уход с
+                        поля тоже сохраняет. */}
+                    {/* Название — ССЫЛКА в карточку: по нему кликают
+                        чаще всего. Правка на месте висела бы кражей
+                        клика — человек хочет открыть карточку, а
+                        попадает в поле. Поэтому правка отдельным
+                        значком рядом. */}
+                    <button className="link-name">{r.name}</button>
+                    <InlineText value={r.name} label="название" placeholder="✎"
+                      onSave={async (v) => {
+                        try {
+                          await api(`/clients/${r.id}`, { method: 'PATCH', body: { name: v } });
+                          toast({ text: 'Название изменено' });
+                          dropCache(); await load();
+                        } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                      }} />
                     <div className="sub">
                       {r.city ?? '—'}
                       {r.stores > 1 ? ` · точек ${r.stores}` : ''}
@@ -201,10 +237,16 @@ export default function Clients({ me }: { me: Me }) {
                     </div>}
                   </td>
                   <td>
-                    <span className={`badge ${STATE[r.state]?.cls ?? 'st-unknown'}`}>
-                      {STATE[r.state]?.text ?? r.state}
+                    <span className={`badge ${statusView(r.state).cls}`}>
+                      {statusView(r.state).text}
                     </span>
-                    {r.pendingPayments > 0 && <div className="sub">оплат: {r.pendingPayments}</div>}
+                    {/* Пояснение под плашкой: цвет несёт смысл, но
+                        словами всё равно надо сказать. Их приём. */}
+                    <div className="sub">
+                      {r.pendingPayments > 0
+                        ? `оплат: ${r.pendingPayments}`
+                        : statusView(r.state).hint}
+                    </div>
                   </td>
                   <td>
                     {r.paidUntil ? fullDate(r.paidUntil) : '—'}
@@ -227,38 +269,77 @@ export default function Clients({ me }: { me: Me }) {
                   <td className="actions">
                     <button className="btn small accent">Оплата</button>
                     <button className="btn small">Карточка</button>
-                    <button className="btn small ghost"
-                      onClick={() => setMenu(menu === r.id ? null : r.id)}>···</button>
 
-                    {menu === r.id && (
-                      <div className="row-menu">
-                        <button onClick={async () => {
-                          setMenu(null);
+                    {/* Меню строки: в строке два действия каждого дня,
+                        остальное здесь. Шесть целей по 32 px в правой
+                        колонке — это панель управления, размноженная на
+                        каждого клиента. Их довод. */}
+                    <RowMenu actions={[
+                      { label: 'Код для кассы',
+                        hint: 'одноразовый, живёт 30 минут',
+                        onClick: async () => {
                           try {
                             const x = await api(`/clients/${r.id}/activation`);
                             setShown({ title: 'Код для кассы', value: x.code, note: x.note });
-                          } catch (e: any) { setErr(e.message); }
-                        }}>Код для кассы</button>
-                        <button onClick={async () => {
-                          setMenu(null);
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        } },
+
+                      { label: 'Новый пароль владельцу',
+                        hint: 'показан один раз — продиктуйте',
+                        onClick: async () => {
                           try {
                             const x = await api(`/clients/${r.id}/reset-password`,
                               { method: 'POST', body: { tenantId: r.id } });
-                            setShown({ title: 'Новый пароль владельцу', value: x.password, note: x.note });
-                          } catch (e: any) { setErr(e.message); }
-                        }}>Сбросить пароль</button>
-                        {isSuper && (
-                          <button onClick={async () => {
-                            setMenu(null);
-                            try {
-                              await api(`/clients/${r.id}/status`, { method: 'POST',
-                                body: { active: r.state === 'suspended' } });
-                              dropCache(); await load();
-                            } catch (e: any) { setErr(e.message); }
-                          }}>{r.state === 'suspended' ? 'Разморозить' : 'Заморозить'}</button>
-                        )}
-                      </div>
-                    )}
+                            setShown({ title: 'Новый пароль владельцу',
+                                       value: x.password, note: x.note });
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        } },
+
+                      { label: 'Добавить устройство…',
+                        hint: 'касса или точка, с доплатой',
+                        onClick: () => addDevice(r) },
+
+                      ...(isSuper ? [{
+                        label: r.partner ? 'Передать другому партнёру…' : 'Назначить партнёра…',
+                        hint: 'доля считается с будущих оплат',
+                        onClick: () => assign(r, data.partners),
+                      }] : []),
+
+                      ...(isSuper ? [{
+                        label: r.state === 'suspended' ? 'Включить магазин' : 'Отключить магазин',
+                        hint: r.state === 'suspended'
+                          ? 'продажи снова откроются'
+                          : 'продажи закроются, кабинет останется',
+                        danger: r.state !== 'suspended',
+                        onClick: async () => {
+                          const on = r.state === 'suspended';
+                          const ok = await ask({
+                            title: on ? `Включить «${r.name}»` : `Отключить «${r.name}»`,
+                            effects: [
+                              ['Магазин', r.name],
+                              ['Продажи', on ? 'откроются' : 'закроются'],
+                              ['Кабинет владельца', 'останется открытым'],
+                            ],
+                            danger: !on,
+                            confirmLabel: on ? 'Включить' : 'Отключить',
+                          });
+                          if (!ok) return;
+                          try {
+                            await api(`/clients/${r.id}/status`,
+                              { method: 'POST', body: { active: on } });
+                            toast({ text: on ? `«${r.name}» включён` : `«${r.name}» отключён` });
+                            dropCache(); await load();
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        },
+                      }] : []),
+
+                      ...(isSuper ? [{
+                        label: 'Удалить магазин…',
+                        hint: 'две ступени, набор названия',
+                        danger: true,
+                        onClick: () => del(r),
+                      }] : []),
+                    ]} />
                   </td>
                 </tr>
               ))}

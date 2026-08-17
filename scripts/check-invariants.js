@@ -465,6 +465,15 @@ const RULES = [
   { file: 'admin/app/platform/sections/Today.tsx', must: 'setLeaving',
     why: 'Карточка уходит плавно, а не пропадает рывком: видно, что действие сработало именно с ней' },
 
+  { file: 'admin/app/platform/ui/RowMenu.tsx', must: 'createPortal',
+    why: 'Меню строки рисуется поверх таблицы: иначе последняя строка обрезает его нижним краем' },
+  { file: 'admin/app/platform/ui/InlineText.tsx', must: 'onBlur={commit}',
+    why: 'Уход с поля сохраняет: человек не должен помнить, какая кнопка «настоящая»' },
+  { file: 'admin/app/platform/ui/deleteTenant.ts', must: 'mustEqual: String(Math.round(client.revenue30d',
+    why: 'Первая ступень удаления — набрать выручку: смотришь на цифру продаж и часто передумываешь' },
+  { file: 'admin/app/platform/ui/useAssign.ts', must: 'не пересчитываются',
+    why: 'Про деньги сказано прямо: доля замораживается при подтверждении, прошлые выплаты не меняются' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

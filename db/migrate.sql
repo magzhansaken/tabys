@@ -144,5 +144,8 @@
 \echo '--- 058 общая роль владельца ---'
 \i db/migrations/058_owner_role_fix.sql
 
+\echo '--- 059 правка названия магазина ---'
+\i db/migrations/059_rename_account.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
