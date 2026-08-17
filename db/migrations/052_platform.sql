@@ -610,3 +610,131 @@ BEGIN
   RETURN QUERY SELECT v_code, now() + interval '30 minutes', v_reg.name;
 END; $$;
 GRANT EXECUTE ON FUNCTION platform_pairing_code(uuid) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 1: «СЕГОДНЯ» — лента решений.
+--
+-- Замысел взят у донора и он верный: день начинается не со списка
+-- клиентов, а с решений. Кто просрочен, что пришло сегодня, что висит
+-- со вчера, кому платить на неделе.
+--
+-- ОДНИМ ЗАПРОСОМ, а не четырьмя. У донора экран собирал ленту в
+-- браузере из четырёх ответов: список клиентов, оплаты, заявки,
+-- партнёры. Это четыре ожидания подряд на стартовом экране, который
+-- открывают первым делом с утра — и половина данных приходит уже
+-- устаревшей относительно другой половины.
+--
+-- ЧЕТЫРЕ ОЧЕРЕДИ, порядок важен:
+--   overdue — деньги уже потеряны, каждый день считается;
+--   today   — свежее, пока помнят разговор;
+--   waiting — висит со вчера и раньше;
+--   soon    — семь дней и меньше до оплаты.
+--
+-- Учебные магазины исключены отовсюду: они не участвуют в деньгах.
+-- =====================================================================
+CREATE OR REPLACE FUNCTION platform_today(p_role text, p_user uuid)
+RETURNS TABLE (
+  id text, grp text, kind text,
+  account_id uuid, client text,
+  what text, why text, meta text,
+  amount bigint, sort_key numeric,
+  payment_id uuid, request_id uuid)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  -- 1. Просроченные: срок вышел, продажи закрыты, деньги теряются.
+  SELECT 'overdue-' || a.id, 'overdue', 'tenant', a.id, a.name,
+         'Срок вышел ' || abs(extract(day FROM now() - s.paid_until)::int) || ' дн. назад',
+         NULL,
+         concat_ws(' · ', tc.city, tc.owner_name, tc.owner_phone),
+         coalesce(t.price_month, 0)::bigint * 100,
+         -extract(epoch FROM now() - s.paid_until) / 86400,
+         NULL::uuid, NULL::uuid
+    FROM account a
+    JOIN subscription s ON s.account_id = a.id
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN tariff t ON t.id = s.tariff_id
+   WHERE a.deleted_at IS NULL AND coalesce(tc.is_demo, false) = false
+     AND s.paid_until < now()
+     AND (p_role = 'super' OR tc.partner_id = p_user)
+
+  UNION ALL
+  -- 2. Оплаты на подтверждении. Сегодняшние — в «пришло сегодня»,
+  --    вчерашние и старше — в «ждёт решения»: висящая оплата означает,
+  --    что клиент заплатил и ждёт, а доступ ему до сих пор не открыли.
+  SELECT 'pay-' || tp.id,
+         CASE WHEN tp.created_at::date = current_date THEN 'today' ELSE 'waiting' END,
+         'payment', a.id, a.name,
+         'Оплата ' || round(tp.amount / 100.0) || ' ₸ · ' || tp.months || ' мес.',
+         tp.comment,
+         concat_ws(' · ', tc.city, tc.owner_name, pu.full_name),
+         tp.amount,
+         extract(epoch FROM tp.created_at) / 86400,
+         tp.id, NULL::uuid
+    FROM tenant_payment tp
+    JOIN account a ON a.id = tp.account_id
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN platform_user pu ON pu.id = tp.partner_id
+   WHERE tp.status = 'pending'
+     AND (p_role = 'super' OR tp.partner_id = p_user)
+
+  UNION ALL
+  -- 3. Заявки партнёров: вторая касса, отсрочка, смена тарифа.
+  SELECT 'req-' || tr.id,
+         CASE WHEN tr.created_at::date = current_date THEN 'today' ELSE 'waiting' END,
+         'request', a.id, a.name,
+         CASE tr.kind
+           WHEN 'device' THEN 'Просит устройство'
+           WHEN 'tariff' THEN 'Просит смену тарифа'
+           WHEN 'grace'  THEN 'Просит отсрочку'
+           ELSE 'Заявка' END,
+         tr.comment,
+         concat_ws(' · ', tc.city, pu.full_name),
+         NULL::bigint,
+         extract(epoch FROM tr.created_at) / 86400,
+         NULL::uuid, tr.id
+    FROM tenant_request tr
+    JOIN account a ON a.id = tr.account_id
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN platform_user pu ON pu.id = tr.created_by
+   WHERE tr.status = 'pending'
+     AND (p_role = 'super' OR tr.created_by = p_user)
+
+  UNION ALL
+  -- 4. Самозаписи: владелец зарегистрировался сам и ждёт одобрения.
+  --    Пока не одобрили — он не может работать, а мы теряем клиента.
+  SELECT 'signup-' || a.id,
+         CASE WHEN a.created_at::date = current_date THEN 'today' ELSE 'waiting' END,
+         'signup', a.id, a.name,
+         'Регистрация: владелец завёл магазин сам',
+         NULL,
+         concat_ws(' · ', tc.city, tc.owner_name, a.phone),
+         NULL::bigint,
+         extract(epoch FROM a.created_at) / 86400,
+         NULL::uuid, NULL::uuid
+    FROM account a
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+   WHERE a.deleted_at IS NULL AND a.status = 'trial'
+     AND coalesce(tc.is_demo, false) = false
+     AND tc.partner_id IS NULL          -- ничей: партнёр ещё не назначен
+     AND p_role = 'super'
+
+  UNION ALL
+  -- 5. Скоро платить: семь дней и меньше. Звонок сейчас уместен,
+  --    а через неделю выглядит выбиванием долга.
+  SELECT 'soon-' || a.id, 'soon', 'tenant', a.id, a.name,
+         'Платить через ' || extract(day FROM s.paid_until - now())::int || ' дн.',
+         NULL,
+         concat_ws(' · ', tc.city, tc.owner_name, tc.owner_phone),
+         coalesce(t.price_month, 0)::bigint * 100,
+         extract(epoch FROM s.paid_until - now()) / 86400,
+         NULL::uuid, NULL::uuid
+    FROM account a
+    JOIN subscription s ON s.account_id = a.id
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN tariff t ON t.id = s.tariff_id
+   WHERE a.deleted_at IS NULL AND coalesce(tc.is_demo, false) = false
+     AND s.paid_until BETWEEN now() AND now() + interval '7 days'
+     AND (p_role = 'super' OR tc.partner_id = p_user)
+
+  ORDER BY 2, 10;
+$$;
+GRANT EXECUTE ON FUNCTION platform_today(text, uuid) TO shop_app;

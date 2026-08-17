@@ -345,6 +345,12 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: "kind='base' AND ends_at IS NULL",
     why: 'Смена тарифа трогает только основную строку: доплаты за устройства и скидки — отдельные договорённости с клиентом' },
 
+  // ── Раздел «Сегодня» ───────────────────────────────────────────────
+  { file: 'db/migrations/052_platform.sql', must: 'CREATE OR REPLACE FUNCTION platform_today',
+    why: 'Лента собирается ОДНИМ запросом: у донора экран склеивал четыре ответа, и половина данных приходила устаревшей' },
+  { file: 'server/src/platform/platform.module.ts', must: "approve: r.kind === 'payment' && ctx.role === 'super'",
+    why: 'Партнёру денежные кнопки не рисуются: мёртвая кнопка «нельзя» хуже отсутствующей' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

@@ -351,6 +351,41 @@ const shop = async (name, owner) => {
     ok(v.status === 403, 'Партнёр не удаляет клиентов');
   }
 
+  // ---------- РАЗДЕЛ 1: «СЕГОДНЯ» ----------
+  // Лента решений на утро. Замысел донора: день начинается не со
+  // списка клиентов, а с того, что требует решения сегодня.
+  {
+    let v = await j('GET', '/platform/today', null, SUPER);
+    ok(Array.isArray(v.d?.groups), '★ «Сегодня» отдаёт ленту очередей');
+
+    const byKey = Object.fromEntries((v.d.groups ?? []).map((g) => [g.key, g]));
+    ok(!!byKey.today?.items?.length,
+       `★ Пришло сегодня: ${byKey.today?.items?.length} — свежее, пока помнят разговор`);
+
+    const pay = (byKey.today?.items ?? []).find((x) => x.kind === 'payment');
+    ok(pay && pay.amount > 0 && pay.client && pay.paymentId,
+       `★ Оплата в ленте: ${pay?.amount} ₸ от «${pay?.client}» — видно, кого касается`);
+    ok(pay?.can?.approve === true, 'Владелец платформы может подтвердить прямо из ленты');
+    ok(pay?.meta && pay.meta.length > 0,
+       `Рядом контакты, чтобы позвонить не выходя из ленты: «${pay?.meta}»`);
+
+    // Порядок групп важен: просроченные первыми, «скоро платить»
+    // последними. Владелец читает сверху вниз и до конца не доходит.
+    const order = (v.d.groups ?? []).map((g) => g.key);
+    const iOver = order.indexOf('overdue'), iSoon = order.indexOf('soon');
+    ok(iOver === -1 || iSoon === -1 || iOver < iSoon,
+       '★ Просроченные выше «скоро платить»: сверху то, где деньги уже теряются');
+
+    // Партнёру денежные кнопки не рисуем: он их всё равно не нажмёт,
+    // а мёртвая кнопка хуже отсутствующей.
+    v = await j('GET', '/platform/today', null, PARTNER);
+    const all = (v.d.groups ?? []).flatMap((g) => g.items);
+    ok(all.length > 0, `Партнёр видит свою ленту: ${all.length} дел`);
+    ok(all.every((x) => x.can.approve === false && x.can.decide === false),
+       '★ Партнёру денежные решения НЕ показываются — рисовать «нельзя» нечестно');
+    ok(all.every((x) => x.can.call === true), 'Но позвонить клиенту он может всегда');
+  }
+
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
   // Дописано по сверке с донором: у них 39 методов, у нас было 30.
   {

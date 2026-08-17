@@ -63,6 +63,64 @@ export class PlatformService {
     return { token, user: { id: u.id, name: u.full_name, email: u.email, role: u.role } };
   }
 
+  // ── РАЗДЕЛ «СЕГОДНЯ» ────────────────────────────────────────────────
+  /**
+   * Лента решений на утро. Замысел донора: день начинается не со
+   * списка клиентов, а с того, что требует решения сегодня.
+   *
+   * ОДНИМ ЗАПРОСОМ. У донора экран собирал ленту в браузере из четырёх
+   * ответов — четыре ожидания подряд на стартовом экране, и половина
+   * данных приходит устаревшей относительно другой половины.
+   *
+   * Партнёру не показываем то, чего он не может: денежные решения
+   * принимает платформа, и рисовать ему кнопки, которые ответят
+   * «нельзя», нечестно.
+   */
+  async today(ctx: PlatformCtx) {
+    const rows = (await this.q(
+      `SELECT * FROM platform_today($1, $2)`, [ctx.role, ctx.userId])).rows;
+
+    const groups: Record<string, any> = {
+      overdue: { key: 'overdue', title: 'Просрочены',
+                 hint: 'деньги уже потеряны, каждый день считается', items: [] },
+      today:   { key: 'today', title: 'Пришло сегодня',
+                 hint: 'свежее — пока помнят разговор', items: [] },
+      waiting: { key: 'waiting', title: 'Ждёт решения',
+                 hint: 'висит со вчера и раньше', items: [] },
+      soon:    { key: 'soon', title: 'Скоро платить',
+                 hint: 'семь дней и меньше', items: [] },
+    };
+
+    for (const r of rows) {
+      groups[r.grp]?.items.push({
+        id: r.id, kind: r.kind,
+        accountId: r.account_id, client: r.client,
+        what: r.what, why: r.why, meta: r.meta,
+        amount: r.amount == null ? null : money(Number(r.amount)),
+        paymentId: r.payment_id, requestId: r.request_id,
+        // Что можно сделать прямо из ленты. Партнёру денежные решения
+        // не показываем — он их всё равно не примет.
+        can: {
+          approve: r.kind === 'payment' && ctx.role === 'super',
+          decide:  r.kind === 'request' && ctx.role === 'super',
+          signup:  r.kind === 'signup'  && ctx.role === 'super',
+          call:    true,
+        },
+      });
+    }
+
+    const list = Object.values(groups).filter((g: any) => g.items.length);
+    return {
+      groups: list,
+      total: rows.length,
+      // Пустая лента — это хорошая новость, и сказать об этом надо
+      // словами: пустой экран читается как поломка.
+      empty: rows.length === 0
+        ? 'Ничего не ждёт решения. Просроченных нет, оплаты подтверждены, заявок нет.'
+        : null,
+    };
+  }
+
   // ── СПИСОК КЛИЕНТОВ ─────────────────────────────────────────────────
   /**
    * Что видно в списке — набор столбцов взят у донора, он обкатан:
@@ -1036,6 +1094,12 @@ export class PlatformController {
   clients(@Req() r: any, @Query('q') q?: string) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.clients(Pl(r), q);
+  }
+
+  @Public() @Get('today')
+  today(@Req() r: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.today(Pl(r));
   }
 
   @Public() @Get('summary')
