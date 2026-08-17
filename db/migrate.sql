@@ -123,5 +123,8 @@
 \echo '--- 052 платформа: партнёры, строки счёта, оплаты ---'
 \i db/migrations/052_platform.sql
 
+\echo '--- 053 разделы кабинета платформы ---'
+\i db/migrations/053_platform_sections.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

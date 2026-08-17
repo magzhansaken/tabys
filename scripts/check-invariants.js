@@ -340,37 +340,37 @@ const RULES = [
     why: 'Смена тарифа трогает только основную строку: доплаты за устройства и скидки — отдельные договорённости с клиентом' },
 
   // ── Раздел «Сегодня» ───────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'CREATE OR REPLACE FUNCTION platform_today',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'CREATE OR REPLACE FUNCTION platform_today',
     why: 'Лента собирается ОДНИМ запросом: у донора экран склеивал четыре ответа, и половина данных приходила устаревшей' },
   { file: 'server/src/platform/platform.module.ts', must: "approve: r.kind === 'payment' && ctx.role === 'super'",
     why: 'Партнёру денежные кнопки не рисуются: мёртвая кнопка «нельзя» хуже отсутствующей' },
 
   // ── Раздел «Клиенты» ───────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'platform_clients_filtered',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'platform_clients_filtered',
     why: 'Отбор в базе, а не в браузере: при сотне клиентов лишние сотни строк по сети на каждое нажатие' },
-  { file: 'db/migrations/052_platform.sql', must: 'ORDER BY (p.days_left IS NULL), p.days_left',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'ORDER BY (p.days_left IS NULL), p.days_left',
     why: 'Порядок по срочности: просроченные сверху — владелец читает сверху и до конца не доходит' },
 
   // ── Раздел «Деньги» ────────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'period_from = v_from, period_to = v_until',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'period_from = v_from, period_to = v_until',
     why: 'Оплаченный отрезок пишется при подтверждении и не пересчитывается: у донора он плыл от любой правки в цепочке' },
-  { file: 'db/migrations/052_platform.sql', must: "FILTER (WHERE p.status = 'approved') OVER ()",
+  { file: 'db/migrations/053_platform_sections.sql', must: "FILTER (WHERE p.status = 'approved') OVER ()",
     why: 'В доход идут только подтверждённые: ждущие и отклонённые — это ещё не деньги' },
 
   // ── Раздел «Заявки» ────────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'platform_request_preview',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'platform_request_preview',
     why: 'Одобрение показывает последствие ДО нажатия: у донора кнопка просто делала, и увидеть результат можно было только после' },
-  { file: 'db/migrations/052_platform.sql', must: "v_effect := 'Строка счёта добавлена'",
+  { file: 'db/migrations/053_platform_sections.sql', must: "v_effect := 'Строка счёта добавлена'",
     why: 'Одобрение само выполняет действие: иначе возможно «одобрено, но не сделано» — все считают, что сделано' },
 
   // ── Раздел «Воронка» ───────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'coalesce(tc.stage_manual, false) THEN',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'coalesce(tc.stage_manual, false) THEN',
     why: 'Ручной этап сильнее выведенного из фактов: человек знает о клиенте больше, чем база' },
-  { file: 'db/migrations/052_platform.sql', must: 'extract(day FROM now() - tc.touched_at)',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'extract(day FROM now() - tc.touched_at)',
     why: 'Дни молчания — главный столбец воронки: сделка умирает не от отказа, а от того, что о ней забыли' },
 
   // ── Раздел «Партнёры» ──────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: 'brought_period bigint, brought_total bigint',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'brought_period bigint, brought_total bigint',
     why: 'Привёл денег и заработал — разные числа: партнёр с малой комиссией может приносить платформе больше' },
   { file: 'server/src/platform/platform.module.ts', must: 'останутся без сопровождения',
     why: 'Отключение партнёра показывает последствие: его клиенты продолжат работать, но останутся без ведения' },
@@ -378,13 +378,13 @@ const RULES = [
   // ── Раздел «Сводка» ────────────────────────────────────────────────
   { file: 'server/src/automation/scheduler.module.ts', must: 'platform_snapshot',
     why: 'Срез пишет запускальщик раз в сутки: у донора он писался при открытии экрана — не заходил неделю, недели в истории нет' },
-  { file: 'db/migrations/052_platform.sql', must: 'generate_series(current_date',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'generate_series(current_date',
     why: 'Дни без событий тоже в ряду: пропуск в графике читается как сбой, а не как «в тот день не платили»' },
 
   // ── Раздел «Журнал» ────────────────────────────────────────────────
-  { file: 'db/migrations/052_platform.sql', must: "WHEN 'payment_approved'    THEN 'Оплата подтверждена'",
+  { file: 'db/migrations/053_platform_sections.sql', must: "WHEN 'payment_approved'    THEN 'Оплата подтверждена'",
     why: 'Записи описываются словами на сервере: у донора кабинет переводил сам, и новое действие показывалось кодом' },
-  { file: 'db/migrations/052_platform.sql', must: 'p_before IS NULL OR pa.at < p_before',
+  { file: 'db/migrations/053_platform_sections.sql', must: 'p_before IS NULL OR pa.at < p_before',
     why: 'Листание по времени последней записи, а не по номеру страницы: журнал растёт, и номера съезжают' },
 
   // ── Кабинет платформы (свой, восемь разделов) ──────────────────────
@@ -396,6 +396,9 @@ const RULES = [
     why: 'Подпись под итогами объясняет, что посчитано: цифра без пояснения при отборе вводит в заблуждение' },
   { dir: 'admin/app/platform', mustNotContainText: 'window.confirm(',
     why: 'Опасные действия показывают последствие своим окном, а не системным вопросом' },
+
+  { file: 'db/migrations/053_platform_sections.sql', must: 'ПО ИМЕНИ ФАЙЛА',
+    why: 'Правки в уже применённую миграцию на сервер НЕ попадают: развёртывание говорит «уже применена» и идёт дальше — молча. Новое всегда новым файлом' },
 
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
