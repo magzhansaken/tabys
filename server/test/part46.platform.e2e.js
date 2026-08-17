@@ -560,6 +560,56 @@ const shop = async (name, owner) => {
     ok(v.status === 403, '★ Партнёр подаёт заявки, но не решает по ним');
   }
 
+  // ---------- РАЗДЕЛ 5: «ВОРОНКА» ----------
+  // Этап ВЫВОДИТСЯ ИЗ ФАКТОВ, пока его не двигали руками. Ручной сдвиг
+  // сильнее: человек знает о клиенте больше, чем база.
+  {
+    let v = await j('GET', '/platform/funnel', null, SUPER);
+    ok(Array.isArray(v.d?.stages) && v.d.stages.length === 5,
+       `★ Пять этапов воронки, всего карточек ${v.d?.total}`);
+    ok(v.d.stages.every((st) => st.title && st.hint),
+       'У каждого этапа подсказка — что он значит');
+
+    const all = v.d.stages.flatMap((st) => st.cards);
+    const paid = all.find((c) => c.derivedStage === 'paid');
+    ok(!!paid, '★ Кто платил — выведен в «Оплатил» автоматически, без ручной работы');
+    ok(paid.isManual === false, 'И помечен как выведенный, а не поставленный руками');
+
+    ok(v.d.stages.every((st) => typeof st.sum === 'number'),
+       '★ На каждом этапе видна СУММА: воронка про деньги, а не про карточки');
+
+    // Сколько дней молчим — сделка умирает не от отказа, а от того,
+    // что о ней забыли.
+    ok(all.some((c) => c.daysSilent != null),
+       'Видно, сколько дней не общались с клиентом');
+
+    // РУЧНОЙ СДВИГ СИЛЬНЕЕ. Клиент заплатил, но закрылся — партнёр
+    // знает это, а база нет.
+    v = await j('POST', `/platform/funnel/${paid.id}`,
+      { stage: 'lost', note: 'Закрылся, магазин продан' }, SUPER);
+    ok(/сильнее/.test(v.d?.note ?? ''), 'Сказано, что ручной этап сильнее');
+
+    v = await j('GET', '/platform/funnel', null, SUPER);
+    const moved = v.d.stages.flatMap((st) => st.cards).find((c) => c.id === paid.id);
+    ok(moved.stage === 'lost' && moved.derivedStage === 'paid' && moved.isManual,
+       '★ Карточка в «Отказе», хотя факты говорят «оплатил» — человек знает больше');
+    ok(moved.note === 'Закрылся, магазин продан',
+       'Заметка сохранена: через месяц никто не вспомнит, почему отказ');
+
+    // Неизвестный этап отбивается.
+    v = await j('POST', `/platform/funnel/${paid.id}`, { stage: 'придумал' }, SUPER);
+    ok(v.status === 400, 'Несуществующий этап отбит');
+
+    // Партнёр двигает только своих.
+    v = await j('POST', `/platform/funnel/${id2}`, { stage: 'lost' }, PARTNER);
+    ok(v.status === 403, '★ Партнёр не двигает чужие карточки');
+
+    // Учебные магазины в воронке не участвуют.
+    v = await j('GET', '/platform/funnel', null, SUPER);
+    ok(v.d.stages.flatMap((st) => st.cards).every((c) => c.name !== 'Учебный'),
+       'Учебные магазины в воронку не попадают');
+  }
+
   // ---------- ПОЛНЫЙ НАБОР ДЕЙСТВИЙ ПЛАТФОРМЫ ----------
   // Дописано по сверке с донором: у них 39 методов, у нас было 30.
   {

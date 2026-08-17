@@ -1138,3 +1138,104 @@ BEGIN
   RETURN QUERY SELECT v_r.account_id, v_r.kind, v_effect;
 END; $$;
 GRANT EXECUTE ON FUNCTION platform_request_decide(uuid, uuid, boolean, text) TO shop_app;
+
+-- =====================================================================
+-- РАЗДЕЛ 5: «ВОРОНКА» — от знакомства до оплаты.
+--
+-- Замысел донора взят целиком и он умный: этап ВЫВОДИТСЯ ИЗ ФАКТОВ,
+-- пока его не двигали руками. Заплатил — «Оплатил». Идёт пробный —
+-- «Пробный». Ручной сдвиг сильнее вывода: человек знает о клиенте
+-- больше, чем база.
+--
+-- СДЕЛАНО ЛУЧШЕ: вывод считается на СЕРВЕРЕ, а не в браузере. У донора
+-- этап вычислялся при отрисовке — значит два человека, открывшие
+-- воронку одновременно, могли увидеть разное, и никто из них не понял
+-- бы почему.
+--
+-- Плюс мы храним, ВЫВЕДЕН этап или поставлен руками. У донора это было
+-- неразличимо: колонка «Оплатил» могла означать и «система увидела
+-- оплату», и «партнёр перетащил карточку». Разница важна — вторая
+-- держится, даже если оплата отклонена.
+-- =====================================================================
+ALTER TABLE tenant_card
+  ADD COLUMN IF NOT EXISTS stage_manual boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN tenant_card.stage_manual IS
+  'true = этап поставлен руками и сильнее вывода из фактов';
+
+/**
+ * Воронка: карточки по этапам с выводом из фактов.
+ *
+ * Пять этапов, как у донора:
+ *   new       — нашли, ещё не говорили;
+ *   contacted — разговор идёт;
+ *   trial     — работает бесплатно;
+ *   paid      — деньги пришли;
+ *   lost      — не сложилось.
+ */
+CREATE OR REPLACE FUNCTION platform_funnel(p_role text, p_user uuid, p_partner uuid DEFAULT NULL)
+RETURNS TABLE (
+  id uuid, name text, city text, owner_name text, owner_phone text,
+  stage text, stage_manual boolean, derived_stage text,
+  deal_note text, touched_at timestamptz, days_silent integer,
+  paid_until timestamptz, days_left integer, monthly bigint,
+  partner_id uuid, partner_name text, created_at timestamptz)
+SECURITY DEFINER SET search_path = public LANGUAGE sql STABLE AS $$
+  SELECT a.id, a.name, tc.city, tc.owner_name, tc.owner_phone,
+         -- Ручной этап сильнее выведенного: человек знает больше базы.
+         CASE WHEN coalesce(tc.stage_manual, false) THEN coalesce(tc.deal_stage, 'new')
+              ELSE d.derived END,
+         coalesce(tc.stage_manual, false),
+         d.derived,
+         tc.deal_note, tc.touched_at,
+         -- Сколько дней молчим. Главный столбец воронки: сделка
+         -- умирает не от отказа, а от того, что о ней забыли.
+         CASE WHEN tc.touched_at IS NULL THEN NULL
+              ELSE extract(day FROM now() - tc.touched_at)::int END,
+         s.paid_until,
+         CASE WHEN s.paid_until IS NULL THEN NULL
+              ELSE ceil(extract(epoch FROM s.paid_until - now()) / 86400)::int END,
+         coalesce(
+           (SELECT sum(pl.unit_price * pl.qty) FROM plan_line pl
+             WHERE pl.account_id = a.id AND pl.ends_at IS NULL),
+           coalesce(t.price_month, 0) * 100)::bigint,
+         tc.partner_id, pu.full_name, a.created_at
+    FROM account a
+    LEFT JOIN tenant_card tc ON tc.account_id = a.id
+    LEFT JOIN platform_user pu ON pu.id = tc.partner_id
+    LEFT JOIN subscription s ON s.account_id = a.id
+    LEFT JOIN tariff t ON t.id = s.tariff_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        -- Порядок важен: сначала самые определённые факты.
+        WHEN EXISTS (SELECT 1 FROM tenant_payment tp
+                      WHERE tp.account_id = a.id AND tp.status = 'approved') THEN 'paid'
+        WHEN a.deleted_at IS NOT NULL OR a.status = 'suspended' THEN 'lost'
+        WHEN s.paid_until > now() THEN 'trial'
+        WHEN tc.touched_at IS NOT NULL THEN 'contacted'
+        ELSE 'new' END AS derived
+    ) d
+   WHERE a.deleted_at IS NULL
+     AND coalesce(tc.is_demo, false) = false      -- учебные не в воронке
+     AND (p_role = 'super' OR tc.partner_id = p_user)
+     AND (p_partner IS NULL OR tc.partner_id = p_partner)
+   ORDER BY tc.touched_at NULLS FIRST, a.created_at DESC
+   LIMIT 500;
+$$;
+GRANT EXECUTE ON FUNCTION platform_funnel(text, uuid, uuid) TO shop_app;
+
+/** Сдвинуть карточку по воронке. Ручной сдвиг помечается как ручной. */
+CREATE OR REPLACE FUNCTION platform_funnel_move(
+  p_account uuid, p_stage text, p_note text DEFAULT NULL)
+RETURNS void
+SECURITY DEFINER SET search_path = public LANGUAGE sql AS $$
+  INSERT INTO tenant_card (account_id, deal_stage, stage_manual, deal_note, touched_at)
+  VALUES (p_account, p_stage, true, p_note, now())
+  ON CONFLICT (account_id) DO UPDATE SET
+    deal_stage = p_stage,
+    stage_manual = true,
+    deal_note = coalesce(p_note, tenant_card.deal_note),
+    touched_at = now(),
+    updated_at = now();
+$$;
+GRANT EXECUTE ON FUNCTION platform_funnel_move(uuid, text, text) TO shop_app;

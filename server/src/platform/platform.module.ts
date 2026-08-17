@@ -1121,6 +1121,84 @@ export class PlatformService {
     return { ok: true, note: 'Клиенты увидят новые реквизиты сразу' };
   }
 
+  // ── РАЗДЕЛ «ВОРОНКА» ────────────────────────────────────────────────
+  /**
+   * Воронка: карточки по этапам.
+   *
+   * Замысел донора: этап ВЫВОДИТСЯ ИЗ ФАКТОВ, пока его не двигали
+   * руками. Заплатил — «Оплатил», идёт пробный — «Пробный». Ручной
+   * сдвиг сильнее: человек знает о клиенте больше, чем база.
+   *
+   * СДЕЛАНО ЛУЧШЕ: вывод считает СЕРВЕР. У донора этап вычислялся при
+   * отрисовке — два человека, открывшие воронку одновременно, могли
+   * увидеть разное и не понять почему.
+   *
+   * Плюс различаем выведенный этап и поставленный руками. У донора это
+   * было неразличимо: «Оплатил» означало и «система увидела оплату», и
+   * «партнёр перетащил карточку».
+   */
+  async funnel(ctx: PlatformCtx, partnerId?: string) {
+    const rows = (await this.q(
+      `SELECT * FROM platform_funnel($1,$2,$3)`,
+      [ctx.role, ctx.userId, partnerId || null])).rows;
+
+    const stages = [
+      { key: 'new',       title: 'Новые',     hint: 'нашли, ещё не говорили' },
+      { key: 'contacted', title: 'Связались', hint: 'разговор идёт' },
+      { key: 'trial',     title: 'Пробный',   hint: 'работает бесплатно' },
+      { key: 'paid',      title: 'Оплатил',   hint: 'деньги пришли' },
+      { key: 'lost',      title: 'Отказ',     hint: 'не сложилось' },
+    ].map((st) => ({ ...st, cards: [] as any[], sum: 0 }));
+
+    const byKey = Object.fromEntries(stages.map((s) => [s.key, s]));
+
+    for (const r of rows) {
+      const card = {
+        id: r.id, name: r.name, city: r.city,
+        owner: r.owner_name, ownerPhone: r.owner_phone,
+        stage: r.stage, isManual: r.stage_manual, derivedStage: r.derived_stage,
+        note: r.deal_note, touchedAt: r.touched_at,
+        // Сколько дней молчим — главный столбец воронки: сделка умирает
+        // не от отказа, а от того, что о ней забыли.
+        daysSilent: r.days_silent,
+        cold: r.days_silent != null && r.days_silent >= 7,
+        paidUntil: r.paid_until, daysLeft: r.days_left,
+        monthly: money(Number(r.monthly)),
+        partner: r.partner_name, partnerId: r.partner_id,
+        createdAt: r.created_at,
+      };
+      const st = byKey[r.stage] ?? byKey.new;
+      st.cards.push(card);
+      st.sum += card.monthly;
+    }
+
+    return {
+      stages: stages.map((s) => ({ ...s, count: s.cards.length })),
+      // Сколько денег стоит на каждом этапе — это и есть смысл воронки:
+      // видно, где застревают деньги, а не просто карточки.
+      total: rows.length,
+    };
+  }
+
+  /** Сдвинуть карточку. Ручной сдвиг сильнее вывода из фактов. */
+  async funnelMove(ctx: PlatformCtx, accountId: string, stage: string, note?: string) {
+    const ok = ['new', 'contacted', 'trial', 'paid', 'lost'];
+    if (!ok.includes(stage)) throw new BadRequestException('Неизвестный этап');
+
+    if (ctx.role === 'partner') {
+      const own = (await this.q(
+        `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
+        [accountId, ctx.userId])).rows[0];
+      if (!own) throw new ForbiddenException('Это не ваш клиент');
+    }
+
+    await this.q(`SELECT platform_funnel_move($1,$2,$3)`,
+      [accountId, stage, note?.trim() ?? null]);
+    await this.audit(ctx, 'funnel_moved', accountId, { stage, note });
+    return { ok: true,
+      note: 'Этап поставлен руками — он сильнее того, что система выводит из фактов' };
+  }
+
   // ── ЖУРНАЛ ──────────────────────────────────────────────────────────
   private async audit(ctx: PlatformCtx, action: string, accountId: string | null, details: any) {
     await this.q(
@@ -1448,6 +1526,18 @@ export class PlatformController {
   savePaySettings(@Req() r: any, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.savePaySettings(Pl(r), d ?? {});
+  }
+
+  @Public() @Get('funnel')
+  funnel(@Req() r: any, @Query('partnerId') pid?: string) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.funnel(Pl(r), pid);
+  }
+
+  @Public() @Post('funnel/:id')
+  funnelMove(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.funnelMove(Pl(r), id, d?.stage, d?.note);
   }
 
   @Public() @Get('audit')
