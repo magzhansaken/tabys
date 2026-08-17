@@ -1,21 +1,17 @@
 'use client';
 /**
- * РАЗДЕЛ 1: «СЕГОДНЯ» — лента решений.
+ * РАЗДЕЛ 1: «СЕГОДНЯ».
  *
- * Раскладка списана с кабинета соседнего проекта до мелочей:
- *   «Сегодня, 17 августа» — с датой: кабинет открывают утром и держат
- *     весь день, без даты непонятно, свежее ли это;
- *   «1 решение ждёт вас» — числом словами, голая цифра не говорит,
- *     что с ней делать;
- *   заголовок очереди с числом и объяснением под ним;
- *   ПОСЛЕДСТВИЕ ПРЯМО В КАРТОЧКЕ: «продлит до 01.10.2026». Владелец
- *     видит результат НЕ НАЖИМАЯ — это лучше окна с предпросмотром;
- *   «отметил Ерлан · 01.08, 17:01» — чьё решение подтверждаешь;
- *   многоточие на кнопках: «Подтвердить…» значит, что спросят ещё раз.
- *     Кнопка без многоточия должна делать сразу.
+ * Разметка и классы — из их Today.tsx дословно: queue-group, queue-head,
+ * count, hint, queue-list, queue-item, queue-main, link-name, queue-what,
+ * sub, queue-why, pay-note, queue-actions, waiting-note, all-clear.
+ *
+ * Оформление к ним — их файл style/admin.css целиком.
+ *
+ * Отличается только дело: магазины вместо заведений.
  */
 import { useEffect, useState } from 'react';
-import { P, api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
 
 type Item = {
   id: string; kind: string; accountId: string; client: string;
@@ -24,17 +20,12 @@ type Item = {
   paymentId: string | null; requestId: string | null;
   can: { approve: boolean; decide: boolean; signup: boolean; call: boolean };
 };
-type Group = { key: string; title: string; hint: string; items: Item[] };
-
-const TONE: Record<string, string> = {
-  overdue: '#8f3a2c', today: '#b8761c', waiting: '#7a4e10', soon: '#8b9391',
-};
 
 export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [asking, setAsking] = useState<{ id: string; mode: 'ok' | 'no' } | null>(null);
+  const [ask, setAsk] = useState<{ item: Item; yes: boolean } | null>(null);
   const [reason, setReason] = useState('');
 
   const load = async () => {
@@ -47,7 +38,12 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
   };
   useEffect(() => { load(); }, []);
 
-  const act = async (it: Item, yes: boolean) => {
+  const isSuper = me.role === 'super';
+
+  const run = async () => {
+    if (!ask) return;
+    const { item: it, yes } = ask;
+    if (!yes && !reason.trim()) { setErr('Напишите причину — партнёр должен понять, что не так'); return; }
     setBusy(it.id);
     try {
       if (it.kind === 'payment') {
@@ -60,184 +56,123 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
         yes ? await api(`/signups/${it.accountId}/approve`, { method: 'POST', body: { trialDays: 14 } })
             : await api(`/signups/${it.accountId}/reject`, { method: 'POST', body: { reason } });
       }
-      setAsking(null); setReason(''); dropCache(); await load();
+      setAsk(null); setReason(''); dropCache(); await load();
     } catch (e: any) { setErr(e.message); }
     finally { setBusy(null); }
   };
 
-  if (err && !data) return <div className="pl-err">{err}</div>;
-  if (!data) return <div className="pl-load">Загрузка…</div>;
+  if (err && !data) return <div className="err">{err}</div>;
+  if (!data) return <div className="muted">Загрузка…</div>;
 
   return (
     <>
-      <style>{CSS}</style>
+      {err && <div className="err">{err}</div>}
 
-      {/* Дата и счёт дел словами — как у них. */}
-      <div className="td-head">
-        <div className="td-date">Сегодня, {data.dateLabel}</div>
-        <div className="td-count">
-          {data.headline ?? 'ничего не ждёт решения'}
+      {/* Их окно подтверждения: последствие крупно, две кнопки. */}
+      {ask && (
+        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
+          <div className="ask-card">
+            <b>{ask.item.client}</b>
+            <p>{ask.item.what}</p>
+            {ask.yes
+              ? <p className="pay-note">{ask.item.effect ?? 'Подтвердить?'}</p>
+              : <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
+                  placeholder="Причина — партнёр должен понять, что не так" />}
+            <div className="queue-actions">
+              <button className="btn small ghost" onClick={() => { setAsk(null); setReason(''); }}>
+                Отмена
+              </button>
+              <button className={`btn small ${ask.yes ? 'primary' : 'danger'}`}
+                disabled={busy === ask.item.id} onClick={run}>
+                {ask.yes ? 'Да, подтвердить' : 'Отклонить'}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {err && <div className="pl-err">{err}</div>}
+      )}
 
       {data.total === 0 ? (
-        <div className="td-empty">
-          <b>Ничего не ждёт решения</b>
-          <span>{data.empty}</span>
+        <div className="all-clear">
+          <b>Разобрано. Ни одного решения не ждёт</b>
+          <p>{data.empty}</p>
+          <p className="hint">
+            {isSuper
+              ? 'Новые оплаты, заявки и регистрации попадут на этот экран, а на пункте «Сегодня» загорится счётчик.'
+              : 'Здесь появятся ваши клиенты, которым пора платить, и ответы платформы по заявкам.'}
+          </p>
         </div>
-      ) : data.groups.map((g: Group) => (
-        <section key={g.key} className="td-group">
-          <h2 style={{ color: TONE[g.key] }}>{g.title}</h2>
-          <div className="td-hint"><b>{g.items.length}</b> {g.hint}</div>
+      ) : data.groups.map((g: any) => (
+        <section key={g.key} className="queue-group">
+          <div className="queue-head">
+            <h2>{g.title}</h2>
+            <span className="count">{g.items.length}</span>
+            <i>{g.hint}</i>
+          </div>
 
-          {g.items.map((it) => (
-            <article key={it.id} className="td-card"
-              style={{ borderLeftColor: TONE[g.key] }}>
-              <div className="td-client">{it.client}</div>
-              <div className="td-what">{it.what}</div>
-
-              {/* Кто отметил и когда — чьё решение подтверждаешь. */}
-              {(it.actor || it.at) && (
-                <div className="td-actor">
-                  {it.actor ? `отметил ${it.actor}` : ''}
-                  {it.at ? ` · ${dateTime(it.at)}` : ''}
+          <div className="queue-list">
+            {g.items.map((item: Item) => (
+              <article key={item.id} className={`queue-item ${g.key}`}>
+                <div className="queue-main">
+                  <button className="link-name" onClick={() => goTo('clients')}>
+                    {item.client}
+                  </button>
+                  <div className="queue-what">{item.what}</div>
+                  <div className="sub">
+                    {item.meta}
+                    {item.actor && item.at ? ` · отметил ${item.actor}, ${dateTime(item.at)}` : ''}
+                  </div>
+                  {item.why && <div className="queue-why">{item.why}</div>}
+                  {/* Последствие без нажатия — их приём: «продлит до
+                      01.10.2026». Владелец читает результат, не трогая
+                      мышь. */}
+                  {item.effect && <div className="pay-note">{item.effect}</div>}
                 </div>
-              )}
 
-              {it.why && <div className="td-why">«{it.why}»</div>}
-              {it.meta && <div className="td-meta">{it.meta}</div>}
-
-              {/* ПОСЛЕДСТВИЕ БЕЗ НАЖАТИЯ. Главное, что взято у донора:
-                  владелец читает результат, не трогая мышь. */}
-              {it.effect && <div className="td-effect">{it.effect}</div>}
-
-              {asking?.id === it.id ? (
-                <div className="td-ask">
-                  {asking.mode === 'no' ? (
+                <div className="queue-actions">
+                  {isSuper && item.kind === 'payment' && (
                     <>
-                      <input value={reason} autoFocus
-                        onChange={(e) => setReason(e.target.value)}
-                        placeholder="Причина — партнёр должен понять, что не так" />
-                      <div className="td-btns">
-                        <button className="no" disabled={busy === it.id}
-                          onClick={() => { if (!reason.trim()) { setErr('Напишите причину'); return; } act(it, false); }}>
-                          Отклонить
-                        </button>
-                        <button onClick={() => { setAsking(null); setReason(''); }}>Отмена</button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="td-confirm">{it.effect ?? 'Подтвердить?'}</div>
-                      <div className="td-btns">
-                        <button className="ok" disabled={busy === it.id}
-                          onClick={() => act(it, true)}>Да, подтвердить</button>
-                        <button onClick={() => setAsking(null)}>Отмена</button>
-                      </div>
+                      <button className="btn small" disabled={busy === item.id}
+                        onClick={() => setAsk({ item, yes: false })}>Отклонить…</button>
+                      <button className="btn small primary" disabled={busy === item.id}
+                        onClick={() => setAsk({ item, yes: true })}>Подтвердить…</button>
                     </>
                   )}
-                </div>
-              ) : (
-                <div className="td-btns">
-                  {/* Многоточие значит: спросят ещё раз. Кнопка без
-                      многоточия должна делать сразу.
-
-                      У просроченных и «скоро платить» решать нечего —
-                      там только позвонить и открыть карточку. Рисовать
-                      «Подтвердить» было бы обманом: подтверждать
-                      нечего. */}
-                  {(it.can.approve || it.can.decide || it.can.signup) && (
+                  {isSuper && item.kind === 'request' && (
                     <>
-                      <button onClick={() => setAsking({ id: it.id, mode: 'no' })}>
-                        Отклонить…
-                      </button>
-                      <button className="ok" onClick={() => setAsking({ id: it.id, mode: 'ok' })}>
-                        {it.kind === 'signup' ? 'Открыть доступ…' : 'Подтвердить…'}
-                      </button>
+                      <button className="btn small" disabled={busy === item.id}
+                        onClick={() => setAsk({ item, yes: false })}>Отказать…</button>
+                      <button className="btn small primary" disabled={busy === item.id}
+                        onClick={() => setAsk({ item, yes: true })}>Одобрить…</button>
                     </>
                   )}
-                  {/* Телефон ссылкой: половина работы — это позвонить. */}
-                  {it.kind === 'tenant' && it.meta?.match(/\+?\d[\d\s()-]{8,}/) && (
-                    <a className="td-call"
-                      href={`tel:${it.meta.match(/\+?\d[\d\s()-]{8,}/)![0].replace(/\s/g, '')}`}>
+                  {isSuper && item.kind === 'signup' && (
+                    <>
+                      <button className="btn small"
+                        onClick={() => setAsk({ item, yes: false })}>Отклонить…</button>
+                      <button className="btn small primary"
+                        onClick={() => setAsk({ item, yes: true })}>Одобрить…</button>
+                    </>
+                  )}
+                  {/* Партнёру решение не рисуем: он всё равно не решает,
+                      а мёртвая кнопка хуже отсутствующей. */}
+                  {!isSuper && (item.kind === 'payment' || item.kind === 'request') && (
+                    <span className="sub waiting-note">Ждёт решения платформы</span>
+                  )}
+                  {item.meta?.match(/\+?\d[\d\s()-]{8,}/) && (
+                    <a className="btn small"
+                      href={`tel:${item.meta.match(/\+?\d[\d\s()-]{8,}/)![0].replace(/\s/g, '')}`}>
                       Позвонить
                     </a>
                   )}
-                  <button onClick={() => goTo('clients')}>Карточка</button>
+                  <button className="btn small ghost" onClick={() => goTo('clients')}>
+                    Карточка
+                  </button>
                 </div>
-              )}
-            </article>
-          ))}
+              </article>
+            ))}
+          </div>
         </section>
       ))}
     </>
   );
 }
-
-const CSS = `
-.td-head { margin-bottom: 20px; }
-.td-date { font-family: ${P.display}; font-size: 26px; color: ${P.ink};
-  letter-spacing: -.01em; }
-.td-count { font-size: 14px; color: ${P.dim}; margin-top: 2px; }
-
-.td-group { margin-bottom: 26px; }
-.td-group h2 { font-family: ${P.display}; font-weight: 400; font-size: 19px;
-  margin: 0; letter-spacing: -.01em; }
-.td-hint { font-size: 13px; color: ${P.dim}; margin: 2px 0 10px; }
-.td-hint b { color: ${P.ink}; font-weight: 600; }
-
-.td-card {
-  background: ${P.card}; border: 1px solid ${P.line}; border-left: 3px solid;
-  border-radius: ${P.r.md}px; padding: 14px 16px; margin-bottom: 10px;
-}
-.td-client { font-family: ${P.display}; font-size: 17px; color: ${P.ink}; }
-.td-what { font-size: 15px; color: ${P.ink}; margin-top: 3px; }
-.td-actor { font-size: 12.5px; color: ${P.faint}; margin-top: 3px; }
-.td-why { font-size: 14px; color: ${P.ink}; font-style: italic; margin-top: 6px; }
-.td-meta { font-size: 13px; color: ${P.dim}; margin-top: 3px; }
-
-/* Последствие: тише названия, но заметно — это ответ на вопрос
-   «что будет, если я нажму». */
-.td-effect {
-  font-size: 13.5px; color: ${P.accentSoft}; margin-top: 8px;
-  background: ${P.sunk}; border-radius: ${P.r.sm}px; padding: 6px 9px;
-  display: inline-block;
-}
-
-.td-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-.td-btns button {
-  min-height: 38px; padding: 0 14px; border-radius: ${P.r.sm}px;
-  border: 1px solid ${P.line}; background: ${P.card}; color: ${P.ink};
-  font-size: 14px; cursor: pointer;
-}
-.td-btns button:hover { background: ${P.sunk}; }
-.td-btns button.ok { background: ${P.accent}; border-color: ${P.accent};
-  color: ${P.accentInk}; font-weight: 600; }
-.td-btns button.ok:hover { background: ${P.accentDark}; }
-.td-btns button.no { background: ${P.danger}; border-color: ${P.danger};
-  color: #fff; font-weight: 600; }
-.td-btns button:disabled { opacity: .6; cursor: default; }
-.td-call {
-  min-height: 38px; padding: 0 14px; border-radius: ${P.r.sm}px;
-  border: 1px solid ${P.line}; background: ${P.card}; color: ${P.accentSoft};
-  font-size: 14px; text-decoration: none; display: inline-flex; align-items: center;
-}
-.td-call:hover { background: ${P.sunk}; }
-
-.td-ask { margin-top: 12px; }
-.td-ask input {
-  width: 100%; min-height: 42px; padding: 0 12px; font-size: 15px;
-  border: 1px solid ${P.line}; border-radius: ${P.r.sm}px; box-sizing: border-box;
-}
-.td-confirm { font-size: 14.5px; color: ${P.ink}; }
-
-.td-empty { background: ${P.card}; border: 1px solid ${P.line};
-  border-radius: ${P.r.md}px; padding: 40px 20px; text-align: center; }
-.td-empty b { display: block; font-family: ${P.display}; font-size: 19px;
-  color: ${P.ink}; margin-bottom: 6px; }
-.td-empty span { font-size: 14px; color: ${P.dim}; }
-
-.pl-load { color: ${P.dim}; padding: 20px; }
-`;

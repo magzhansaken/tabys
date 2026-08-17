@@ -390,8 +390,8 @@ const RULES = [
   // ── Кабинет платформы (свой, восемь разделов) ──────────────────────
   { file: 'admin/app/platform/lib.ts', must: "'tabys.platform.token'",
     why: 'Ключ платформы хранится под своим именем: один человек может держать открытыми и кабинет магазина, и платформу' },
-  { file: 'admin/app/platform/sections/Today.tsx', must: 'it.can.approve',
-    why: 'Что можно делать, решает сервер: правило в двух местах разъедется, и партнёр увидит кнопку, которая ответит «нельзя»' },
+  { file: 'admin/app/platform/sections/Today.tsx', must: 'Ждёт решения платформы',
+    why: 'Партнёру вместо кнопок решения показывается «Ждёт решения платформы»: мёртвая кнопка хуже отсутствующей' },
   { file: 'admin/app/platform/sections/Money.tsx', must: 'ещё не деньги',
     why: 'Подпись под итогами объясняет, что посчитано: цифра без пояснения при отборе вводит в заблуждение' },
   { dir: 'admin/app/platform', mustNotContainText: 'window.confirm(',
