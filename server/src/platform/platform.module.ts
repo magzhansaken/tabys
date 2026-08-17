@@ -98,6 +98,10 @@ export class PlatformService {
         what: r.what, why: r.why, meta: r.meta,
         amount: r.amount == null ? null : money(Number(r.amount)),
         paymentId: r.payment_id, requestId: r.request_id,
+        // Последствие видно СРАЗУ, без нажатия: «продлит до 01.10.2026».
+        // Приём донора, и он лучше окна с предпросмотром — владелец
+        // читает результат, не трогая мышь.
+        effect: r.effect, actor: r.actor, at: r.at,
         // Что можно сделать прямо из ленты. Партнёру денежные решения
         // не показываем — он их всё равно не примет.
         can: {
@@ -110,9 +114,21 @@ export class PlatformService {
     }
 
     const list = Object.values(groups).filter((g: any) => g.items.length);
+    const n = rows.length;
+    // «1 решение ждёт вас» — число словами, как у донора. Голая цифра
+    // не говорит, что с ней делать.
+    const word = n % 10 === 1 && n % 100 !== 11 ? 'решение ждёт'
+      : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'решения ждут'
+      : 'решений ждут';
+
     return {
       groups: list,
-      total: rows.length,
+      total: n,
+      headline: n === 0 ? null : `${n} ${word} вас`,
+      // Дата в заголовке: «Сегодня, 17 августа». Кабинет открывают
+      // утром и держат весь день — без даты непонятно, свежее ли это.
+      dateLabel: new Date().toLocaleDateString('ru-RU',
+        { day: 'numeric', month: 'long' }),
       // Пустая лента — это хорошая новость, и сказать об этом надо
       // словами: пустой экран читается как поломка.
       empty: rows.length === 0

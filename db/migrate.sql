@@ -129,5 +129,8 @@
 \echo '--- 054 функции платформы ---'
 \i db/migrations/054_platform_functions.sql
 
+\echo '--- 055 последствие в ленте «Сегодня» ---'
+\i db/migrations/055_today_preview.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
