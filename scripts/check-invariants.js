@@ -311,7 +311,7 @@ const RULES = [
 
   { file: 'server/src/platform/platform.module.ts', must: 'if (days >= 10) proRata',
     why: 'Правило десяти дней: спорить из-за трёхсот тенге в конце месяца дороже самих трёхсот, а обиду клиент запомнит' },
-  { file: 'db/migrations/052_platform.sql', must: "coalesce(tc.is_demo, false) = false\n  LOOP",
+  { file: 'db/migrations/054_platform_functions.sql', must: "coalesce(tc.is_demo, false) = false\n  LOOP",
     why: 'Учебные отсекаются внутри функции массового действия: новое действие иначе однажды заденет демо партнёра' },
   { file: 'server/src/platform/platform.module.ts', must: 'async bulkPreview',
     why: 'Массовое действие всегда сначала показывает, кого затронет: «применилось к 47 клиентам» постфактум узнавать нельзя' },
@@ -322,17 +322,17 @@ const RULES = [
   // ── Перенесённый кабинет платформы ─────────────────────────────────
   { file: 'server/src/platform/platform.module.ts', must: 'слово в слово',
     why: 'Удаление требует набрать название: оно необратимо, а «случайно нажал» с чужими деньгами не шутка' },
-  { file: 'db/migrations/052_platform.sql', must: "status = 'deleted'",
+  { file: 'db/migrations/054_platform_functions.sql', must: "status = 'deleted'",
     why: 'Удаление мягкое: магазин отключается, данные остаются — их могут спросить и через год при разбирательстве' },
 
   { file: 'deploy/05_update.sh', must: '--delete',
     why: 'Обновление удаляет файлы, которых больше нет: иначе убранная страница остаётся на сервере навсегда и продолжает работать' },
 
 
-  { file: 'db/migrations/052_platform.sql', must: 'CREATE OR REPLACE FUNCTION platform_payments',
+  { file: 'db/migrations/054_platform_functions.sql', must: 'CREATE OR REPLACE FUNCTION platform_payments',
     why: 'Любой запрос платформы к данным магазинов — функцией с обходом изоляции: пять раз ловил пустые списки без ошибки' },
 
-  { file: 'db/migrations/052_platform.sql', must: 'can_login_admin, can_login_pos, is_active',
+  { file: 'db/migrations/054_platform_functions.sql', must: 'can_login_admin, can_login_pos, is_active',
     why: 'Владельцу заведённого магазина разрешён вход: без этого магазин создаётся, пароль верный, а войти нельзя' },
   { file: 'server/src/platform/platform.module.ts', must: 'platform_find_by_phone',
     why: 'Дубли ловятся по последним 10 цифрам: люди пишут номер то с +7, то с 8' },
