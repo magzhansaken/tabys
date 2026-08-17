@@ -437,6 +437,13 @@ const RULES = [
   { file: 'admin/app/platform/style/admin.css', must: 'ВНУТРИ ПЛАТФОРМЫ ДЕЙСТВУЮТ ИХ ПРАВИЛА',
     why: 'Наш общий слой ставит свой шрифт и размеры на всё приложение: их файл лежал целиком, а работал наполовину' },
 
+  { file: 'admin/app/platform/sections/Journal.tsx', must: 'className="entry-time"',
+    why: 'Разметка журнала их классами: entry, entry-time, entry-body — иначе их оформление не привязано ни к чему' },
+  { file: 'admin/app/platform/sections/Funnel.tsx', must: 'className="funnel-cols"',
+    why: 'Столбцы воронки их разметкой, включая перетаскивание за ручку grip' },
+  { file: 'admin/app/platform/sections/Summary.tsx', must: 'className="chart-box"',
+    why: 'Два графика рядом в их сетке chart-grid, а не по одному' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

@@ -1,20 +1,27 @@
 'use client';
 /**
- * РАЗДЕЛ 7: «СВОДКА» — где мы сейчас и куда движемся.
+ * РАЗДЕЛ 7: «СВОДКА».
  *
- * Цифра без сравнения ничего не значит: «пришло 140 тысяч» — это много
- * или мало? Рядом с каждым числом за период стоит прошлый такой же.
+ * Разметка из их Summary.tsx: cards, card ok/bad/money, chart-grid,
+ * chart-box, chart-head, section-title, grid ranking, place, animal,
+ * num, note, sub.
  *
- * График простой, без библиотек: столбики на голом CSS. Библиотека
- * ради одного графика — это лишние сотни килобайт на страницу, которую
- * открывают с телефона в дороге.
+ * Их приёмы: два графика рядом, таблица партнёров с местом и знаком.
+ * График рисуется столбиками без библиотеки — у них так же.
  */
 import { useEffect, useState } from 'react';
-import { C, Card, ErrLine } from '../../../lib/ui';
-import { P, api, cached, putCache, dropCache, money, shortDate, type Me } from '../lib';
+import { api, cached, putCache, money, type Me } from '../lib';
+
+/** Знаки партнёров: у них у каждого свой, чтобы различать в списке
+ *  быстрее, чем читая имя. */
+const SIGNS = ['◆', '●', '▲', '■', '★', '✦', '◈', '▼'];
+
+const short = (iso: string) =>
+  new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 
 export default function Summary({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
+  const [partners, setPartners] = useState<any[]>([]);
   const [days, setDays] = useState(30);
   const [err, setErr] = useState('');
 
@@ -23,100 +30,119 @@ export default function Summary({ me }: { me: Me }) {
     const hit = cached(path);
     if (hit) setData(hit.data);
     try {
-      const r = await api(path);
-      setData(r); putCache(path, r); setErr('');
+      const [m, p] = await Promise.all([
+        api(path),
+        api('/partners').catch(() => ({ rows: [] })),
+      ]);
+      setData(m); putCache(path, m); setPartners(p.rows ?? []); setErr('');
     } catch (e: any) { if (!hit) setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
+  if (err && !data) return <div className="err">{err}</div>;
+  if (!data) return <div className="muted">Загрузка…</div>;
 
-  const max = Math.max(1, ...data.series.map((d: any) => d.amount));
+  const t = data.now;
   const ch = data.change;
+  const maxAmount = Math.max(1, ...data.series.map((d: any) => d.amount));
+  const maxMrr = Math.max(1, ...data.series.map((d: any) => d.mrr));
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {err && <ErrLine err={err} />}
+    <>
+      {err && <div className="err">{err}</div>}
 
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div className="chips">
         {[7, 30, 90].map((d) => (
-          <button key={d} onClick={() => { setDays(d); load(d); }}
-            style={{
-              minHeight: 38, padding: '0 14px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              border: `1px solid ${days === d ? P.accent : P.line}`,
-              background: days === d ? P.accent : P.card,
-              color: days === d ? '#fff' : P.ink,
-            }}>{d} дней</button>
+          <button key={d} className={`chip${days === d ? ' on' : ''}`}
+            onClick={() => { setDays(d); load(d); }}>{d} дней</button>
         ))}
       </div>
 
-      <Card title="Сейчас">
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <Big title="Клиентов" value={String(data.now.tenants)} />
-          <Big title="Работают" value={String(data.now.active)} />
-          <Big title="Просрочены" value={String(data.now.expired)}
-            tone={data.now.expired > 0 ? P.danger : undefined} />
-          <Big title="Доход в месяц" value={money(data.now.mrr)} big />
-        </div>
-        {data.note && (
-          <div style={{ fontSize: 13, color: P.accentSoft, marginTop: 10 }}>{data.note}</div>
-        )}
-      </Card>
+      <div className="cards">
+        <div className="card"><span>Всего магазинов</span><b>{t.tenants}</b></div>
+        <div className="card ok"><span>Работают</span><b>{t.active}</b></div>
+        <div className="card bad"><span>Срок вышел</span><b>{t.expired}</b></div>
+        <div className="card money"><span>Доход в месяц</span><b>{money(t.mrr)}</b></div>
+        <div className="card money"><span>Пришло за {data.days} дн.</span>
+          <b>{money(data.period.amount)}</b></div>
+      </div>
 
-      <Card title={`За ${data.days} дней`}>
-        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          <Big title="Пришло" value={money(data.period.amount)} big />
-          <Big title="Оплат" value={String(data.period.payments)} />
-          <Big title="Партнёрам" value={money(data.period.partnerShare)} />
-          <Big title="Платформе" value={money(data.period.platformShare)} />
-        </div>
+      <div className="chart-grid">
+        <section className="chart-box">
+          <div className="chart-head">
+            <b>Оплаты по дням</b>
+            {/* Цифра без сравнения ничего не значит: «140 тысяч» — это
+                много или мало? */}
+            <span>
+              {data.period.payments} за период ·{' '}
+              {ch.amount >= 0 ? '+' : '−'}{money(Math.abs(ch.amount))} к прошлым {data.days} дн.
+            </span>
+          </div>
+          <Bars series={data.series} max={maxAmount} pick={(d: any) => d.amount} />
+        </section>
 
-        {/* Сравнение с прошлым периодом: направление важнее величины.
-            140 тысяч при падении на треть — плохая новость. */}
-        <div style={{ fontSize: 14, marginTop: 10,
-          color: ch.amount >= 0 ? P.accent : P.danger }}>
-          {ch.amount >= 0 ? '↑' : '↓'} {money(Math.abs(ch.amount))}
-          {ch.percent != null && ` (${ch.percent > 0 ? '+' : ''}${ch.percent}%)`}
-          {' '}к прошлым {data.days} дням
-          <span style={{ color: P.dim }}> · было {money(ch.prevAmount)}</span>
-        </div>
-      </Card>
+        <section className="chart-box">
+          <div className="chart-head">
+            <b>Доход в месяц</b>
+            <span>{money(t.mrr)} сейчас</span>
+          </div>
+          <Bars series={data.series} max={maxMrr} pick={(d: any) => d.mrr} />
+        </section>
+      </div>
 
-      <Card title="По дням">
-        {/* Столбики на голом CSS: библиотека ради одного графика — это
-            лишние сотни килобайт на странице, которую открывают с
-            телефона в дороге. */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 140,
-          borderBottom: `1px solid ${P.line}`, paddingBottom: 2 }}>
-          {data.series.map((d: any) => (
-            <div key={d.day} title={`${shortDate(d.day)}: ${money(d.amount)}`}
-              style={{
-                flex: 1, minWidth: 3,
-                height: `${Math.max(2, (d.amount / max) * 100)}%`,
-                background: d.amount > 0 ? P.accent : P.line,
-                borderRadius: '3px 3px 0 0',
-              }} />
-          ))}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between',
-          fontSize: 12, color: P.dim, marginTop: 6 }}>
-          <span>{shortDate(data.series[0]?.day)}</span>
-          <span>{shortDate(data.series[data.series.length - 1]?.day)}</span>
-        </div>
-      </Card>
-    </div>
+      <h2 className="section-title">Партнёры за {data.days} дней</h2>
+      {partners.length === 0 ? (
+        <p className="note">Партнёров пока нет — заведите их во вкладке «Партнёры».</p>
+      ) : (
+        <table className="grid ranking">
+          <thead>
+            <tr>
+              <th>Партнёр</th>
+              <th className="num">Клиентов</th>
+              <th className="num">Привёл</th>
+              <th className="num">Заработал</th>
+              <th className="num">Дают в месяц</th>
+            </tr>
+          </thead>
+          <tbody>
+            {partners.map((p: any, i: number) => (
+              <tr key={p.id}>
+                <td>
+                  <span className="place">{i + 1}</span>
+                  <span className="animal" title="знак партнёра">{SIGNS[i % SIGNS.length]}</span>
+                  {p.name}
+                  <div className="sub">{p.commissionPercent}%</div>
+                </td>
+                <td className="num">
+                  {p.clients}
+                  <div className="sub">работают {p.activeClients}</div>
+                </td>
+                {/* Привёл и заработал — разные числа, и первое важнее:
+                    партнёр с малой комиссией может приносить больше. */}
+                <td className="num">{money(p.brought)}</td>
+                <td className="num">{money(p.earned)}</td>
+                <td className="num">{money(p.mrr)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {data.note && <p className="note">{data.note}</p>}
+    </>
   );
 }
 
-function Big({ title, value, big, tone }: {
-  title: string; value: string; big?: boolean; tone?: string;
-}) {
+/** Столбики без библиотеки — как у них: лишние сотни килобайт на
+ *  странице, которую открывают с телефона в дороге, ни к чему. */
+function Bars({ series, max, pick }: { series: any[]; max: number; pick: (d: any) => number }) {
   return (
-    <div>
-      <div style={{ fontSize: 13, color: P.dim }}>{title}</div>
-      <div style={{ fontSize: big ? 28 : 22, fontWeight: 600, color: tone ?? P.ink,
-        fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+    <div className="bars">
+      {series.map((d) => (
+        <span key={d.day} title={`${short(d.day)}: ${money(pick(d))}`}
+          style={{ height: `${Math.max(2, (pick(d) / max) * 100)}%` }}
+          className={pick(d) > 0 ? 'on' : ''} />
+      ))}
     </div>
   );
 }

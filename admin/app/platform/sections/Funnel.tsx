@@ -1,30 +1,30 @@
 'use client';
 /**
- * РАЗДЕЛ 5: «ВОРОНКА» — от знакомства до оплаты.
+ * РАЗДЕЛ 5: «ВОРОНКА».
  *
- * Этап выводится из фактов, пока его не двигали руками. Ручной сдвиг
- * сильнее: человек знает о клиенте больше, чем база. Кабинет
- * показывает, какой этап откуда взялся — это разные вещи.
+ * Разметка из их Funnel.tsx: funnel-cols, funnel-col, col-top, count,
+ * col-sum, lead, lead-top, grip, sub, phone, touched, lead-price,
+ * lead-note, lead-note-edit, lead-actions, empty, sorter.
  *
- * Дни молчания — главный столбец: сделка умирает не от отказа, а от
- * того, что о ней забыли.
+ * Их приёмы взяты целиком: перетаскивание карточки за ручку, сумма на
+ * каждом столбце, заметка правится прямо в карточке.
+ *
+ * Отличие по делу: этап выводится из фактов на СЕРВЕРЕ, а не при
+ * отрисовке — два человека, открывшие воронку разом, видят одно и то же.
  */
 import { useEffect, useState } from 'react';
-import { C, Card, Btn, Input, ErrLine, EmptyState } from '../../../lib/ui';
-import { P, api, cached, putCache, dropCache, money, daysWord, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
 
 export default function Funnel({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
-  const [moving, setMoving] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ id: string; from: string; over?: string } | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState('');
 
-  const load = async (silent = false) => {
-    // Показываем известное сразу, свежее подъезжает в фоне: пустой
-    // экран при каждом входе ощущался как «всё тормозит», хотя сервер
-    // отвечает за 10-20 миллисекунд.
+  const load = async () => {
     const hit = cached('/funnel');
-    if (hit && !silent) setData(hit.data);
+    if (hit) setData(hit.data);
     try {
       const d = await api('/funnel');
       setData(d); putCache('/funnel', d); setErr('');
@@ -32,90 +32,105 @@ export default function Funnel({ me }: { me: Me }) {
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <ErrLine err={err} />;
-  if (!data) return <div style={{ color: P.dim, padding: 20 }}>Загрузка…</div>;
-  if (data.total === 0) return <EmptyState text="Воронка пуста. Клиентов пока нет." />;
-
-  const move = async (id: string, stage: string) => {
+  const move = async (id: string, stage: string, text?: string) => {
     try {
-      await api(`/funnel/${id}`, { method: 'POST', body: { stage, note: note || undefined } });
-      setMoving(null); setNote(''); dropCache(); await load();
+      await api(`/funnel/${id}`, { method: 'POST', body: { stage, note: text } });
+      setEditing(null); setNote(''); dropCache(); await load();
     } catch (e: any) { setErr(e.message); }
   };
 
+  if (err && !data) return <div className="err">{err}</div>;
+  if (!data) return <div className="muted">Загрузка…</div>;
+
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      {err && <ErrLine err={err} />}
+    <>
+      {err && <div className="err">{err}</div>}
 
-      <div style={{ display: 'grid', gap: 14,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="funnel-cols">
         {data.stages.map((st: any) => (
-          <Card key={st.key} title={`${st.title} · ${st.count}`}>
-            <div style={{ fontSize: 13, color: P.dim, marginTop: -4, marginBottom: 4 }}>{st.hint}</div>
-            {/* Сумма на этапе: воронка про деньги, а не про карточки. */}
-            {st.sum > 0 && (
-              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10,
-                fontVariantNumeric: 'tabular-nums' }}>{money(st.sum)}/мес</div>
-            )}
+          <section key={st.key}
+            className={`funnel-col ${drag && drag.over === st.key && drag.from !== st.key ? 'over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); if (drag) setDrag({ ...drag, over: st.key }); }}
+            onDrop={() => { if (drag && drag.from !== st.key) move(drag.id, st.key); setDrag(null); }}>
 
-            <div style={{ display: 'grid', gap: 8 }}>
-              {st.cards.map((c: any) => (
-                <div key={c.id} style={{
-                  border: `1px solid ${c.cold ? P.accentSoft : P.line}`,
-                  borderRadius: 10, padding: 10, fontSize: 14,
-                }}>
-                  <div style={{ fontWeight: 600 }}>{c.name}</div>
-                  <div style={{ color: P.dim, fontSize: 13 }}>
-                    {c.city}{c.owner ? ` · ${c.owner}` : ''}
-                  </div>
-                  {c.ownerPhone && (
-                    <a href={`tel:${c.ownerPhone}`}
-                      style={{ color: P.accent, fontSize: 13, textDecoration: 'none' }}>
-                      {c.ownerPhone}
-                    </a>
-                  )}
-
-                  {/* Молчание — главный признак умирающей сделки. */}
-                  {c.daysSilent != null && (
-                    <div style={{ fontSize: 13, marginTop: 4,
-                      color: c.cold ? P.accentSoft : P.dim }}>
-                      молчим {c.daysSilent} дн.
-                    </div>
-                  )}
-                  {c.note && (
-                    <div style={{ fontSize: 13, fontStyle: 'italic', marginTop: 4 }}>«{c.note}»</div>
-                  )}
-
-                  {/* Откуда взялся этап: выведен из фактов или поставлен
-                      руками. Это разные вещи, и путать их нельзя. */}
-                  <div style={{ fontSize: 12, color: P.dim, marginTop: 4 }}>
-                    {c.isManual ? 'этап поставлен вручную' : 'этап выведен из фактов'}
-                  </div>
-
-                  {moving === c.id ? (
-                    <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                      <Input value={note} onChange={(e: any) => setNote(e.target.value)}
-                        placeholder="Заметка: о чём договорились" autoFocus />
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {data.stages.filter((x: any) => x.key !== st.key).map((x: any) => (
-                          <Btn key={x.key} onClick={() => move(c.id, x.key)}>{x.title}</Btn>
-                        ))}
-                        <Btn onClick={() => { setMoving(null); setNote(''); }}>Отмена</Btn>
-                      </div>
-                    </div>
-                  ) : (
-                    <Btn onClick={() => { setMoving(c.id); setNote(c.note ?? ''); }}
-                      style={{ marginTop: 8 }}>Сдвинуть</Btn>
-                  )}
-                </div>
-              ))}
-              {st.cards.length === 0 && (
-                <div style={{ fontSize: 13, color: P.dim }}>пусто</div>
-              )}
+            <div className="col-top">
+              <b>{st.title}</b>
+              <span className="count">{st.cards.length}</span>
             </div>
-          </Card>
+            <div className="sub">{st.hint}</div>
+            {/* Сумма на этапе: воронка про деньги, а не про карточки. */}
+            <div className="col-sum">{st.sum > 0 ? `${money(st.sum)}/мес` : '—'}</div>
+
+            {st.cards.length === 0 && <p className="empty">пусто</p>}
+
+            {st.cards.map((r: any) => (
+              <article key={r.id} className={`lead ${drag?.id === r.id ? 'dragging' : ''}`}
+                draggable onDragStart={() => setDrag({ id: r.id, from: st.key })}
+                onDragEnd={() => setDrag(null)}>
+
+                <div className="lead-top">
+                  <span className="grip" title="перетащить в другой этап">⋮⋮</span>
+                  <b>{r.name}</b>
+                </div>
+
+                <div className="sub">{[r.city, r.owner].filter(Boolean).join(' · ') || '—'}</div>
+                {r.ownerPhone && <a className="sub phone" href={`tel:${r.ownerPhone}`}>{r.ownerPhone}</a>}
+                {me.role === 'super' && r.partner && <div className="sub">партнёр: {r.partner}</div>}
+
+                {r.monthly > 0 && <div className="lead-price">{money(r.monthly)}/мес</div>}
+                {r.paidUntil && <div className="sub">оплачено до {fullDate(r.paidUntil)}</div>}
+
+                {/* Молчание — главный признак умирающей сделки: она
+                    умирает не от отказа, а от того, что о ней забыли. */}
+                {r.daysSilent != null && (
+                  <div className={`sub touched${r.cold ? ' cold' : ''}`}>
+                    молчим {r.daysSilent} дн.
+                  </div>
+                )}
+
+                {/* Откуда взялся этап: выведен из фактов или поставлен
+                    руками. Это разные вещи, и путать их нельзя. */}
+                <div className="sub">
+                  {r.isManual ? 'этап поставлен вручную' : 'этап выведен из фактов'}
+                </div>
+
+                {editing === r.id ? (
+                  <div className="lead-note-edit">
+                    <input value={note} autoFocus
+                      onChange={(e) => setNote(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') move(r.id, r.stage, note); }}
+                      placeholder="О чём договорились" />
+                    <div className="lead-actions">
+                      <button className="btn small primary"
+                        onClick={() => move(r.id, r.stage, note)}>Сохранить</button>
+                      <button className="btn small ghost"
+                        onClick={() => { setEditing(null); setNote(''); }}>Отмена</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {r.note && <div className="lead-note">{r.note}</div>}
+                    <div className="lead-actions">
+                      <button className="btn small ghost"
+                        onClick={() => { setEditing(r.id); setNote(r.note ?? ''); }}>
+                        {r.note ? 'Заметка' : '+ заметка'}
+                      </button>
+                      {/* Кому перетаскивать неудобно — тот же сдвиг
+                          списком. Их приём. */}
+                      <select className="sorter" value={r.stage}
+                        onChange={(e) => move(r.id, e.target.value)}>
+                        {data.stages.map((x: any) => (
+                          <option key={x.key} value={x.key}>{x.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </article>
+            ))}
+          </section>
         ))}
       </div>
-    </div>
+    </>
   );
 }

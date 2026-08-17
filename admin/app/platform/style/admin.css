@@ -1400,3 +1400,20 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   color: var(--ink); box-sizing: border-box; margin: var(--space-3) 0;
 }
 .ask-card .queue-actions { justify-content: flex-end; margin-top: var(--space-4); }
+
+/* Столбики графика. У них они жили в ui/Chart.tsx со стилями внутри
+   файла — здесь то же самое их переменными. */
+.bars {
+  display: flex; align-items: flex-end; gap: 2px; height: 120px;
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--line);
+}
+.bars span {
+  flex: 1; min-width: 2px; background: var(--line-strong);
+  border-radius: 3px 3px 0 0; transition: background var(--t-fast) var(--ease);
+}
+.bars span.on { background: var(--accent); }
+.bars span:hover { background: var(--accent-hover); }
+
+/* Молчание больше недели: сделка умирает не от отказа, а от того, что
+   о ней забыли. У них этого не было — добавлено их же переменными. */
+.sub.touched.cold { color: var(--ink-on-warm); }
