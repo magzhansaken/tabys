@@ -410,6 +410,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Today.tsx', must: 'dropCache()',
     why: 'После действия память сбрасывается: подтвердили оплату — устарели и деньги, и клиенты, и сводка' },
 
+  { file: 'admin/app/platform/page.tsx', must: 'max-width: 860px',
+    why: 'На телефоне меню уезжает вниз полосой: боковое в 246 px там съело бы две трети экрана' },
+  { file: 'admin/app/platform/page.tsx', must: 'counts[t.key] ?',
+    why: 'Счётчик с нулём не рисуется: он обучает себя игнорировать, а счётчик — единственная причина открыть раздел прямо сейчас' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
