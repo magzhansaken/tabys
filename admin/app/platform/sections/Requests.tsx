@@ -123,7 +123,10 @@ export default function Requests({ me }: { me: Me }) {
             <article key={r.id}
               className={`req ${r.status === 'pending' ? 'waiting' : ''} ${leaving[r.id] ? 'leaving' : ''}`}>
               <div className="req-head">
-                <b>{r.client}</b>
+                <button className="link-name"
+                  onClick={() => { window.location.hash = `#/client/${r.account_id}`; }}>
+                  {r.client}
+                </button>
                 <span className="sub">{r.author ?? '—'} · {dateTime(r.created_at)}</span>
               </div>
 

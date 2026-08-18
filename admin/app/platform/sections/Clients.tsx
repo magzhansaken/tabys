@@ -21,7 +21,6 @@ import { AskForm } from '../ui/AskForm';
 import { NewTenant } from '../ui/NewTenant';
 import { PlanLines } from '../ui/PlanLines';
 import { NewPassword, CopyValue, Credentials } from '../ui/access';
-import TenantCard from './TenantCard';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
 import { useDeleteTenant } from '../ui/deleteTenant';
@@ -63,22 +62,7 @@ export default function Clients({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false);
   const [billFor, setBillFor] = useState<any>(null);
 
-  // У карточки есть АДРЕС: её можно оставить открытой, вернуться к ней
-  // и отправить ссылку. Их приём — раньше это было окно-тупик.
-  const [openCard, setOpenCard] = useState<string | null>(null);
-
-  useEffect(() => {
-    const read = () => {
-      const m = window.location.hash.match(/^#\/client\/(.+)$/);
-      setOpenCard(m?.[1] ? decodeURIComponent(m[1]) : null);
-    };
-    read();
-    window.addEventListener('hashchange', read);
-    return () => window.removeEventListener('hashchange', read);
-  }, []);
-
   const goClient = (id: string) => { window.location.hash = `#/client/${id}`; };
-  const goList = () => { window.location.hash = ''; };
   // Партнёр не меняет деньги сам — он просит платформу. Их пункт
   // «Запросить у платформы» в меню строки.
   const [asking, setAsking] = useState<any>(null);
@@ -111,23 +95,6 @@ export default function Clients({ me }: { me: Me }) {
   useLive(() => load(), 30_000);
 
   // Их состояния: скелетон показывает форму будущего содержимого.
-  // Открыта карточка — показываем её вместо списка.
-  if (openCard) return (
-    <>
-      {paying && (
-        <PayForm client={paying}
-          onDone={(saved) => { setPaying(null); if (saved) dropCache(); }} />
-      )}
-      {asking && (
-        <AskForm client={asking}
-          onDone={(sent) => { setAsking(null); if (sent) dropCache(); }} />
-      )}
-      <TenantCard me={me} accountId={openCard} onBack={goList}
-        onPay={(c) => setPaying({ ...c, monthly: c.monthly })}
-        onRequest={(c) => setAsking(c)} />
-    </>
-  );
-
   if (err && !data) return <Failed text={err} onRetry={() => load()} />;
   if (!data) return <><SkeletonMetrics count={5} /><SkeletonTable rows={6} cols={7} /></>;
 

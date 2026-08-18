@@ -185,7 +185,10 @@ export default function Funnel({ me }: { me: Me }) {
                       onPointerMove={onMove}
                       onPointerUp={(e) => onUp(e, r)}
                       onPointerCancel={() => { grab.current = null; setDrag(null); }}>⋮⋮</span>
-                    <b>{r.name}</b>
+                    <button className="link-name"
+                      onClick={() => { window.location.hash = `#/client/${r.id}`; }}>
+                      {r.name}
+                    </button>
 
                     {/* Кому перетаскивать неудобно — тот же сдвиг здесь. */}
                     <RowMenu label="Сдвинуть" actions={

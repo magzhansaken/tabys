@@ -28,6 +28,9 @@ import Partners from './sections/Partners';
 import Summary from './sections/Summary';
 import Journal from './sections/Journal';
 import Settings from './sections/Settings';
+import TenantCard from './sections/TenantCard';
+import { PayForm } from './ui/PayForm';
+import { AskForm } from './ui/AskForm';
 
 type TabKey = 'today' | 'clients' | 'money' | 'requests'
   | 'funnel' | 'partners' | 'summary' | 'journal' | 'settings';
@@ -55,6 +58,23 @@ export default function PlatformPage() {
   const [ready, setReady] = useState(false);
   const [counts, setCounts] = useState<Record<string, number | undefined>>({});
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Карточка клиента открывается ИЗ ЛЮБОГО РАЗДЕЛА по адресу
+  // #/client/<id>. Раньше она жила внутри «Клиентов», и ссылка из
+  // «Денег» или ленты вела в пустоту.
+  const [openCard, setOpenCard] = useState<string | null>(null);
+  const [paying, setPaying] = useState<any>(null);
+  const [asking, setAsking] = useState<any>(null);
+
+  useEffect(() => {
+    const read = () => {
+      const m = window.location.hash.match(/^#\/client\/(.+)$/);
+      setOpenCard(m?.[1] ? decodeURIComponent(m[1]) : null);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
 
   useEffect(() => {
     const s = readSession();
@@ -170,6 +190,15 @@ export default function PlatformPage() {
         </header>
 
         <main>
+          {/* Карточка поверх любого раздела: адрес один, и неважно,
+              откуда на него пришли — из ленты, денег или списка. */}
+          {openCard ? (
+            <TenantCard me={me} accountId={openCard}
+              onBack={() => { window.location.hash = ''; }}
+              onPay={(c) => setPaying(c)}
+              onRequest={(c) => setAsking(c)} />
+          ) : (
+          <>
           {tab === 'today'    && <Today me={me} goTo={setTab} />}
           {tab === 'clients'  && <Clients me={me} />}
           {tab === 'money'    && <Money me={me} />}
@@ -179,6 +208,15 @@ export default function PlatformPage() {
           {tab === 'summary'  && <Summary me={me} />}
           {tab === 'journal'  && <Journal me={me} />}
           {tab === 'settings' && <Settings me={me} />}
+          </>
+          )}
+
+          {paying && (
+            <PayForm client={paying} onDone={() => setPaying(null)} />
+          )}
+          {asking && (
+            <AskForm client={asking} onDone={() => setAsking(null)} />
+          )}
         </main>
       </div>
 

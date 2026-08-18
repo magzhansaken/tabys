@@ -148,7 +148,14 @@ export default function Money({ me }: { me: Me }) {
               className={`pay ${p.status === 'pending' ? 'waiting' : ''} ${leaving[p.id] ? 'leaving' : ''}`}>
               <div className="pay-top">
                 <div className="pay-who">
-                  <b>{p.client}</b>
+                  {/* Имя ссылкой в карточку. У донора здесь просто
+                      текст — их упущение: в остальных разделах имя
+                      ведёт в карточку, а решая про деньги, посмотреть
+                      на клиента хочется чаще всего. */}
+                  <button className="link-name"
+                    onClick={() => { window.location.hash = `#/client/${p.accountId}`; }}>
+                    {p.client}
+                  </button>
                   <div className="sub">
                     {p.method} · отметил {p.partner ?? 'клиент'} · {dateTime(p.createdAt)}
                   </div>

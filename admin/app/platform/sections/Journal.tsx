@@ -201,7 +201,8 @@ export default function Journal({ me }: { me: Me }) {
                     {r.detail && <span className="entry-kind">{r.detail}</span>}
                     {r.client && (
                       <button className="link-name entry-tenant"
-                        onClick={() => { setTenantId(r.accountId); setRows([]); }}>
+                        title="Открыть карточку клиента"
+                        onClick={() => { window.location.hash = `#/client/${r.accountId}`; }}>
                         {r.client}
                       </button>
                     )}

@@ -579,6 +579,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Clients.tsx', must: 'Только отмеченные',
     why: 'Набрал тридцать строк по всему списку — надо убедиться, что набрал именно те' },
 
+  { file: 'admin/app/platform/page.tsx', must: 'Карточка поверх любого раздела',
+    why: 'Карточка жила внутри «Клиентов»: ссылка из денег, ленты и журнала вела в пустоту' },
+  { file: 'admin/app/platform/sections/Money.tsx', must: 'className="link-name"',
+    why: 'Имя клиента ведёт в карточку и в деньгах: решая про оплату, посмотреть на клиента хочется чаще всего' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
