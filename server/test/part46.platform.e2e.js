@@ -921,6 +921,32 @@ const shop = async (name, owner) => {
        'Числа сводки не отрицательные');
   }
 
+  // ── ЖУРНАЛ: ЛИСТАНИЕ НИЧЕГО НЕ ТЕРЯЕТ ───────────────────────────
+  //
+  // Дописано после находки: листание шло по ВРЕМЕНИ записи, а массовое
+  // действие пишет несколько записей одним мгновением. Страница
+  // кончалась на такой записи, следующая просила «раньше этого
+  // момента» — и пропускала все остальные записи той же секунды.
+  {
+    const all = (await j('GET', '/platform/audit?limit=200', null, SUPER)).d?.rows ?? [];
+    if (all.length >= 4) {
+      const seen = [];
+      let cursor = null, page = 0;
+      while (page < 60) {
+        const url = '/platform/audit?limit=2' + (cursor ? `&before=${cursor}` : '');
+        const d = (await j('GET', url, null, SUPER)).d;
+        if (!d?.rows?.length) break;
+        page++;
+        seen.push(...d.rows.map((r) => r.id));
+        if (!d.hasMore) break;
+        cursor = d.nextBefore;
+      }
+      ok(new Set(seen).size === all.length,
+         `★ Листание журнала ничего не теряет: ${new Set(seen).size} из ${all.length}`);
+      ok(seen.length === new Set(seen).size, '★ И ничего не повторяет');
+    }
+  }
+
   // ── ЦИФРЫ СВОДКИ СКЛАДЫВАЮТСЯ ───────────────────────────────────
   //
   // Дописано после находки: «работают 3» при трёх магазинах, из

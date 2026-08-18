@@ -1643,7 +1643,11 @@ export class PlatformService {
     const rows = (await this.q(
       `SELECT * FROM platform_journal($1,$2,$3,$4,$5,$6,$7)`,
       [ctx.role, ctx.userId,
-       opts.before || null, opts.accountId || null, opts.actorId || null,
+       // Курсор — ПОРЯДКОВЫЙ НОМЕР, а не время: массовое действие
+       // пишет несколько записей одним мгновением, и листание по
+       // времени пропускало все, кроме первой.
+       opts.before ? Number(opts.before) : null,
+       opts.accountId || null, opts.actorId || null,
        opts.weight || null, Math.min(200, Math.max(1, Number(opts.limit ?? 50)))])).rows;
 
     return {
@@ -1657,9 +1661,10 @@ export class PlatformService {
         accountId: r.account_id, client: r.client,
         amount: r.amount == null ? null : money(Number(r.amount)),
       })),
-      // Курсор для следующей страницы: время последней записи. Номера
-      // страниц не годятся — журнал растёт, и они съезжают.
-      nextBefore: rows.length ? rows[rows.length - 1].at : null,
+      // Курсор для следующей страницы: НОМЕР последней записи. Номера
+      // страниц не годятся — журнал растёт, и они съезжают. Время не
+      // годится тоже: записи одной секунды теряются на границе.
+      nextBefore: rows.length ? String(rows[rows.length - 1].seq) : null,
       hasMore: rows.length >= Math.min(200, Math.max(1, Number(opts.limit ?? 50))),
     };
   }

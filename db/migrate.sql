@@ -192,5 +192,8 @@
 \echo '--- 074 платят и пробные не пересекаются ---'
 \i db/migrations/074_snapshot_split.sql
 
+\echo '--- 075 листание журнала по номеру ---'
+\i db/migrations/075_journal_cursor.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
