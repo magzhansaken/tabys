@@ -897,6 +897,45 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── ПОСЛЕДСТВИЯ ЗАЯВОК ДОХОДЯТ ДО СЧЁТА ─────────────────────────
+  //
+  // Одобрение должно МЕНЯТЬ ДЕЛО, а не просто ставить отметку. Проверка
+  // на живых данных: счёт до и после каждого вида заявки.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? [])[0];
+    if (cl) {
+      const before = cl.monthly;
+
+      // Устройство: счёт растёт ровно на цену строки.
+      let r = await j('POST', '/platform/requests',
+        { accountId: cl.id, kind: 'device', payload: { device: 'pos' }, comment: 'касса' }, PARTNER);
+      const rid = r.d?.id;
+      r = await j('POST', `/platform/requests/${rid}/decide`,
+        { approve: true, unitPrice: 2500 }, SUPER);
+      ok(/2 500/.test(r.d?.effect ?? ''), `★ Одобрение назвало цену: ${r.d?.effect}`);
+
+      v = await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER);
+      ok(v.d?.monthly === before + 2500,
+         `★ Счёт вырос ровно на цену строки: ${before} → ${v.d?.monthly}`);
+
+      // Отказ ничего не меняет.
+      const now = v.d.monthly;
+      r = await j('POST', '/platform/requests',
+        { accountId: cl.id, kind: 'device', payload: { device: 'store' }, comment: 'точка' }, PARTNER);
+      await j('POST', `/platform/requests/${r.d.id}/decide`,
+        { approve: false, note: 'обсудим на встрече' }, SUPER);
+      v = await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER);
+      ok(v.d?.monthly === now, '★ Отказ не меняет счёт клиента');
+
+      // Партнёр видит причину отказа.
+      v = await j('GET', '/platform/requests', null, PARTNER);
+      const rej = (v.d ?? []).find((x) => x.status === 'rejected');
+      ok(rej?.decision_note === 'обсудим на встрече',
+         '★ Партнёр видит причину отказа — иначе он не поймёт, что не так');
+    }
+  }
+
   // ── КАРТОЧКА И СПИСОК ГОВОРЯТ ОДНО И ТО ЖЕ ──────────────────────
   //
   // Дописано после того, как в карточке стоял НОЛЬ, а в списке рядом
