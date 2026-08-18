@@ -1232,27 +1232,52 @@ export class PlatformService {
     return { ok: true, note: 'Новая сумма применится со следующего счёта' };
   }
 
-  /** Правка партнёра: имя, телефон, комиссия. */
+  /**
+   * Правка партнёра: имя, почта, телефон, доля, пароль.
+   *
+   * Почта — это ВХОД, поэтому меняется отдельной проверкой на занятость:
+   * два партнёра с одной почтой означали бы, что один не сможет войти,
+   * и виноватым окажется тот, кто заводил вторым.
+   */
   async updatePartner(ctx: PlatformCtx, id: string, d: {
-    name?: string; phone?: string; commissionPercent?: number;
+    name?: string; email?: string; phone?: string;
+    commissionPercent?: number; password?: string;
   }) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
+
     const bp = d.commissionPercent != null ? Math.round(Number(d.commissionPercent) * 100) : null;
     if (bp != null && (bp < 0 || bp > 10000))
-      throw new BadRequestException('Комиссия от 0 до 100%');
+      throw new BadRequestException('Доля партнёра от 0 до 100%');
+
+    if (d.email?.trim()) {
+      const taken = (await this.q(
+        `SELECT 1 FROM platform_user WHERE lower(email) = lower($1) AND id <> $2`,
+        [d.email.trim(), id])).rows[0];
+      if (taken) throw new BadRequestException('Эта почта уже занята другим человеком');
+    }
+
+    if (d.password && d.password.length < 8)
+      throw new BadRequestException('Пароль не короче восьми знаков');
 
     await this.q(
-      `UPDATE platform_user SET full_name=coalesce($2,full_name),
-              phone=coalesce($3,phone), commission_bp=coalesce($4,commission_bp)
-        WHERE id=$1 AND role='partner'`,
-      [id, d.name?.trim() ?? null, d.phone ?? null, bp]);
+      `UPDATE platform_user SET
+         full_name     = coalesce($2, full_name),
+         email         = coalesce($3, email),
+         phone         = coalesce($4, phone),
+         commission_bp = coalesce($5, commission_bp),
+         password_hash = coalesce($6, password_hash)
+       WHERE id = $1 AND role = 'partner'`,
+      [id, d.name?.trim() || null, d.email?.trim() || null, d.phone || null, bp,
+       d.password ? await bcrypt.hash(d.password, 10) : null]);
 
-    await this.audit(ctx, 'partner_updated', null, { id, ...d });
+    await this.audit(ctx, 'partner_updated', null,
+      { id, ...d, password: d.password ? '(сменён)' : undefined });
+
     // Прошлые выплаты не пересчитываются: доля заморожена при
     // подтверждении оплаты.
     return { ok: true, note: bp != null
-      ? 'Новая комиссия — для будущих оплат. Прошлые выплаты не меняются'
-      : 'Сохранено' };
+      ? 'Новая доля — для будущих оплат. Уже подтверждённые хранят свою'
+      : d.password ? 'Пароль сменён. Старый перестал работать' : 'Сохранено' };
   }
 
   /** Правка карточки клиента: контакты и заметки. */

@@ -12,6 +12,12 @@
  */
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { RowMenu } from '../ui/RowMenu';
+import { InlineText } from '../ui/InlineText';
+import { useAsk } from '../ui/Ask';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonMetrics, SkeletonTable, Empty } from '../ui/States';
 
 export default function Partners({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
@@ -19,20 +25,101 @@ export default function Partners({ me }: { me: Me }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', commissionPercent: 15 });
   const [shown, setShown] = useState<{ title: string; value: string; note: string } | null>(null);
-  const [offAsk, setOffAsk] = useState<any>(null);
-
   const load = async () => {
     const hit = cached('/partners');
     if (hit) setData(hit.data);
     try {
       const d = await api('/partners');
       setData(d); putCache('/partners', d); setErr('');
-    } catch (e: any) { if (!hit) setErr(e.message); }
+    } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <div className="err">{err}</div>;
-  if (!data) return <div className="muted">Загрузка…</div>;
+  const ask = useAsk();
+  const toast = useToast();
+
+  const save = async (id: string, body: any, ok: string) => {
+    try {
+      await api(`/partners/${id}`, { method: 'PATCH', body });
+      toast({ text: ok });
+      dropCache(); await load();
+    } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+  };
+
+  /**
+   * Правка доли. Последствие пересчитывается ПРИ ВВОДЕ: набираешь
+   * процент — сразу видно, сколько останется вам. Их приём.
+   */
+  const editShare = async (p: any) => {
+    const now = p.commissionPercent;
+    const r = await ask({
+      title: `Доля партнёра · ${p.name}`,
+      value: { label: 'Доля партнёра, %', initial: String(now), numeric: true },
+      effects: (d) => {
+        const next = Number(d.value);
+        const ok = Number.isFinite(next) && next >= 0 && next <= 100;
+        return [
+          ['Партнёр', p.name],
+          ['Сейчас', `${now}% · вам ${100 - now}%`],
+          ['Станет', ok ? `${next}% · вам ${100 - next}%` : '— · допустимо от 0 до 100'],
+          ['Уже подтверждённые оплаты', 'хранят свою долю'],
+          ['Заработал за 30 дн.', money(p.earned)],
+        ];
+      },
+      confirmLabel: 'Изменить долю',
+    });
+    if (!r) return;
+    const next = Number(r.value);
+    if (!Number.isFinite(next) || next < 0 || next > 100) {
+      toast({ text: 'Доля от 0 до 100%', kind: 'err' }); return;
+    }
+    await save(p.id, { commissionPercent: next }, `Доля ${p.name}: ${next}%`);
+  };
+
+  /** Смена пароля партнёру. Показан один раз — передайте лично. */
+  const changePassword = async (p: any) => {
+    const r = await ask({
+      title: `Новый пароль · ${p.name}`,
+      sub: 'Старый пароль перестанет работать сразу. Передайте новый лично — '
+         + 'показан он будет один раз.',
+      effects: [['Партнёр', p.name], ['Вход', p.email]],
+      value: { label: 'Новый пароль', hint: 'не короче восьми знаков' },
+      confirmLabel: 'Сменить пароль',
+    });
+    if (!r) return;
+    if (r.value.length < 8) { toast({ text: 'Не короче восьми знаков', kind: 'err' }); return; }
+    try {
+      await api(`/partners/${p.id}`, { method: 'PATCH', body: { password: r.value } });
+      setShown({ title: 'Новый пароль партнёра', value: r.value,
+                 note: 'Показан один раз — передайте лично. В базе хранится отпечатком.' });
+      dropCache(); await load();
+    } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+  };
+
+  /** Отключение показывает последствие: сколько клиентов осиротеет. */
+  const toggle = async (p: any) => {
+    if (!p.isActive) { await save(p.id, { isActive: true }, `${p.name}: вход открыт`); return; }
+    let pv: any;
+    try { pv = await api(`/partners/${p.id}/off-preview`); }
+    catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
+
+    const r = await ask({
+      title: `Закрыть вход · ${p.name}`,
+      sub: pv.effect,
+      effects: [
+        ['Клиентов', String(pv.clients)],
+        ['Работающих', String(pv.activeClients)],
+        ['Дают в месяц', money(pv.mrr)],
+      ],
+      danger: true,
+      confirmLabel: 'Да, закрыть вход',
+    });
+    if (!r) return;
+    await save(p.id, { isActive: false }, `${p.name}: вход закрыт`);
+  };
+
+  if (err && !data) return <Failed text={err} onRetry={load} />;
+  if (!data) return <><SkeletonMetrics count={3} /><SkeletonTable rows={4} cols={7} /></>;
 
   return (
     <>
@@ -44,29 +131,6 @@ export default function Partners({ me }: { me: Me }) {
             <span>{shown.title}</span>
             <b>{shown.value}</b>
             <i>{shown.note}</i>
-          </div>
-        </div>
-      )}
-
-      {offAsk && (
-        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setOffAsk(null); }}>
-          <div className="ask-card">
-            <b>{offAsk.name}</b>
-            {/* Опасное действие показывает последствие до нажатия. */}
-            <p className="pay-note">{offAsk.effect}</p>
-            {offAsk.activeClients > 0 && (
-              <p>Работающих клиентов: {offAsk.activeClients} · дают {money(offAsk.mrr)}/мес</p>
-            )}
-            <div className="pay-actions">
-              <button className="btn ghost" onClick={() => setOffAsk(null)}>Отмена</button>
-              <button className="btn danger" onClick={async () => {
-                const id = offAsk.id; setOffAsk(null);
-                try {
-                  await api(`/partners/${id}`, { method: 'PATCH', body: { isActive: false } });
-                  dropCache(); await load();
-                } catch (e: any) { setErr(e.message); }
-              }}>Да, закрыть вход</button>
-            </div>
           </div>
         </div>
       )}
@@ -138,11 +202,18 @@ export default function Partners({ me }: { me: Me }) {
             {data.rows.map((p: any) => (
               <tr key={p.id}>
                 <td>
-                  {p.name}
+                  {/* Правка на месте: опечатку в имени гонять через
+                      лист подтверждения незачем — это не деньги. */}
+                  <InlineText value={p.name} label="Имя партнёра"
+                    onSave={(v) => save(p.id, { name: v }, 'Имя изменено')} />
                   {!p.isActive && <div className="sub">вход закрыт</div>}
                 </td>
                 <td>
-                  {p.email}
+                  {/* Почта — это ВХОД. Занятую сервер не примет: два
+                      партнёра с одной почтой означали бы, что один не
+                      сможет войти. */}
+                  <InlineText value={p.email} label="Почта для входа" mono
+                    onSave={(v) => save(p.id, { email: v }, 'Почта изменена')} />
                   {p.phone && <div className="sub">{p.phone}</div>}
                 </td>
                 <td className="num">
@@ -169,19 +240,22 @@ export default function Partners({ me }: { me: Me }) {
                       : dateTime(p.lastLoginAt)}
                 </td>
                 <td className="actions">
-                  {p.isActive ? (
-                    <button className="btn small" onClick={async () => {
-                      try { setOffAsk({ ...(await api(`/partners/${p.id}/off-preview`)), id: p.id }); }
-                      catch (e: any) { setErr(e.message); }
-                    }}>Закрыть вход</button>
-                  ) : (
-                    <button className="btn small" onClick={async () => {
-                      try {
-                        await api(`/partners/${p.id}`, { method: 'PATCH', body: { isActive: true } });
-                        dropCache(); await load();
-                      } catch (e: any) { setErr(e.message); }
-                    }}>Открыть вход</button>
-                  )}
+                  {/* Два действия в меню, как у них: доля и пароль
+                      нужны редко, но нужны — в строке им места нет. */}
+                  <RowMenu actions={[
+                    { label: 'Изменить долю…',
+                      hint: `сейчас ${p.commissionPercent}%`,
+                      onClick: () => editShare(p) },
+                    { label: 'Сменить пароль…',
+                      hint: 'старый перестанет работать сразу',
+                      onClick: () => changePassword(p) },
+                    { label: p.isActive ? 'Закрыть вход' : 'Открыть вход',
+                      hint: p.isActive
+                        ? 'клиенты продолжат работать'
+                        : 'партнёр снова сможет войти',
+                      danger: p.isActive,
+                      onClick: () => toggle(p) },
+                  ]} />
                 </td>
               </tr>
             ))}
