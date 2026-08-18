@@ -142,7 +142,10 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
               <article key={item.id}
                 className={`queue-item ${g.key} ${leaving[item.id] ? 'leaving' : ''}`}>
                 <div className="queue-main">
-                  <button className="link-name" onClick={() => goTo('clients')}>
+                  {/* Имя ведёт прямо в карточку клиента: у неё есть
+                      адрес, и возвращаться в список не нужно. */}
+                  <button className="link-name"
+                    onClick={() => { window.location.hash = `#/client/${item.accountId}`; goTo('clients'); }}>
                     {item.client}
                   </button>
                   <div className="queue-what">{item.what}</div>
@@ -193,7 +196,8 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
                       Позвонить
                     </a>
                   )}
-                  <button className="btn small ghost" onClick={() => goTo('clients')}>
+                  <button className="btn small ghost"
+                    onClick={() => { window.location.hash = `#/client/${item.accountId}`; goTo('clients'); }}>
                     Карточка
                   </button>
                 </div>

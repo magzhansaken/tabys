@@ -20,6 +20,7 @@ import { PayForm } from '../ui/PayForm';
 import { AskForm } from '../ui/AskForm';
 import { PlanLines } from '../ui/PlanLines';
 import { NewPassword, CopyValue } from '../ui/access';
+import TenantCard from './TenantCard';
 import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
@@ -53,6 +54,23 @@ export default function Clients({ me }: { me: Me }) {
   const [paying, setPaying] = useState<any>(null);
   const [newPass, setNewPass] = useState<any>(null);
   const [billFor, setBillFor] = useState<any>(null);
+
+  // У карточки есть АДРЕС: её можно оставить открытой, вернуться к ней
+  // и отправить ссылку. Их приём — раньше это было окно-тупик.
+  const [openCard, setOpenCard] = useState<string | null>(null);
+
+  useEffect(() => {
+    const read = () => {
+      const m = window.location.hash.match(/^#\/client\/(.+)$/);
+      setOpenCard(m?.[1] ? decodeURIComponent(m[1]) : null);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
+
+  const goClient = (id: string) => { window.location.hash = `#/client/${id}`; };
+  const goList = () => { window.location.hash = ''; };
   // Партнёр не меняет деньги сам — он просит платформу. Их пункт
   // «Запросить у платформы» в меню строки.
   const [asking, setAsking] = useState<any>(null);
@@ -81,6 +99,23 @@ export default function Clients({ me }: { me: Me }) {
   useEffect(() => { load(); }, []);
 
   // Их состояния: скелетон показывает форму будущего содержимого.
+  // Открыта карточка — показываем её вместо списка.
+  if (openCard) return (
+    <>
+      {paying && (
+        <PayForm client={paying}
+          onDone={(saved) => { setPaying(null); if (saved) dropCache(); }} />
+      )}
+      {asking && (
+        <AskForm client={asking}
+          onDone={(sent) => { setAsking(null); if (sent) dropCache(); }} />
+      )}
+      <TenantCard me={me} accountId={openCard} onBack={goList}
+        onPay={(c) => setPaying({ ...c, monthly: c.monthly })}
+        onRequest={(c) => setAsking(c)} />
+    </>
+  );
+
   if (err && !data) return <Failed text={err} onRetry={() => load()} />;
   if (!data) return <><SkeletonMetrics count={5} /><SkeletonTable rows={6} cols={7} /></>;
 
@@ -264,7 +299,7 @@ export default function Clients({ me }: { me: Me }) {
                         клика — человек хочет открыть карточку, а
                         попадает в поле. Поэтому правка отдельным
                         значком рядом. */}
-                    <button className="link-name">{r.name}</button>
+                    <button className="link-name" onClick={() => goClient(r.id)}>{r.name}</button>
                     <InlineText value={r.name} label="название" placeholder="✎"
                       onSave={async (v) => {
                         try {
@@ -319,7 +354,7 @@ export default function Clients({ me }: { me: Me }) {
                   <td className="actions">
                     <button className="btn small accent"
                       onClick={() => setPaying(r)}>Оплата</button>
-                    <button className="btn small">Карточка</button>
+                    <button className="btn small" onClick={() => goClient(r.id)}>Карточка</button>
 
                     {/* Меню строки: в строке два действия каждого дня,
                         остальное здесь. Шесть целей по 32 px в правой
