@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { api, dropCache, money, type Me } from '../lib';
 import { useToast } from '../ui/Toast';
+import { BulkPanel } from '../ui/BulkPanel';
 import { humanError } from '../ui/errors';
 import { Failed, SkeletonCards , PageHead } from '../ui/States';
 
@@ -21,17 +22,34 @@ export default function Settings({ me }: { me: Me }) {
   const [pay, setPay] = useState<any>(null);
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState('');
+  // Снимок с сервера: с ним сравниваем, чтобы понять, есть ли правки.
+  const [basePrices, setBasePrices] = useState<any>(null);
+  const [basePay, setBasePay] = useState<any>(null);
+
+  const [clients, setClients] = useState<any[]>([]);
 
   const load = async () => {
     try {
-      const [p, s] = await Promise.all([api('/price-book'), api('/pay-settings')]);
-      setPrices(p); setPay(s); setErr('');
+      const [p, s, c] = await Promise.all([
+        api('/price-book'), api('/pay-settings'),
+        api('/clients').catch(() => ({ rows: [] })),
+      ]);
+      setClients(c.rows ?? []);
+      setPrices(p); setPay(s);
+      setBasePrices(JSON.parse(JSON.stringify(p)));
+      setBasePay(JSON.parse(JSON.stringify(s)));
+      setErr('');
     } catch (e: any) { setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
   if (err && !prices) return <Failed text={err} onRetry={load} />;
   if (!prices || !pay) return <SkeletonCards count={2} height={240} />;
+
+  // Что изменено с последней загрузки: кнопка не должна предлагать
+  // сохранить, когда сохранять нечего. Их приём.
+  const dirtyPrices = JSON.stringify(prices) !== JSON.stringify(basePrices);
+  const dirtyPay = JSON.stringify(pay) !== JSON.stringify(basePay);
 
   const nothing = !pay.payUrl?.trim() && !pay.payQrUrl?.trim()
     && !pay.payPhone?.trim() && !pay.payName?.trim();
@@ -68,32 +86,54 @@ export default function Settings({ me }: { me: Me }) {
           ['extraStore', 'Вторая и следующая точка', 'в месяц за каждую'],
         ].map(([k, title, note]) => (
           <div className="price-row" key={k}>
-            <label>
-              {title}
-              <i className="split">{note}</i>
-            </label>
+            <div>
+              <b>{title}</b>
+              <div className="sub">{note}</div>
+            </div>
             <input value={String(prices[k] ?? 0)} inputMode="numeric"
               onChange={(e) => setPrices({ ...prices, [k]: Number(e.target.value) || 0 })} />
           </div>
         ))}
 
         {[
-          ['discount6', 'Скидка за полгода, %', 'клиент платит вперёд — платформа получает деньги раньше'],
-          ['discount12', 'Скидка за год, %', 'то же, но выгоднее обоим'],
-        ].map(([k, title, note]) => (
-          <div className="price-row" key={k}>
-            <label>
-              {title}
-              <i className="split">{note}</i>
-            </label>
-            <input value={String(prices[k] ?? 0)} inputMode="numeric"
-              onChange={(e) => setPrices({ ...prices, [k]: Number(e.target.value) || 0 })} />
-          </div>
-        ))}
+          ['discount6', 'Скидка за полгода, %', 6],
+          ['discount12', 'Скидка за год, %', 12],
+        ].map(([k, title, months]) => {
+          const pct = Number(prices[k as string] ?? 0);
+          const full = Number(prices.base ?? 0) * (months as number);
+          const withPct = Math.round(full * (1 - pct / 100));
+          return (
+            <div className="price-row" key={k as string}>
+              <div>
+                <b>{title}</b>
+                {/* Во что выльется скидка В ТЕНЬГЕ. Их приём: «10%»
+                    само по себе не говорит, сколько клиент заплатит и
+                    сколько платформа потеряет. */}
+                <div className="sub">
+                  {pct > 0 && Number(prices.base) > 0
+                    ? `при ${money(prices.base)}/мес — ${money(withPct)} вместо ${money(full)}`
+                    : 'скидки нет — срок считается по полной цене'}
+                </div>
+              </div>
+              <input value={String(prices[k as string] ?? 0)} inputMode="numeric"
+                onChange={(e) => setPrices({ ...prices, [k as string]: Number(e.target.value) || 0 })} />
+            </div>
+          );
+        })}
       </div>
 
-      <div className="pay-save">
-        <button className="btn primary" onClick={() => save('prices')}>Сохранить цены</button>
+      <div className="form-actions pay-save">
+        {/* «Сохранено» вместо «Сохранить», когда сохранять нечего:
+            кнопка, которая ничего не делает, учит нажимать наугад. */}
+        <button className="btn primary" disabled={!dirtyPrices}
+          onClick={() => save('prices')}>
+          {dirtyPrices ? 'Сохранить цены' : 'Сохранено'}
+        </button>
+        {dirtyPrices && (
+          <button className="btn" onClick={() => setPrices(JSON.parse(JSON.stringify(basePrices)))}>
+            Отменить правки
+          </button>
+        )}
       </div>
 
       <h2 className="section-title">Куда платят магазины</h2>
@@ -147,8 +187,16 @@ export default function Settings({ me }: { me: Me }) {
             <i className="split">Чтобы платёж нашли, когда он придёт</i>
           </label>
 
-          <div className="pay-save">
-            <button className="btn primary" onClick={() => save('pay')}>Сохранить реквизиты</button>
+          <div className="form-actions pay-save">
+            <button className="btn primary" disabled={!dirtyPay}
+              onClick={() => save('pay')}>
+              {dirtyPay ? 'Сохранить реквизиты' : 'Сохранено'}
+            </button>
+            {dirtyPay && (
+              <button className="btn" onClick={() => setPay(JSON.parse(JSON.stringify(basePay)))}>
+                Отменить правки
+              </button>
+            )}
           </div>
         </section>
 
@@ -196,6 +244,18 @@ export default function Settings({ me }: { me: Me }) {
           <p className="hint">Сумма в примере условная — у клиента подставится его счёт.</p>
         </section>
       </div>
+
+      {/* МАССОВЫЕ ДЕЙСТВИЯ ЖИВУТ ЗДЕСЬ, а не среди ежедневной работы.
+          Их довод: самая опасная возможность платформы не должна
+          стоять между графиком и таблицей, где на неё нажимают
+          походя. */}
+      <h2 className="section-title danger-title">Массовые действия</h2>
+      <p className="hint settings-hint">
+        Меняет деньги сразу у многих и живёт здесь, а не среди ежедневной работы.
+        Чтобы применить к отдельным магазинам — отметьте их галочками во вкладке «Клиенты».
+      </p>
+      <BulkPanel rows={clients} selected={[]}
+        onClear={() => {}} onDone={() => { dropCache(); load(); }} />
     </>
   );
 }

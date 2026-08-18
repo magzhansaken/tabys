@@ -562,6 +562,13 @@ const RULES = [
   { file: 'admin/app/platform/sections/Journal.tsx', must: "dirty ? 'По этому отбору записей нет'",
     why: 'Пустота объясняется по-разному: при отборе предлагаем его снять, без отбора — говорим, что здесь появится' },
 
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'danger-title',
+    why: 'Массовые действия живут в настройках: самая опасная возможность не должна стоять среди ежедневной работы' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: "dirtyPrices ? 'Сохранить цены' : 'Сохранено'",
+    why: 'Кнопка знает, есть ли что сохранять: кнопка, которая ничего не делает, учит нажимать наугад' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'вместо ${money(full)}',
+    why: 'Скидка показана в тенге: «10%» само не говорит, сколько заплатит клиент и сколько потеряет платформа' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

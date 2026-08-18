@@ -22,7 +22,6 @@ import { NewTenant } from '../ui/NewTenant';
 import { PlanLines } from '../ui/PlanLines';
 import { NewPassword, CopyValue, Credentials } from '../ui/access';
 import TenantCard from './TenantCard';
-import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
 import { useDeleteTenant } from '../ui/deleteTenant';
@@ -202,13 +201,20 @@ export default function Clients({ me }: { me: Me }) {
         ))}
       </div>
 
-      {/* Массовые действия: два шага всегда. Сперва сервер отвечает,
-          кого затронет, потом применение — тем же листом, что и
-          одиночное решение. Одинаковые действия выглядят одинаково. */}
-      {isSuper && (
-        <BulkPanel rows={data.rows} selected={selected}
-          onClear={() => setSelected([])}
-          onDone={() => { dropCache(); load(); }} />
+      {/* Отмеченные строки применяются в «Настройках»: сами массовые
+          действия живут там, а не среди ежедневной работы. Их довод:
+          самая опасная возможность платформы не должна стоять между
+          графиком и таблицей, где на неё нажимают походя. */}
+      {isSuper && selected.length > 0 && (
+        <div className="picked-bar">
+          <span>Отмечено {selected.length}</span>
+          <div className="picked-controls">
+            <button className="btn small ghost" onClick={() => setSelected([])}>Снять</button>
+            <span className="hint">
+              Массовые действия — во вкладке «Настройки»
+            </span>
+          </div>
+        </div>
       )}
 
       {creating && (
