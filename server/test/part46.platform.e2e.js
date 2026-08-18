@@ -897,6 +897,36 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── ОТКЛЮЧЕНИЕ ПАРТНЁРА ДЕЙСТВУЕТ СРАЗУ ─────────────────────────
+  //
+  // Дописано после находки: партнёру закрыли вход, а его СТАРЫЙ КЛЮЧ
+  // продолжал работать — он видел клиентов, отмечал оплаты, заводил
+  // новых. «Закрыть вход» мешало только войти заново.
+  {
+    let v = await j('GET', '/platform/partners', null, SUPER);
+    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser && x.isActive);
+    if (p) {
+      await j('PATCH', `/platform/partners/${p.id}`, { isActive: false }, SUPER);
+
+      v = await j('GET', '/platform/clients', null, PARTNER);
+      ok(v.status === 403,
+         '★ Отключённый партнёр не видит клиентов даже со старым ключом');
+
+      v = await j('POST', '/platform/tenants',
+        { name: 'После отключения', ownerName: 'X', ownerPhone: '+77010000777' }, PARTNER);
+      ok(v.status === 403, '★ Отключённый партнёр не заводит клиентов');
+
+      // Владельца это не задевает.
+      v = await j('GET', '/platform/clients', null, SUPER);
+      ok((v.d?.rows ?? []).length > 0, 'Владелец работает как работал');
+
+      // Возвращаем, чтобы не мешать остальным проверкам.
+      await j('PATCH', `/platform/partners/${p.id}`, { isActive: true }, SUPER);
+      v = await j('GET', '/platform/clients', null, PARTNER);
+      ok(v.status === 200, '★ Включение возвращает доступ сразу');
+    }
+  }
+
   // ── ВОРОНКА: ручной этап сильнее, но его можно снять ─────────────
   //
   // Дописано после находки: карточка, двинутая в «Отказ» руками,

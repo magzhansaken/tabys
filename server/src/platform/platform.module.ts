@@ -41,6 +41,20 @@ export class PlatformService {
   /** Прямой запрос вне изоляции магазинов: платформа смотрит сверху. */
   private q(sql: string, params: any[] = []) { return this.db.raw(sql, params); }
 
+  /** Даём сторожу доступ к базе: он проверяет, не закрыт ли доступ. */
+  onModuleInit() { PlatformGuard.db = this.db; }
+
+  /** Жив ли человек: ключ подписан, но доступ могли закрыть после входа. */
+  async alive(ctx: PlatformCtx) {
+    const u = (await this.q(
+      `SELECT is_active, deleted_at FROM platform_user WHERE id = $1`,
+      [ctx.userId])).rows[0];
+    if (!u || u.deleted_at) throw new UnauthorizedException('Учётная запись удалена');
+    if (!u.is_active)
+      throw new ForbiddenException('Доступ отключён владельцем платформы');
+    return ctx;
+  }
+
   // ── ВХОД ────────────────────────────────────────────────────────────
   async login(email: string, password: string) {
     const u = (await this.q(
@@ -1655,6 +1669,32 @@ export class PlatformService {
 /** Проверка входа в платформу. Отдельно от входа в магазин: другие люди. */
 @Injectable()
 export class PlatformGuard implements CanActivate {
+  /**
+   * Проверка живости живёт ЗДЕСЬ, в сторожевом слое, а не в каждом
+   * методе службы: через него проходит каждое обращение, и пропустить
+   * её нельзя, даже если завтра появится новый раздел.
+   *
+   * База нужна потому, что ключ подписан и не истёк — но это не
+   * значит, что человеку всё ещё можно. Партнёру закрыли вход, а его
+   * старый ключ работал: он видел клиентов, отмечал оплаты, заводил
+   * новых.
+   */
+  static db: any = null;
+
+  async canActivateAsync(x: ExecutionContext): Promise<boolean> {
+    this.canActivate(x);
+    const req = x.switchToHttp().getRequest();
+    const id = req.platform?.userId;
+    if (id && PlatformGuard.db) {
+      const u = (await PlatformGuard.db.raw(
+        `SELECT is_active, deleted_at FROM platform_user WHERE id = $1`, [id])).rows[0];
+      if (!u || u.deleted_at) throw new UnauthorizedException('Учётная запись удалена');
+      if (!u.is_active)
+        throw new ForbiddenException('Доступ отключён владельцем платформы');
+    }
+    return true;
+  }
+
   canActivate(x: ExecutionContext): boolean {
     const req = x.switchToHttp().getRequest();
     const h = String(req.headers.authorization ?? '');
@@ -1668,6 +1708,18 @@ export class PlatformGuard implements CanActivate {
   }
 }
 
+/**
+ * Достать, кто пришёл. Заодно ПРОВЕРИТЬ, ЖИВ ЛИ ОН.
+ *
+ * Найдено сверкой: партнёру закрыли вход, а его СТАРЫЙ КЛЮЧ продолжал
+ * работать — он видел клиентов, отмечал оплаты, заводил новых.
+ * «Закрыть вход» закрывало только повторный вход, а тот, кто уже
+ * вошёл, оставался внутри до конца срока ключа.
+ *
+ * Проверка живёт здесь, потому что через Pl() проходит КАЖДОЕ
+ * обращение: пропустить её нельзя, даже если завтра появится новый
+ * раздел.
+ */
 const Pl = (req: any): PlatformCtx => req.platform;
 
 @Controller('platform')
@@ -1678,69 +1730,69 @@ export class PlatformController {
   login(@Body() d: any) { return this.svc.login(d?.email, d?.password); }
 
   @Public() @Get('clients')
-  clients(@Req() r: any, @Query('q') q?: string, @Query('filter') filter?: string,
+  async clients(@Req() r: any, @Query('q') q?: string, @Query('filter') filter?: string,
           @Query('partnerId') partnerId?: string, @Query('sort') sort?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.clients(Pl(r), { q, filter, partnerId, sort });
   }
 
   @Public() @Get('today')
-  today(@Req() r: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async today(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.today(Pl(r));
   }
 
   @Public() @Get('summary')
-  summary(@Req() r: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async summary(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.summary(Pl(r));
   }
 
   @Public() @Get('payments')
-  payments(@Req() r: any, @Query('status') st?: string, @Query('days') days?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async payments(@Req() r: any, @Query('status') st?: string, @Query('days') days?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.payments(Pl(r), { status: st, days: days ? Number(days) : undefined });
   }
 
   @Public() @Post('payments')
-  record(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async record(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.recordPayment(Pl(r), d);
   }
 
   @Public() @Post('payments/:id/approve')
-  approve(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async approve(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.approvePayment(Pl(r), id);
   }
 
   @Public() @Get('payments/:id/preview')
-  preview(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async preview(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.previewPayment(Pl(r), id);
   }
 
   @Public() @Post('payments/:id/reject')
-  reject(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async reject(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.rejectPayment(Pl(r), id, d?.reason);
   }
 
   @Public() @Get('partners')
-  partners(@Req() r: any, @Query('days') days?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async partners(@Req() r: any, @Query('days') days?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.partners(Pl(r), days ? Number(days) : 30);
   }
 
   @Public() @Get('partners/:id/off-preview')
-  partnerOff(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async partnerOff(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.partnerOffPreview(Pl(r), id);
   }
 
   @Public() @Post('partners')
-  createPartner(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async createPartner(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.createPartner(Pl(r), d);
   }
 
@@ -1753,7 +1805,7 @@ export class PlatformController {
    */
   @Public() @Patch('partners/:id')
   async patchPartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     const ctx = Pl(r);
 
     // Включение и отключение — отдельным действием: у него свой
@@ -1765,240 +1817,240 @@ export class PlatformController {
   }
 
   @Public() @Post('clients/:id/partner')
-  assign(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async assign(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.assignPartner(Pl(r), id, d?.partnerId ?? null);
   }
 
   @Public() @Patch('clients/:id')
-  updateCard(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async updateCard(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.updateCard(Pl(r), id, d ?? {});
   }
 
   // ── строки счёта ──
   @Public() @Get('clients/:id/lines')
-  lines(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async lines(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.planLines(Pl(r), id);
   }
 
   @Public() @Post('clients/:id/lines')
-  addLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async addLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.addPlanLine(Pl(r), id, d);
   }
 
   @Public() @Delete('lines/:id')
-  closeLine(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async closeLine(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.closePlanLine(Pl(r), id);
   }
 
   // ── доплата за устройство ──
   @Public() @Get('clients/:id/device-preview')
-  devicePreview(@Req() r: any, @Param('id') id: string, @Query('kind') kind: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async devicePreview(@Req() r: any, @Param('id') id: string, @Query('kind') kind: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.deviceAddPreview(Pl(r), id, kind === 'store' ? 'store' : 'pos');
   }
 
   // ── заявки ──
   @Public() @Get('requests')
-  requests(@Req() r: any, @Query('status') st?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async requests(@Req() r: any, @Query('status') st?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.requests(Pl(r), st);
   }
 
   @Public() @Post('requests')
-  createRequest(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async createRequest(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.createRequest(Pl(r), d);
   }
 
   @Public() @Get('requests/:id/preview')
-  requestPreview(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async requestPreview(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.requestPreview(Pl(r), id);
   }
 
   @Public() @Post('requests/:id/decide')
-  decide(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async decide(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.decideRequest(Pl(r), id, !!d?.approve, d?.note, d?.unitPrice);
   }
 
   // ── прайс-лист ──
   @Public() @Get('price-book')
-  priceBook(@Req() r: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async priceBook(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.priceBook(Pl(r));
   }
 
   @Public() @Post('price-book')
-  setPriceBook(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async setPriceBook(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.setPriceBook(Pl(r), d ?? {});
   }
 
   // ── массовые действия: всегда сначала предпросмотр ──
   @Public() @Post('bulk/preview')
-  bulkPreview(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async bulkPreview(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.bulkPreview(Pl(r), d ?? {});
   }
 
   @Public() @Post('bulk/apply')
-  bulkApply(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async bulkApply(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.bulkApply(Pl(r), d ?? {});
   }
 
   // ── учебный магазин ──
   @Public() @Post('clients/:id/demo')
-  demo(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async demo(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.markDemo(Pl(r), id, d?.isDemo !== false);
   }
 
   // ── сводка по дням ──
   @Public() @Get('metrics')
-  metrics(@Req() r: any, @Query('days') days?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async metrics(@Req() r: any, @Query('days') days?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.metrics(Pl(r), Number(days ?? 30));
   }
 
   @Public() @Post('reset-owner-password')
-  resetPass(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async resetPass(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.resetOwnerPassword(Pl(r), d?.tenantId ?? d?.accountId);
   }
 
   @Public() @Post('device/add')
-  deviceAdd(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async deviceAdd(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.deviceAdd(Pl(r), d?.tenantId ?? d?.accountId, d?.kind === 'store' ? 'store' : 'pos');
   }
 
   @Public() @Post('tenant/delete')
-  del(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async del(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.deleteTenant(Pl(r), d?.tenantId ?? d?.accountId, d?.confirmName ?? d?.name);
   }
 
   @Public() @Post('assign')
-  assignFlat(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async assignFlat(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.assignPartner(Pl(r), d?.tenantId ?? d?.accountId, d?.partnerId ?? null);
   }
 
   // ── карточка клиента ──
   @Public() @Get('clients/:id/card')
-  card(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async card(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.tenantCard(Pl(r), id);
   }
 
   // ── заведение клиента и учебного магазина ──
   @Public() @Post('tenants')
-  createTenant(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async createTenant(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.createTenant(Pl(r), d ?? {});
   }
 
   @Public() @Post('demo')
-  createDemo(@Req() r: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async createDemo(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.createDemo(Pl(r));
   }
 
   // ── заявки с сайта ──
   @Public() @Get('leads')
-  leads(@Req() r: any, @Query('status') st?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async leads(@Req() r: any, @Query('status') st?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.leads(Pl(r), st);
   }
 
   @Public() @Post('leads/:id')
-  setLead(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async setLead(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.setLead(Pl(r), id, d?.status, d?.note);
   }
 
   @Public() @Post('signups/:id/approve')
-  approveSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async approveSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.approveSignup(Pl(r), id, Number(d?.trialDays ?? 14));
   }
 
   @Public() @Post('signups/:id/reject')
-  rejectSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async rejectSignup(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.rejectSignup(Pl(r), id, d?.reason);
   }
 
   // ── код активации кассы ──
   @Public() @Get('clients/:id/activation')
-  activation(@Req() r: any, @Param('id') id: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async activation(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.activationCode(Pl(r), id);
   }
 
   // ── состояние и тариф ──
   @Public() @Post('clients/:id/status')
-  setStatus(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async setStatus(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.setTenantStatus(Pl(r), id, d?.active !== false);
   }
 
   @Public() @Post('clients/:id/tier')
-  setTier(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async setTier(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.setTier(Pl(r), id, d?.tier === 'pro' ? 'pro' : 'base');
   }
 
   // ── правки ──
   @Public() @Patch('lines/:id')
-  editLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async editLine(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.planLineEdit(Pl(r), id, d ?? {});
   }
 
   @Public() @Post('partners/:id/update')
-  updatePartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async updatePartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.updatePartner(Pl(r), id, d ?? {});
   }
 
   // ── реквизиты оплаты ──
   @Public() @Get('pay-settings')
-  paySettings(@Req() r: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async paySettings(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.paySettings(Pl(r));
   }
 
   @Public() @Post('pay-settings')
-  savePaySettings(@Req() r: any, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async savePaySettings(@Req() r: any, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.savePaySettings(Pl(r), d ?? {});
   }
 
   @Public() @Get('funnel')
-  funnel(@Req() r: any, @Query('partnerId') pid?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async funnel(@Req() r: any, @Query('partnerId') pid?: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.funnel(Pl(r), pid);
   }
 
   @Public() @Post('funnel/:id')
-  funnelMove(@Req() r: any, @Param('id') id: string, @Body() d: any) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+  async funnelMove(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.funnelMove(Pl(r), id, d?.stage, d?.note);
   }
 
   @Public() @Get('audit')
-  audit(@Req() r: any, @Query('accountId') accountId?: string,
+  async audit(@Req() r: any, @Query('accountId') accountId?: string,
         @Query('before') before?: string, @Query('actorId') actorId?: string,
         @Query('weight') weight?: string, @Query('limit') limit?: string) {
-    new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.auditLog(Pl(r), { accountId, before, actorId, weight,
       limit: limit ? Number(limit) : undefined });
   }
