@@ -18,6 +18,7 @@
  * Запуск:  node scripts/check-migrations.js
  */
 const { execSync } = require('child_process');
+const path = require('path');
 const fs = require('fs');
 
 const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8' }); } catch { return ''; } };
@@ -56,7 +57,7 @@ let spread = [];
 for (const f of files) {
   const n = Number(f.slice(0, 3));
   if (!Number.isFinite(n) || n <= APPLIED) continue;
-  const t = fs.readFileSync(path.join(DIR, f), 'utf8');
+  const t = fs.readFileSync(path.join('db/migrations', f), 'utf8');
   if (/unit_price \* pl\.qty/.test(t) && /price_month/.test(t)) spread.push(f);
 }
 if (spread.length) {

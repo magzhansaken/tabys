@@ -1091,6 +1091,22 @@ export class PlatformService {
          touched_at = now(), updated_at = now()`,
       [accountId, d.dealStage ?? null, d.dealNote ?? null, d.city ?? null,
        d.ownerName ?? null, d.ownerPhone ?? null, d.note ?? null]);
+
+    // Правка карточки ПИШЕТСЯ В ЖУРНАЛ. Журнал нужен ровно для вопроса
+    // «кто это поменял», а название, город и телефон правят чаще
+    // всего — и до сих пор эта правка следа не оставляла.
+    //
+    // Пишем ТОЛЬКО заполненные поля: иначе запись выглядит как
+    // «поменял всё», хотя человек тронул одно.
+    const changed = Object.fromEntries(
+      Object.entries({
+        name: d.name, city: d.city, ownerName: d.ownerName,
+        ownerPhone: d.ownerPhone, dealStage: d.dealStage, dealNote: d.dealNote,
+      }).filter(([, v]) => v != null && v !== ''));
+    if (Object.keys(changed).length > 0) {
+      await this.audit(ctx, 'card_updated', accountId, changed);
+    }
+
     return { ok: true };
   }
 

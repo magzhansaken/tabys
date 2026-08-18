@@ -177,5 +177,8 @@
 \echo '--- 069 счёт в остальных трёх местах ---'
 \i db/migrations/069_monthly_rest.sql
 
+\echo '--- 070 названия действий в журнале ---'
+\i db/migrations/070_journal_titles.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
