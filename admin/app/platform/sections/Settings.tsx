@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { api, dropCache, money, type Me } from '../lib';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonCards } from '../ui/States';
+import { Failed, SkeletonCards , PageHead } from '../ui/States';
 
 export default function Settings({ me }: { me: Me }) {
   const [prices, setPrices] = useState<any>(null);
@@ -49,6 +49,8 @@ export default function Settings({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={'Настройки'} sub={'Реквизиты видит владелец каждого магазина у себя в разделе «Подписка». Он платит напрямую вам — партнёр получает долю расчётом.'} />
+
       {err && <div className="err">{err}</div>}
       {saved && <div className="all-clear"><b>{saved}</b></div>}
 

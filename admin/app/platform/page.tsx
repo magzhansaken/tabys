@@ -170,7 +170,6 @@ export default function PlatformPage() {
         </header>
 
         <main>
-          <h1>{label(tabs.find((t) => t.key === tab)!)}</h1>
           {tab === 'today'    && <Today me={me} goTo={setTab} />}
           {tab === 'clients'  && <Clients me={me} />}
           {tab === 'money'    && <Money me={me} />}

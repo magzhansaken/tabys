@@ -17,7 +17,7 @@ import { InlineText } from '../ui/InlineText';
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonMetrics, SkeletonTable, Empty } from '../ui/States';
+import { Failed, SkeletonMetrics, SkeletonTable, Empty , PageHead } from '../ui/States';
 
 export default function Partners({ me }: { me: Me }) {
   const [data, setData] = useState<any>(null);
@@ -123,6 +123,8 @@ export default function Partners({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={'Партнёры'} sub={'Партнёр заводит и настраивает своих клиентов, отмечает оплаты. Подтверждаете деньги только вы.'} />
+
       {err && <div className="err">{err}</div>}
 
       {shown && (

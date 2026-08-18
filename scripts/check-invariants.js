@@ -539,6 +539,11 @@ const RULES = [
   { file: 'db/migrations/063_money_note.sql', must: 'will_extend_to timestamptz',
     why: 'Что будет при подтверждении, считает база тем же способом, что и само подтверждение — строка не разойдётся с делом' },
 
+  { file: 'admin/app/platform/sections/Requests.tsx', must: 'Решаете вы',
+    why: 'Подпись раздела разная по роли: партнёр просит, владелец решает — и это надо сказать словами' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'платит напрямую вам',
+    why: 'Подпись настроек объясняет устройство денег: клиент платит платформе, партнёр получает долю расчётом' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

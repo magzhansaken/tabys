@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { api, money, type Me } from '../lib';
 import { humanError } from '../ui/errors';
-import { Empty, Failed, SkeletonCards } from '../ui/States';
+import { Empty, Failed, SkeletonCards , PageHead } from '../ui/States';
 
 /**
  * Короткая метка вида — их приём: «оплата», «отказ», «массово». Она
@@ -67,6 +67,7 @@ const time = (iso: string) =>
   new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
 export default function Journal({ me }: { me: Me }) {
+  const isSuper = me.role === 'super';
   const [rows, setRows] = useState<any[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -117,6 +118,10 @@ export default function Journal({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={isSuper ? 'Журнал' : 'Мои события'} sub={isSuper
+          ? 'Кто что сделал на платформе: оплаты, цены, отсрочки, уровни, воронка. Денежные записи выделены.'
+          : 'Что происходило по вашим клиентам и что решила платформа.'} />
+
       {me.role === 'super' && (
         <div className="toolbar">
           <select className="sorter" value={actorId}

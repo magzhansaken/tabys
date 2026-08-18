@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { api, cached, putCache, money, type Me } from '../lib';
 import { Chart } from '../ui/Chart';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonCards, SkeletonMetrics } from '../ui/States';
+import { Failed, SkeletonCards, SkeletonMetrics , PageHead } from '../ui/States';
 
 /** Знаки партнёров: у них у каждого свой, чтобы различать в списке
  *  быстрее, чем читая имя. */
@@ -52,6 +52,8 @@ export default function Summary({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={'Сводка платформы'} sub={`За ${data.days} дней`} />
+
       {err && <div className="err">{err}</div>}
 
       <div className="chips">

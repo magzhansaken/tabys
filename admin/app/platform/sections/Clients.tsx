@@ -31,7 +31,7 @@ import { statusView, STATUS_FILTERS, STATUS_FILTERS_PARTNER } from '../ui/status
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonMetrics, SkeletonTable, Empty } from '../ui/States';
+import { Failed, SkeletonMetrics, SkeletonTable, Empty , PageHead } from '../ui/States';
 
 const SORTS = [
   { key: 'due',     label: 'Сначала просроченные' },
@@ -142,6 +142,8 @@ export default function Clients({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={isSuper ? 'Клиенты' : 'Мои клиенты'} sub={'Все магазины платформы: состояние, срок оплаты и кто ведёт.'} />
+
       <div className="page-head">
         <div>
           <p className="muted">Все магазины платформы: состояние, срок оплаты и кто ведёт.</p>

@@ -17,9 +17,10 @@ import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } 
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonMetrics, SkeletonCards, Empty } from '../ui/States';
+import { Failed, SkeletonMetrics, SkeletonCards, Empty , PageHead } from '../ui/States';
 
 export default function Money({ me }: { me: Me }) {
+  const isSuper = me.role === 'super';
   const [data, setData] = useState<any>(null);
   const [onlyPending, setOnlyPending] = useState(true);
   const [err, setErr] = useState('');
@@ -104,6 +105,10 @@ export default function Money({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={isSuper ? 'Деньги' : 'Оплаты моих клиентов'} sub={isSuper
+          ? 'Очередь платежей. Подтверждение продлевает доступ и начисляет долю партнёру.'
+          : 'Оплаты ваших клиентов и их состояние.'} />
+
       {err && <div className="err">{err}</div>}
 
       <div className="cards">

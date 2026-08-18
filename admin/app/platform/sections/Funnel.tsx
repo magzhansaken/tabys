@@ -22,12 +22,13 @@ import { RowMenu } from '../ui/RowMenu';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
 import { requestMark } from '../ui/requestMark';
-import { Failed, SkeletonCards, Empty } from '../ui/States';
+import { Failed, SkeletonCards, Empty , PageHead } from '../ui/States';
 
 type Drag = { id: string; name: string; from: string; x: number; y: number; over: string | null };
 type Grab = Drag & { moved: boolean; pointerId: number };
 
 export default function Funnel({ me }: { me: Me }) {
+  const isSuper = me.role === 'super';
   const [data, setData] = useState<any>(null);
   const [reqs, setReqs] = useState<any[]>([]);
   const [err, setErr] = useState('');
@@ -136,6 +137,10 @@ export default function Funnel({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={'Воронка'} sub={isSuper
+          ? 'Все клиенты платформы. Сумма в колонке — сколько денег в месяц стоит на этапе.'
+          : 'Ваши клиенты. Двигайте карточку по мере работы — этап видит и платформа.'} />
+
       {me.role === 'super' && partnerNames.length > 1 && (
         <div className="toolbar">
           <select className="sorter" value={partner} onChange={(e) => setPartner(e.target.value)}>

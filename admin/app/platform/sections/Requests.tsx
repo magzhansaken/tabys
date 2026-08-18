@@ -16,7 +16,7 @@ import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
 import { describeRequest } from '../ui/describeRequest';
-import { Failed, SkeletonCards, Empty } from '../ui/States';
+import { Failed, SkeletonCards, Empty , PageHead } from '../ui/States';
 
 
 export default function Requests({ me }: { me: Me }) {
@@ -91,6 +91,10 @@ export default function Requests({ me }: { me: Me }) {
 
   return (
     <>
+      <PageHead title={isSuper ? 'Заявки' : 'Мои заявки'} sub={isSuper
+          ? 'Партнёры просят то, что меняет деньги: лимиты, тарифы, отсрочки. Решаете вы.'
+          : 'Ваши заявки владельцу платформы. Решение приходит сюда же.'} />
+
       {err && <div className="err">{err}</div>}
 
       <div className="toolbar">
