@@ -226,6 +226,9 @@ export class PlatformService {
         suspended: Number(c.suspended ?? 0),
         demo: Number(c.demo ?? 0),
         nobody: Number(c.nobody ?? 0),
+        // «Доход в месяц» над таблицей: база его считает, а сервер не
+        // передавал — карточка рисовала пустоту.
+        mrr: money(Number(c.mrr ?? 0)),
       },
       partners: partners.rows.map((p: any) => ({ id: p.id, name: p.full_name })),
       filter, sort, partnerId: partner,
