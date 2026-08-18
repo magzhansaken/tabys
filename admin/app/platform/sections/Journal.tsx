@@ -11,7 +11,7 @@
  *   денежные записи помечены классом weighty — цена ошибки в них другая;
  *   листание кнопкой «Показать ещё» курсором по времени.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, money, type Me } from '../lib';
 import { humanError } from '../ui/errors';
 import { Empty, Failed, SkeletonCards , PageHead } from '../ui/States';
@@ -73,7 +73,6 @@ export default function Journal({ me }: { me: Me }) {
   const [hasMore, setHasMore] = useState(false);
   const [weight, setWeight] = useState('all');
   const [actorId, setActorId] = useState('all');
-  const [onlyMoney, setOnlyMoney] = useState(false);
   const [tenantId, setTenantId] = useState('all');
   const [people, setPeople] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -83,7 +82,7 @@ export default function Journal({ me }: { me: Me }) {
   const load = async (w = weight, before?: string) => {
     setBusy(true);
     try {
-      const p = new URLSearchParams({ limit: '40' });
+      const p = new URLSearchParams({ limit: '50' });
       if (w !== 'all') p.set('weight', w);
       if (actorId !== 'all') p.set('actorId', actorId);
       if (tenantId !== 'all') p.set('accountId', tenantId);
@@ -95,7 +94,13 @@ export default function Journal({ me }: { me: Me }) {
     finally { setBusy(false); }
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => { if (rows.length === 0) load(weight); }, [actorId, tenantId]);
+  // Смена отбора грузит прямо, а не через «список опустел»: иначе
+  // честный пустой ответ сервера запускал перезагрузку по кругу.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    setRows([]); load(weight);
+  }, [actorId, tenantId]);
 
   // Списки для отбора: кто действовал и по какому клиенту. У них так
   // же — журнал без отбора бесполезен, когда записей тысяча.
@@ -107,12 +112,16 @@ export default function Journal({ me }: { me: Me }) {
 
   // Группировка по дням: в журнале ищут «что было вчера», а не запись
   // номер сорок.
-  const shown = onlyMoney ? rows.filter((r) => r.amount != null || r.weight === 'money') : rows;
+  // Отбор по весу делают ВКЛАДКИ, и только они. Раньше рядом жила
+  // галочка «только про деньги» — второй отбор о том же самом.
+  // Вместе они давали пустой экран (вкладка «Доступ» + деньги), и
+  // объяснить это человеку было нечем.
+  const shown = rows;
 
   // Отбор включён — значит пустота объясняется иначе.
-  const dirty = actorId !== 'all' || tenantId !== 'all' || onlyMoney || weight !== 'all';
+  const dirty = actorId !== 'all' || tenantId !== 'all' || weight !== 'all';
   const reset = () => {
-    setActorId('all'); setTenantId('all'); setOnlyMoney(false);
+    setActorId('all'); setTenantId('all');
     setWeight('all'); setRows([]); load('all');
   };
 
@@ -142,12 +151,6 @@ export default function Journal({ me }: { me: Me }) {
             <option value="all">Все магазины</option>
             {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-
-          <label className="check">
-            <input type="checkbox" checked={onlyMoney}
-              onChange={(e) => setOnlyMoney(e.target.checked)} />
-            Только про деньги
-          </label>
 
           {/* Кнопка появляется, только когда есть что сбрасывать: их
               приём. Мёртвая кнопка учит себя не замечать. */}

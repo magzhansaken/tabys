@@ -502,8 +502,10 @@ const RULES = [
     why: 'Мало точек — говорим словами: огрызок графика хуже честной строки' },
   { file: 'admin/app/platform/ui/Chart.tsx', must: 'span * 0.15',
     why: 'Отступ 15% сверху и снизу: линия не липнет к краям, и видно, что она может расти' },
-  { file: 'admin/app/platform/sections/Journal.tsx', must: 'onlyMoney || weight',
+  { file: 'admin/app/platform/sections/Journal.tsx', must: "tenantId !== 'all' || weight !== 'all'",
     why: 'Кнопка «Сбросить» появляется, только когда есть что сбрасывать: мёртвая кнопка учит себя не замечать' },
+  { file: 'admin/app/platform/sections/Journal.tsx', must: 'Отбор по весу делают ВКЛАДКИ, и только они',
+    why: 'Два отбора об одном и том же противоречили: вкладка «Доступ» плюс галочка «деньги» давали пустой экран всегда' },
 
   { file: 'admin/app/platform/ui/PlanLines.tsx', must: 'только плата, без самой кассы',
     why: 'Строка «Касса» в счёте — не устройство: человек выбирал её, думая что подключает, и клиент платил за то, чего нет' },
