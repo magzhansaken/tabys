@@ -23,10 +23,12 @@ const PAD_L = 44;
 const PAD_R = 8;
 const PAD_T = 12;
 
-export function Chart({ points, height = 180, format }: {
+export function Chart({ points, height = 180, format, title }: {
   points: ChartPoint[];
   height?: number;
   format: (v: number) => string;
+  /** Название для тех, кто слушает страницу: график им не виден. */
+  title?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -64,6 +66,7 @@ export function Chart({ points, height = 180, format }: {
   return (
     <div className="chart" ref={box}>
       <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none"
+        role="img" aria-label={title}
         /* Наведение работает и пальцем: события указателя, не мыши. */
         onPointerMove={(e) => track(e.clientX)}
         onPointerLeave={() => setHover(null)}>

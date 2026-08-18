@@ -78,27 +78,44 @@ export default function Summary({ me }: { me: Me }) {
       </div>
 
       <div className="chart-grid">
+        {/* ПЛАТЯЩИЕ КЛИЕНТЫ, а не оплаты по дням. Их выбор, и он
+            вернее: оплаты скачут — сегодня три, завтра ноль, и по
+            такому графику ничего не понять. Число платящих растёт или
+            падает ровно, и это единственная линия, которая отвечает
+            на вопрос «мы растём?». */}
         <section className="chart-box">
           <div className="chart-head">
-            <b>Оплаты по дням</b>
-            {/* Цифра без сравнения ничего не значит: «140 тысяч» — это
-                много или мало? */}
-            <span>
-              {data.period.payments} за период ·{' '}
-              {ch.amount >= 0 ? '+' : '−'}{money(Math.abs(ch.amount))} к прошлым {data.days} дн.
-            </span>
+            <b>Платящие клиенты за {data.days} дней</b>
+            <span>{t.active} сейчас</span>
           </div>
-          <Chart format={(v) => money(v)}
-            points={data.series.map((d: any) => ({ label: short(d.day), value: d.amount }))} />
+          <Chart title={`Платящие клиенты за ${data.days} дней`}
+            format={(v) => String(Math.round(v))}
+            points={data.series.map((d: any) => ({ label: short(d.day), value: d.active }))} />
         </section>
 
         <section className="chart-box">
           <div className="chart-head">
-            <b>Доход в месяц</b>
+            <b>Доход в месяц за {data.days} дней</b>
             <span>{money(t.mrr)} сейчас</span>
           </div>
-          <Chart format={(v) => money(v)}
+          <Chart title={`Доход в месяц за ${data.days} дней`} format={(v) => money(v)}
             points={data.series.map((d: any) => ({ label: short(d.day), value: d.mrr }))} />
+        </section>
+
+        {/* Третий график сверх их двух: приход по дням. Он скачет, и
+            смотреть на него как на «растём ли мы» нельзя — но ответить
+            «когда именно пришли деньги» больше нечем. Стоит третьим,
+            а не первым, чтобы не путать с двумя ровными линиями. */}
+        <section className="chart-box">
+          <div className="chart-head">
+            <b>Приход по дням</b>
+            <span>
+              {data.period.payments} оплат ·{' '}
+              {ch.amount >= 0 ? '+' : '−'}{money(Math.abs(ch.amount))} к прошлым {data.days} дн.
+            </span>
+          </div>
+          <Chart title="Приход по дням" format={(v) => money(v)}
+            points={data.series.map((d: any) => ({ label: short(d.day), value: d.amount }))} />
         </section>
       </div>
 
