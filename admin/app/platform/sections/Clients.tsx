@@ -50,6 +50,9 @@ export default function Clients({ me }: { me: Me }) {
   const [menu, setMenu] = useState<string | null>(null);
   const [shown, setShown] = useState<{ title: string; value: string; note: string } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  // Показать только отмеченные: набрал тридцать строк по всему списку
+  // и хочешь убедиться, что набрал именно те. Их приём.
+  const [onlySel, setOnlySel] = useState(false);
   // Кнопка «Оплата» открывает окно отметки: партнёр получил деньги —
   // отмечает здесь, доступ продлевает владелец платформы.
   const [paying, setPaying] = useState<any>(null);
@@ -135,7 +138,8 @@ export default function Clients({ me }: { me: Me }) {
   // Группировка по партнёру: ничьи первыми — это те, кем никто не
   // занимается, и они теряются первыми.
   const byPartner = new Map<string, any[]>();
-  for (const r of data.rows) {
+  const visible = onlySel ? data.rows.filter((r: any) => selected.includes(r.id)) : data.rows;
+  for (const r of visible) {
     const k = r.partnerId ?? '—';
     if (!byPartner.has(k)) byPartner.set(k, []);
     byPartner.get(k)!.push(r);
@@ -214,7 +218,12 @@ export default function Clients({ me }: { me: Me }) {
         <div className="picked-bar">
           <span>Отмечено {selected.length}</span>
           <div className="picked-controls">
-            <button className="btn small ghost" onClick={() => setSelected([])}>Снять</button>
+            <button className="btn small ghost"
+              onClick={() => setOnlySel((v) => !v)}>
+              {onlySel ? 'Показать всех' : 'Только отмеченные'}
+            </button>
+            <button className="btn small ghost"
+              onClick={() => { setSelected([]); setOnlySel(false); }}>Снять</button>
             <span className="hint">
               Массовые действия — во вкладке «Настройки»
             </span>
@@ -279,7 +288,7 @@ export default function Clients({ me }: { me: Me }) {
         </div>
       )}
 
-      {data.rows.length === 0 ? (
+      {visible.length === 0 ? (
         <Empty title="Никого не нашлось"
           text="Проверьте отбор или поиск. Телефон можно вводить как угодно: +7, 8 или без кода."
           actionLabel={filter !== 'all' || q ? 'Показать всех' : undefined}
@@ -305,7 +314,17 @@ export default function Clients({ me }: { me: Me }) {
           <table className="grid tenants">
             <thead>
               <tr>
-                {isSuper && <th className="pick" />}
+                {isSuper && (
+                  <th className="pick">
+                    {/* Отметить всех разом: отмечать тридцать строк по
+                        одной — это не работа, а наказание. Их приём. */}
+                    <input type="checkbox"
+                      checked={g.rows.length > 0 && g.rows.every((r: any) => selected.includes(r.id))}
+                      onChange={(e) => setSelected((prev) => e.target.checked
+                        ? Array.from(new Set([...prev, ...g.rows.map((r: any) => r.id)]))
+                        : prev.filter((id) => !g.rows.some((r: any) => r.id === id)))} />
+                  </th>
+                )}
                 <th>Магазин</th>
                 <th>Владелец</th>
                 <th>Статус</th>

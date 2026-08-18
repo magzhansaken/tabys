@@ -165,5 +165,8 @@
 \echo '--- 065 порядок внутри очереди ---'
 \i db/migrations/065_today_order.sql
 
+\echo '--- 066 устойчивый порядок клиентов ---'
+\i db/migrations/066_clients_order.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
