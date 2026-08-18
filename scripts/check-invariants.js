@@ -610,6 +610,9 @@ const RULES = [
   { file: 'admin/app/platform/sections/Clients.tsx', must: 'daysWord(r.daysLeft)',
     why: 'Склонение вместо «дн.»: «осталось 0 дн.» — это «сегодня», а «1 дн.» по-русски никто не говорит' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'сколько осталось платформе — не его дело',
+    why: 'Партнёр видит свою долю, но не долю платформы: чужой доход не его дело, а показывать его — рассказывать про чужой карман' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

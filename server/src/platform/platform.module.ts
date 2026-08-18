@@ -313,7 +313,11 @@ export class PlatformService {
       paidUntil: r.paid_until,
       periodFrom: r.period_from,
       partnerShare: money(Number(r.partner_share)),
-      platformShare: money(Number(r.platform_share)),
+      // Доля ПЛАТФОРМЫ — чужие деньги. Партнёру видно, сколько
+      // заработал он; сколько осталось платформе — не его дело, и
+      // показывать это значит рассказывать ему про чужой карман.
+      platformShare: ctx.role === 'super'
+        ? money(Number(r.platform_share)) : null,
       note: `Доступ продлён до ${new Date(r.paid_until).toLocaleDateString('ru-RU')}`,
     };
   }
@@ -420,7 +424,10 @@ export class PlatformService {
         // того, что случилось потом.
         periodFrom: r.period_from, periodTo: r.period_to,
         partnerShare: money(Number(r.partner_share)),
-        platformShare: money(Number(r.platform_share)),
+        // Доля ПЛАТФОРМЫ — чужие деньги. Партнёру видно, сколько
+        // заработал он; сколько осталось платформе — не его дело.
+        platformShare: ctx.role === 'super'
+          ? money(Number(r.platform_share)) : null,
         createdAt: r.created_at, approvedAt: r.approved_at,
         // Кто подтвердил: когда владельцев платформы несколько, вопрос
         // «кто это пропустил» возникает первым.
@@ -436,7 +443,9 @@ export class PlatformService {
         count: Number(t.cnt ?? 0),
         amount: money(Number(t.sum_amount ?? 0)),
         partnerShare: money(Number(t.sum_partner ?? 0)),
-        platformShare: money(Number(t.sum_platform ?? 0)),
+        // Итог платформы — тоже чужие деньги для партнёра.
+        platformShare: ctx.role === 'super'
+          ? money(Number(t.sum_platform ?? 0)) : null,
       },
       status: status ?? 'all', days,
     };

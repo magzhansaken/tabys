@@ -120,7 +120,11 @@ export default function Money({ me }: { me: Me }) {
         <div className="card"><span>Записей</span><b>{t.count}</b></div>
         <div className="card money"><span>Подтверждено</span><b>{money(t.amount)}</b></div>
         <div className="card"><span>Партнёрам</span><b>{money(t.partnerShare)}</b></div>
-        <div className="card ok"><span>Платформе</span><b>{money(t.platformShare)}</b></div>
+        {/* Доля платформы — только владельцу: партнёру чужой доход
+            знать незачем, он видит свой. */}
+        {isSuper && (
+          <div className="card ok"><span>Платформе</span><b>{money(t.platformShare)}</b></div>
+        )}
       </div>
 
       <div className="toolbar">
@@ -202,7 +206,8 @@ export default function Money({ me }: { me: Me }) {
                 {p.status === 'approved' && p.periodFrom && (
                   <span className="pay-note">
                     за {fullDate(p.periodFrom)} — {fullDate(p.periodTo)} ·
-                    {' '}партнёру {money(p.partnerShare)} · платформе {money(p.platformShare)}
+                    {' '}партнёру {money(p.partnerShare)}
+                    {p.platformShare != null && ` · платформе ${money(p.platformShare)}`}
                   </span>
                 )}
 
