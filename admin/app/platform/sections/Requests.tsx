@@ -12,20 +12,22 @@
  */
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, dateTime, type Me } from '../lib';
+import { useAsk } from '../ui/Ask';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { describeRequest } from '../ui/describeRequest';
+import { Failed, SkeletonCards, Empty } from '../ui/States';
 
-const KIND: Record<string, string> = {
-  device: 'Просит устройство', tariff: 'Просит смену тарифа',
-  grace: 'Просит отсрочку', other: 'Прочее',
-};
 
 export default function Requests({ me }: { me: Me }) {
   const [rows, setRows] = useState<any[] | null>(null);
   const [onlyPending, setOnlyPending] = useState(true);
   const [err, setErr] = useState('');
-  const [ask, setAsk] = useState<{ r: any; yes: boolean } | null>(null);
-  const [preview, setPreview] = useState<any>(null);
-  const [reason, setReason] = useState('');
+  const [leaving, setLeaving] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+
+  const ask = useAsk();
+  const toast = useToast();
 
   const load = async (pending = onlyPending) => {
     const path = '/requests' + (pending ? '?status=pending' : '');
@@ -34,65 +36,62 @@ export default function Requests({ me }: { me: Me }) {
     try {
       const d = await api(path);
       setRows(d); putCache(path, d); setErr('');
-    } catch (e: any) { if (!hit) setErr(e.message); }
+    } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  const open = async (r: any, yes: boolean) => {
-    setReason('');
+  /** Решение по заявке. Одобрение САМО выполняет действие. */
+  const decide = async (r: any, yes: boolean) => {
+    let pv: any = null;
     if (yes) {
-      try { setPreview(await api(`/requests/${r.id}/preview`)); }
-      catch (e: any) { setErr(e.message); return; }
-    } else setPreview(null);
-    setAsk({ r, yes });
-  };
+      try { pv = await api(`/requests/${r.id}/preview`); }
+      catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
+    }
 
-  const run = async () => {
-    if (!ask) return;
-    if (!ask.yes && !reason.trim()) { setErr('Напишите причину отказа'); return; }
+    const answer = await ask(yes ? {
+      title: 'Одобрить заявку',
+      sub: 'Действие выполнится сразу: строка счёта или срок изменятся.',
+      effects: [
+        ['Магазин', r.client],
+        ['Просят', describeRequest(r.kind, r.payload)],
+        ['Что произойдёт', pv?.effect ?? '—'],
+        ...(pv?.proRata > 0
+          ? [['Доплата за остаток периода', `${pv.proRata} ₸`] as [string, string]]
+          : []),
+      ],
+      confirmLabel: 'Да, одобрить',
+    } : {
+      title: 'Отказать по заявке',
+      sub: 'Партнёр увидит причину — напишите так, чтобы было понятно.',
+      effects: [['Магазин', r.client], ['Просят', describeRequest(r.kind, r.payload)]],
+      reason: { label: 'Причина отказа — её увидит партнёр', required: true,
+                placeholder: 'Обсудим на встрече' },
+      danger: true,
+      confirmLabel: 'Отказать',
+    });
+
+    if (!answer) return;
+
     setBusy(true);
     try {
-      await api(`/requests/${ask.r.id}/decide`,
-        { method: 'POST', body: { approve: ask.yes, note: reason || undefined } });
-      setAsk(null); setPreview(null); setReason(''); dropCache(); await load();
-    } catch (e: any) { setErr(e.message); }
-    finally { setBusy(false); }
+      const res = await api(`/requests/${r.id}/decide`,
+        { method: 'POST', body: { approve: yes, note: answer.reason || undefined } });
+      toast({ text: yes ? `${r.client}: ${res.effect}` : 'Отказано, партнёр увидит причину' });
+      setLeaving((prev) => ({ ...prev, [r.id]: true }));
+      setTimeout(async () => { dropCache(); await load(); setLeaving({}); }, 280);
+    } catch (e: any) {
+      toast({ text: humanError(e), kind: 'err' });
+    } finally { setBusy(false); }
   };
 
-  if (err && !rows) return <div className="err">{err}</div>;
-  if (!rows) return <div className="muted">Загрузка…</div>;
+  if (err && !rows) return <Failed text={err} onRetry={() => load()} />;
+  if (!rows) return <SkeletonCards count={3} height={120} />;
 
   const isSuper = me.role === 'super';
 
   return (
     <>
       {err && <div className="err">{err}</div>}
-
-      {ask && (
-        <div className="reveal" onClick={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
-          <div className="ask-card">
-            <b>{ask.r.client}</b>
-            <p>{KIND[ask.r.kind] ?? ask.r.kind}</p>
-            {ask.yes ? (
-              /* Что именно произойдёт: одобрение выполняет действие,
-                 а не ставит отметку. */
-              preview && <p className="pay-note">{preview.effect}</p>
-            ) : (
-              <input value={reason} autoFocus onChange={(e) => setReason(e.target.value)}
-                placeholder="Причина отказа — партнёр должен понять, что не так" />
-            )}
-            <div className="pay-actions">
-              <button className="btn ghost" onClick={() => { setAsk(null); setReason(''); }}>
-                Отмена
-              </button>
-              <button className={`btn ${ask.yes ? 'primary' : 'danger'}`}
-                disabled={busy} onClick={run}>
-                {ask.yes ? 'Да, одобрить' : 'Отказать'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="toolbar">
         <label className="check">
@@ -103,22 +102,25 @@ export default function Requests({ me }: { me: Me }) {
       </div>
 
       {rows.length === 0 ? (
-        <div className="all-clear">
-          <b>{onlyPending ? 'Всё решено' : 'Заявок нет'}</b>
-          <p>{onlyPending
+        <Empty title={onlyPending ? 'Всё решено' : 'Заявок нет'}
+          text={onlyPending
             ? 'Ни одна заявка не ждёт ответа.'
-            : 'При этом отборе записей не нашлось.'}</p>
-        </div>
+            : 'При этом отборе записей не нашлось.'}
+          actionLabel={onlyPending ? 'Показать все заявки' : undefined}
+          onAction={() => { setOnlyPending(false); load(false); }} />
       ) : (
         <div className="req-list">
           {rows.map((r: any) => (
-            <article key={r.id} className={`req ${r.status === 'pending' ? 'waiting' : ''}`}>
+            <article key={r.id}
+              className={`req ${r.status === 'pending' ? 'waiting' : ''} ${leaving[r.id] ? 'leaving' : ''}`}>
               <div className="req-head">
                 <b>{r.client}</b>
                 <span className="sub">{r.author ?? '—'} · {dateTime(r.created_at)}</span>
               </div>
 
-              <div className="req-what">{KIND[r.kind] ?? r.kind}</div>
+              {/* Словами и с числами: «Просит устройство» ничего не
+                  говорит — надо видеть, ЧТО просят, не открывая. */}
+              <div className="req-what">{describeRequest(r.kind, r.payload)}</div>
               {r.comment && <div className="req-why">{r.comment}</div>}
 
               <div className="req-state">
@@ -136,9 +138,9 @@ export default function Requests({ me }: { me: Me }) {
                 {r.status === 'pending' && isSuper && (
                   <div className="pay-actions">
                     <button className="btn" disabled={busy}
-                      onClick={() => open(r, false)}>Отказать…</button>
+                      onClick={() => decide(r, false)}>Отказать…</button>
                     <button className="btn primary" disabled={busy}
-                      onClick={() => open(r, true)}>Одобрить…</button>
+                      onClick={() => decide(r, true)}>Одобрить…</button>
                   </div>
                 )}
                 {/* Партнёру решение не рисуем: мёртвая кнопка хуже

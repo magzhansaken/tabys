@@ -481,6 +481,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Money.tsx', must: 'pv.partnerName} (${pv.partnerPercent}%)',
     why: 'Имя партнёра с процентом в последствиях: «партнёру 3 750» заставляет вспоминать, кому именно' },
 
+  { file: 'admin/app/platform/ui/AskForm.tsx', must: 'reason.trim().length >= 5',
+    why: 'Причина заявки от пяти знаков: «надо» причиной не является, а владелец платформы решает именно по ней' },
+  { file: 'admin/app/platform/ui/describeRequest.ts', must: 'Подключить ${what}',
+    why: 'Заявка описана словами: «Просит устройство» ничего не говорит — надо видеть, ЧТО просят, не открывая' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

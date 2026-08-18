@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
 import { RowMenu } from '../ui/RowMenu';
 import { PayForm } from '../ui/PayForm';
+import { AskForm } from '../ui/AskForm';
 import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
@@ -48,6 +49,9 @@ export default function Clients({ me }: { me: Me }) {
   // Кнопка «Оплата» открывает окно отметки: партнёр получил деньги —
   // отмечает здесь, доступ продлевает владелец платформы.
   const [paying, setPaying] = useState<any>(null);
+  // Партнёр не меняет деньги сам — он просит платформу. Их пункт
+  // «Запросить у платформы» в меню строки.
+  const [asking, setAsking] = useState<any>(null);
 
   const ask = useAsk();
   const toast = useToast();
@@ -158,6 +162,11 @@ export default function Clients({ me }: { me: Me }) {
         <BulkPanel rows={data.rows} selected={selected}
           onClear={() => setSelected([])}
           onDone={() => { dropCache(); load(); }} />
+      )}
+
+      {asking && (
+        <AskForm client={asking}
+          onDone={(sent) => { setAsking(null); if (sent) dropCache(); }} />
       )}
 
       {paying && (
@@ -305,9 +314,18 @@ export default function Clients({ me }: { me: Me }) {
                           } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
                         } },
 
-                      { label: 'Добавить устройство…',
+                      // Партнёру — «Запросить у платформы»: сам он
+                      // деньги не меняет. Владельцу этот пункт не
+                      // нужен, он решает напрямую.
+                      ...(!isSuper ? [{
+                        label: 'Запросить у платформы…',
+                        hint: 'устройство, тариф или отсрочку',
+                        onClick: () => setAsking(r),
+                      }] : []),
+
+                      ...(isSuper ? [{ label: 'Добавить устройство…',
                         hint: 'касса или точка, с доплатой',
-                        onClick: () => addDevice(r) },
+                        onClick: () => addDevice(r) }] : []),
 
                       ...(isSuper ? [{
                         label: r.partner ? 'Передать другому партнёру…' : 'Назначить партнёра…',
