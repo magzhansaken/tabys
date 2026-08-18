@@ -109,6 +109,13 @@ export default function Journal({ me }: { me: Me }) {
   // номер сорок.
   const shown = onlyMoney ? rows.filter((r) => r.amount != null || r.weight === 'money') : rows;
 
+  // Отбор включён — значит пустота объясняется иначе.
+  const dirty = actorId !== 'all' || tenantId !== 'all' || onlyMoney || weight !== 'all';
+  const reset = () => {
+    setActorId('all'); setTenantId('all'); setOnlyMoney(false);
+    setWeight('all'); setRows([]); load('all');
+  };
+
   const days = new Map<string, any[]>();
   for (const r of shown) {
     const k = String(r.at).slice(0, 10);
@@ -139,19 +146,13 @@ export default function Journal({ me }: { me: Me }) {
           <label className="check">
             <input type="checkbox" checked={onlyMoney}
               onChange={(e) => setOnlyMoney(e.target.checked)} />
-            Только деньги
+            Только про деньги
           </label>
 
           {/* Кнопка появляется, только когда есть что сбрасывать: их
               приём. Мёртвая кнопка учит себя не замечать. */}
-          {(actorId !== 'all' || tenantId !== 'all' || onlyMoney || weight !== 'all') && (
-            <button className="btn small ghost"
-              onClick={() => {
-                setActorId('all'); setTenantId('all'); setOnlyMoney(false);
-                setWeight('all'); setRows([]); load('all');
-              }}>
-              Сбросить
-            </button>
+          {dirty && (
+            <button className="btn small ghost" onClick={reset}>Сбросить</button>
           )}
         </div>
       )}
@@ -168,7 +169,13 @@ export default function Journal({ me }: { me: Me }) {
       {err && <div className="err">{err}</div>}
 
       {rows.length === 0 && !busy ? (
-        <Empty title="Записей нет" text="При этом отборе ничего не нашлось." />
+        <Empty
+          title={dirty ? 'По этому отбору записей нет' : 'Записей пока нет'}
+          text={dirty
+            ? 'Смените человека или магазин — или снимите отбор.'
+            : 'Здесь появится всё, что делают на платформе: оплаты, цены, отсрочки, решения по заявкам.'}
+          actionLabel={dirty ? 'Сбросить отбор' : undefined}
+          onAction={dirty ? reset : undefined} />
       ) : [...days.entries()].map(([day, list]) => (
         <section className="journal-day" key={day}>
           <h2>{dayTitle(day)}</h2>
@@ -208,12 +215,19 @@ export default function Journal({ me }: { me: Me }) {
         </section>
       ))}
 
-      {hasMore && (
+      {shown.length > 0 && (
         <div className="journal-more">
-          <button className="btn ghost" disabled={busy}
-            onClick={() => load(weight, next ?? undefined)}>
-            {busy ? 'Загрузка…' : 'Показать ещё'}
-          </button>
+          {hasMore
+            ? (
+              <button className="btn ghost" disabled={busy}
+                onClick={() => load(weight, next ?? undefined)}>
+                {busy ? 'Загружаем…' : 'Показать ещё'}
+              </button>
+            )
+            /* Когда листать нечего — сказать об этом. Иначе человек
+               ждёт продолжения и не понимает, кончился журнал или
+               кнопка не сработала. Их приём. */
+            : <p className="table-foot">Это всё — показано {shown.length} записей</p>}
         </div>
       )}
     </>
