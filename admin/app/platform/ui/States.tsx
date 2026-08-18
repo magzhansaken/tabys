@@ -75,14 +75,17 @@ export function Failed({ text, onRetry }: { text?: string; onRetry?: () => void 
 }
 
 /** Шапка раздела: название, объяснение, действия справа. */
-export function PageHead({ title, hint, children }: {
-  title?: string; hint?: string; children?: ReactNode;
+export function PageHead({ title, hint, sub, children }: {
+  title?: string; hint?: string;
+  /** Их имя для того же: подпись под названием раздела. */
+  sub?: string;
+  children?: ReactNode;
 }) {
   return (
     <div className="page-head">
       <div>
         {title && <h1>{title}</h1>}
-        {hint && <p className="hint">{hint}</p>}
+        {(sub ?? hint) && <p className="hint">{sub ?? hint}</p>}
       </div>
       {children && <div className="page-actions">{children}</div>}
     </div>

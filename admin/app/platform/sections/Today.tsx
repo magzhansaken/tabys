@@ -15,7 +15,7 @@ import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } 
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonCards } from '../ui/States';
+import { Failed, SkeletonCards, PageHead } from '../ui/States';
 
 type Item = {
   id: string; kind: string; accountId: string; client: string;
@@ -117,7 +117,10 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
 
   return (
     <>
-      {err && <div className="err">{err}</div>}
+      {/* Заголовок их частью: дата в названии, счёт дел подписью.
+          Ошибки идут ТОЛЬКО тостом, как у них — полоса поверх ленты
+          дублировала бы то, что уже сказано в тосте. */}
+      <PageHead title={`Сегодня, ${data.dateLabel}`} sub={data.headline ?? undefined} />
 
       {data.total === 0 ? (
         <div className="all-clear">

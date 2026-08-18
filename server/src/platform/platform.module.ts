@@ -124,7 +124,9 @@ export class PlatformService {
     return {
       groups: list,
       total: n,
-      headline: n === 0 ? null : `${n} ${word} вас`,
+      headline: ctx.role === 'super'
+        ? (n > 0 ? `${n} ${word} вас` : 'Решений нет — всё разобрано')
+        : (n > 0 ? `${n} дел по вашим клиентам` : 'По вашим клиентам всё спокойно'),
       // Дата в заголовке: «Сегодня, 17 августа». Кабинет открывают
       // утром и держат весь день — без даты непонятно, свежее ли это.
       dateLabel: new Date().toLocaleDateString('ru-RU',
