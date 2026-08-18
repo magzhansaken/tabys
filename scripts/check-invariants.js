@@ -486,6 +486,13 @@ const RULES = [
   { file: 'admin/app/platform/ui/describeRequest.ts', must: 'Подключить ${what}',
     why: 'Заявка описана словами: «Просит устройство» ничего не говорит — надо видеть, ЧТО просят, не открывая' },
 
+  { file: 'admin/app/platform/sections/Funnel.tsx', must: 'e.pointerType === ',
+    why: 'Перетаскивание событиями указателя: мышью и пальцем одинаково, иначе на телефоне воронка не работает' },
+  { file: 'admin/app/platform/sections/Funnel.tsx', must: '< 6) return;',
+    why: 'Порог в 6 пикселей: без него любой клик считался бы перетаскиванием, и карточка прыгала от движения руки' },
+  { file: 'admin/app/platform/ui/requestMark.ts', must: '7 * 86_400_000',
+    why: 'Решения по заявкам показываются неделю: «одобрено» месячной давности — шум, который учит не смотреть на отметки' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
