@@ -11,7 +11,7 @@
  * просто делала.
  */
 import { useEffect, useState } from 'react';
-import { api, cached, putCache, dropCache, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
@@ -122,6 +122,31 @@ export default function Requests({ me }: { me: Me }) {
                   говорит — надо видеть, ЧТО просят, не открывая. */}
               <div className="req-what">{describeRequest(r.kind, r.payload)}</div>
               {r.comment && <div className="req-why">{r.comment}</div>}
+
+              {/* Деньги клиента прямо в заявке — их приём. Решая
+                  «дать ли отсрочку», надо видеть, сколько он платит и
+                  не просрочен ли уже. Иначе идёшь смотреть в другой
+                  раздел и теряешь место в списке. */}
+              {r.monthly != null && (
+                <div className={`req-money ${r.expired ? 'late' : r.expiringSoon ? 'soon' : ''}`}>
+                  <span className="req-money-main">
+                    <b>{money(r.monthly)}</b>/мес
+                  </span>
+                  <span>
+                    {r.paidUntil
+                      ? `оплачено до ${fullDate(r.paidUntil)}`
+                      : 'без подписки'}
+                    {r.daysLeft != null && (r.daysLeft < 0
+                      ? ` · просрочен ${Math.abs(r.daysLeft)} дн.`
+                      : ` · осталось ${r.daysLeft} дн.`)}
+                  </span>
+                  {r.pendingAmount > 0 && (
+                    <span className="req-money-pay">
+                      ждёт подтверждения {money(r.pendingAmount)}
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="req-state">
                 {r.status === 'pending' && (

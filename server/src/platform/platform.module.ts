@@ -662,9 +662,21 @@ export class PlatformService {
   }
 
   async requests(ctx: PlatformCtx, status?: string) {
-    return (await this.q(
+    const rows = (await this.q(
       `SELECT * FROM platform_requests($1, $2, $3)`,
       [status ?? null, ctx.role, ctx.userId])).rows;
+
+    // Деньги клиента идут вместе с заявкой: решая про отсрочку, надо
+    // видеть, сколько он платит и не просрочен ли уже.
+    return rows.map((r: any) => ({
+      ...r,
+      monthly: money(Number(r.monthly ?? 0)),
+      paidUntil: r.paid_until,
+      daysLeft: r.days_left,
+      pendingAmount: money(Number(r.pending_amount ?? 0)),
+      expired: r.days_left != null && r.days_left < 0,
+      expiringSoon: r.days_left != null && r.days_left >= 0 && r.days_left <= 7,
+    }));
   }
 
   /**

@@ -80,3 +80,50 @@ export function NewPassword({ phone, password, onClose }: {
     </div>
   );
 }
+
+/**
+ * ДОСТУПЫ ПОСЛЕ ЗАВЕДЕНИЯ КЛИЕНТА — их окно «Клиент создан».
+ *
+ * Их довод: эти данные показываются ОДИН РАЗ. Дальше пароль
+ * пересоздаётся из карточки, но код привязки и вход придётся искать
+ * заново — а партнёр в этот момент уже стоит в магазине.
+ *
+ * Поэтому: всё в одном месте, каждое поле копируется отдельно, и есть
+ * кнопка «скопировать всё» — чтобы отправить владельцу одним
+ * сообщением.
+ */
+export function Credentials({ rows, onClose }: {
+  rows: { label: string; value: string }[];
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const all = rows.map((r) => `${r.label}: ${r.value}`).join('\n');
+
+  return (
+    <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card">
+        <div className="sheet-head">
+          <h2>Клиент создан</h2>
+        </div>
+
+        <div className="creds">
+          {rows.filter((r) => r.value).map((r) => (
+            <CopyValue key={r.label} label={r.label} value={r.value} />
+          ))}
+        </div>
+
+        <p className="hint">
+          Эти данные показываются один раз — сохраните и передайте владельцу.
+        </p>
+
+        <div className="modal-actions">
+          <button className="btn" onClick={() => {
+            void navigator.clipboard?.writeText(all);
+            toast({ text: 'Все доступы скопированы' });
+          }}>Скопировать всё</button>
+          <button className="btn primary" onClick={onClose}>Готово</button>
+        </div>
+      </div>
+    </div>
+  );
+}

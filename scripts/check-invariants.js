@@ -522,6 +522,13 @@ const RULES = [
   { file: 'server/src/billing/billing.service.ts', must: 'phone: set.pay_phone',
     why: 'Номер отдельным полем: слитую строку копируют целиком и вставляют в поле перевода — платёж не проходит' },
 
+  { file: 'admin/app/platform/sections/Requests.tsx', must: 'className="req-money-main"',
+    why: 'Деньги клиента в заявке: решая про отсрочку, надо видеть, сколько он платит и не просрочен ли уже' },
+  { file: 'admin/app/platform/ui/access.tsx', must: 'показываются один раз',
+    why: 'Доступы после заведения в одном месте: партнёр в этот момент уже стоит в магазине, искать их некогда' },
+  { file: 'admin/app/platform/ui/PlanLines.tsx', must: 'Доплаты за устройства и',
+    why: 'Смена уровня трогает только основную строку: доплаты и скидки — отдельные договорённости' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

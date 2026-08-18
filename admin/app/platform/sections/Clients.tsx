@@ -19,7 +19,7 @@ import { RowMenu } from '../ui/RowMenu';
 import { PayForm } from '../ui/PayForm';
 import { AskForm } from '../ui/AskForm';
 import { PlanLines } from '../ui/PlanLines';
-import { NewPassword, CopyValue } from '../ui/access';
+import { NewPassword, CopyValue, Credentials } from '../ui/access';
 import TenantCard from './TenantCard';
 import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
@@ -53,6 +53,9 @@ export default function Clients({ me }: { me: Me }) {
   // отмечает здесь, доступ продлевает владелец платформы.
   const [paying, setPaying] = useState<any>(null);
   const [newPass, setNewPass] = useState<any>(null);
+  // Доступы после заведения: показываются один раз, дальше партнёр
+  // будет искать их заново, стоя в магазине.
+  const [creds, setCreds] = useState<any[] | null>(null);
   const [billFor, setBillFor] = useState<any>(null);
 
   // У карточки есть АДРЕС: её можно оставить открытой, вернуться к ней
@@ -202,6 +205,8 @@ export default function Clients({ me }: { me: Me }) {
           onClear={() => setSelected([])}
           onDone={() => { dropCache(); load(); }} />
       )}
+
+      {creds && <Credentials rows={creds} onClose={() => setCreds(null)} />}
 
       {newPass && (
         <NewPassword phone={newPass.phone} password={newPass.password}

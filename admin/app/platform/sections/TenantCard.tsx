@@ -243,7 +243,9 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
         <>
           <h2 className="section-title">Счёт</h2>
           <PlanLines accountId={accountId} lines={data.lines}
-            monthly={data.monthly} onChanged={load} />
+            monthly={data.monthly}
+            tier={/стандарт|pro/i.test(data.tariff ?? '') ? 'pro' : 'base'}
+            onChanged={load} />
         </>
       )}
     </>

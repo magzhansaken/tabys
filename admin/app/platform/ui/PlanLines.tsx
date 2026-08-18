@@ -43,10 +43,12 @@ const TITLE: Record<string, string> = {
   module: 'Модуль', discount: 'Скидка',
 };
 
-export function PlanLines({ accountId, lines, monthly, onChanged }: {
+export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
   accountId: string;
   lines: any[];
   monthly: number;
+  /** Текущий уровень: «Старт» или «Стандарт». */
+  tier?: string;
   onChanged: () => void;
 }) {
   const [adding, setAdding] = useState<string | null>(null);
@@ -92,6 +94,31 @@ export function PlanLines({ accountId, lines, monthly, onChanged }: {
     try {
       await api(`/lines/${l.id}`, { method: 'DELETE' });
       toast({ text: 'Строка убрана из счёта' });
+      onChanged();
+    } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+  };
+
+  /**
+   * Смена уровня. Меняет ТОЛЬКО основную строку счёта: доплаты за
+   * устройства и персональные скидки — отдельные договорённости, их
+   * трогать нельзя.
+   */
+  const setTier = async (next: 'base' | 'pro') => {
+    const r = await ask({
+      title: next === 'pro' ? 'Перевести на «Стандарт»' : 'Перевести на «Старт»',
+      sub: 'Изменится только основная строка счёта. Доплаты за устройства и '
+         + 'персональные скидки останутся как есть.',
+      effects: [
+        ['Сейчас', `${money(monthly)}/мес`],
+        ['Уровень', next === 'pro' ? '«Стандарт»' : '«Старт»'],
+        ['Когда применится', 'со следующего счёта — оплаченный период не меняется'],
+      ],
+      confirmLabel: 'Перевести',
+    });
+    if (!r) return;
+    try {
+      await api(`/clients/${accountId}/tier`, { method: 'POST', body: { tier: next } });
+      toast({ text: `Уровень: ${next === 'pro' ? '«Стандарт»' : '«Старт»'}` });
       onChanged();
     } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
   };
@@ -173,6 +200,18 @@ export function PlanLines({ accountId, lines, monthly, onChanged }: {
             <span className="bill-sum">{money(monthly)}<i>/мес</i></span>
           </div>
         </>
+      )}
+
+      {/* Переключатель уровня — их приём: две кнопки вместо списка.
+          Уровней всего два, и список из двух пунктов требует лишнего
+          нажатия, чтобы увидеть то, что и так помещается. */}
+      {tier != null && (
+        <div className="tier-switch">
+          <button className={`chip ${tier !== 'pro' ? 'on' : ''}`}
+            onClick={() => tier === 'pro' && setTier('base')}>Старт</button>
+          <button className={`chip ${tier === 'pro' ? 'on' : ''}`}
+            onClick={() => tier !== 'pro' && setTier('pro')}>Стандарт</button>
+        </div>
       )}
 
       {adding ? (

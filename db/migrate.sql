@@ -150,5 +150,8 @@
 \echo '--- 060 реквизиты оплаты пятью полями ---'
 \i db/migrations/060_pay_fields.sql
 
+\echo '--- 061 деньги клиента в заявке ---'
+\i db/migrations/061_requests_money.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
