@@ -65,7 +65,10 @@ export default function Summary({ me }: { me: Me }) {
 
       <div className="cards">
         <div className="card"><span>Всего магазинов</span><b>{t.tenants}</b></div>
-        <div className="card ok"><span>Работают</span><b>{t.active}</b></div>
+        {/* «Платят», а не «работают»: пробный тоже работает, и при
+            прежней подписи карточки пересекались — человек складывал
+            и получал больше, чем всего. */}
+        <div className="card ok"><span>Платят</span><b>{t.active}</b></div>
         <div className="card warn"><span>На пробном</span><b>{t.trial}</b></div>
         <div className="card bad"><span>Просрочены</span><b>{t.expired}</b></div>
         {/* Ждут одобрения: кто-то стоит у двери. Их карточка. */}

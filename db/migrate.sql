@@ -189,5 +189,8 @@
 \echo '--- 073 вернуть воронку к фактам ---'
 \i db/migrations/073_funnel_auto.sql
 
+\echo '--- 074 платят и пробные не пересекаются ---'
+\i db/migrations/074_snapshot_split.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
