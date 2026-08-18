@@ -130,10 +130,20 @@ export default function Funnel({ me }: { me: Me }) {
   const partnerNames = Array.from(new Set(
     data.stages.flatMap((st: any) => st.cards.map((c: any) => c.partner ?? '—'))));
 
-  const shown = partner === 'all' ? data.stages : data.stages.map((st: any) => ({
-    ...st,
-    cards: st.cards.filter((c: any) => (c.partner ?? '—') === partner),
-  }));
+  const shown = data.stages.map((st: any) => {
+    const cards = partner === 'all'
+      ? st.cards
+      : st.cards.filter((c: any) => (c.partner ?? '—') === partner);
+    return {
+      ...st,
+      cards,
+      // Сумма считается ИЗ ПОКАЗАННЫХ карточек, а не приходит со всей
+      // воронки. Иначе при отборе по партнёру счётчик показывает
+      // двоих, а сумма — деньги всех тридцати: цифра и содержимое
+      // расходятся, и доверять столбцу больше нельзя.
+      sum: cards.reduce((a: number, c: any) => a + (c.monthly ?? 0), 0),
+    };
+  });
 
   return (
     <>
