@@ -53,18 +53,33 @@ export default function Requests({ me }: { me: Me }) {
       catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
     }
 
+    const isDevice = r.kind === 'device';
+    const listed = pv?.listedPrice ?? 0;
+
     const answer = await ask(yes ? {
       title: 'Одобрить заявку',
-      sub: 'Действие выполнится сразу: строка счёта или срок изменятся.',
+      sub: isDevice
+        ? 'Предел вырастет, и цена уйдёт в ежемесячный счёт клиента.'
+        : 'Решение вступит в силу сразу после подтверждения.',
       effects: [
         ['Магазин', r.client],
         ['Просят', describeRequest(r.kind, r.payload)],
+        ['Просил', r.author ?? '—'],
         ['Что произойдёт', pv?.effect ?? '—'],
         ...(pv?.proRata > 0
           ? [['Доплата за остаток периода', `${pv.proRata} ₸`] as [string, string]]
           : []),
       ],
-      confirmLabel: 'Да, одобрить',
+      // ЦЕНА ЗАДАЁТСЯ РУКАМИ. Партнёр мог договориться с клиентом не
+      // по прайсу — при молчаливом прайсе это выяснится через месяц,
+      // когда клиент откажется платить по счёту.
+      value: isDevice ? {
+        label: 'Цена за штуку в месяц, ₸',
+        initial: String(listed),
+        numeric: true,
+        hint: 'ноль — бесплатно, строка всё равно появится в счёте',
+      } : undefined,
+      confirmLabel: isDevice ? 'Одобрить и добавить в счёт' : 'Одобрить',
     } : {
       title: 'Отказать по заявке',
       sub: 'Партнёр увидит причину — напишите так, чтобы было понятно.',
@@ -79,9 +94,14 @@ export default function Requests({ me }: { me: Me }) {
 
     setBusy(true);
     try {
-      const res = await api(`/requests/${r.id}/decide`,
-        { method: 'POST', body: { approve: yes, note: answer.reason || undefined } });
-      toast({ text: yes ? `${r.client}: ${res.effect}` : 'Отказано, партнёр увидит причину' });
+      const res = await api(`/requests/${r.id}/decide`, { method: 'POST', body: {
+        approve: yes,
+        note: answer.reason || undefined,
+        unitPrice: yes && isDevice ? Number(answer.value) || 0 : undefined,
+      }});
+      // Тост разный по виду заявки: «одобрено» само по себе не
+      // говорит, появилась ли строка в счёте.
+      toast({ text: yes ? `${r.client}: ${res.effect}` : 'Отказ отправлен партнёру' });
       setLeaving((prev) => ({ ...prev, [r.id]: true }));
       setTimeout(async () => { dropCache(); await load(); setLeaving({}); }, 280);
     } catch (e: any) {

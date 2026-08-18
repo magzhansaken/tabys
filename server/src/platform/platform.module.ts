@@ -714,6 +714,9 @@ export class PlatformService {
       what: r.what, effect: r.effect,
       proRata: money(Number(r.amount ?? 0)),
       daysLeft: r.days_left,
+      // Цена по прайсу — как подсказка в поле: владелец видит, от
+      // чего отталкиваться, и может задать свою.
+      listedPrice: money(Number(r.listed_price ?? 0)),
     };
   }
 
@@ -726,15 +729,19 @@ export class PlatformService {
    *
    * Отказ требует причины: партнёр должен понять, что не так.
    */
-  async decideRequest(ctx: PlatformCtx, id: string, approve: boolean, note?: string) {
+  async decideRequest(ctx: PlatformCtx, id: string, approve: boolean,
+                      note?: string, unitPrice?: number) {
     if (ctx.role !== 'super') throw new ForbiddenException('Решает владелец платформы');
     if (!approve && !note?.trim())
       throw new BadRequestException('Напишите причину отказа — партнёр должен понять, что не так');
 
     let r: any;
     try {
-      r = (await this.q(`SELECT * FROM platform_request_decide($1,$2,$3,$4)`,
-        [id, ctx.userId, approve, note?.trim() ?? null])).rows[0];
+      // Цена строки задаётся при одобрении: партнёр мог договориться
+      // не по прайсу, и узнавать об этом через месяц поздно.
+      r = (await this.q(`SELECT * FROM platform_request_decide($1,$2,$3,$4,$5)`,
+        [id, ctx.userId, approve, note?.trim() ?? null,
+         unitPrice == null ? null : Math.round(Number(unitPrice) * 100)])).rows[0];
     } catch (e: any) {
       throw new BadRequestException(String(e.message ?? '').replace(/^.*?:\s*/, ''));
     }
@@ -1701,7 +1708,7 @@ export class PlatformController {
   @Public() @Post('requests/:id/decide')
   decide(@Req() r: any, @Param('id') id: string, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.decideRequest(Pl(r), id, !!d?.approve, d?.note);
+    return this.svc.decideRequest(Pl(r), id, !!d?.approve, d?.note, d?.unitPrice);
   }
 
   // ── прайс-лист ──
