@@ -534,6 +534,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Clients.tsx', must: "r.state === 'approval' && isSuper ?",
     why: 'У самозаписавшихся вместо «Оплаты» — решение: пока клиента не одобрили, платить ему не за что' },
 
+  { file: 'db/migrations/063_money_note.sql', must: 'approved_by_name text',
+    why: 'Кто подтвердил оплату: когда владельцев несколько, вопрос «кто это пропустил» возникает первым' },
+  { file: 'db/migrations/063_money_note.sql', must: 'will_extend_to timestamptz',
+    why: 'Что будет при подтверждении, считает база тем же способом, что и само подтверждение — строка не разойдётся с делом' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

@@ -422,6 +422,14 @@ export class PlatformService {
         partnerShare: money(Number(r.partner_share)),
         platformShare: money(Number(r.platform_share)),
         createdAt: r.created_at, approvedAt: r.approved_at,
+        // Кто подтвердил: когда владельцев платформы несколько, вопрос
+        // «кто это пропустил» возникает первым.
+        approvedBy: r.approved_by_name,
+        // Что будет, если подтвердить — считает база тем же способом,
+        // что и само подтверждение: строка не разойдётся с делом.
+        willExtendTo: r.will_extend_to,
+        willPartnerShare: r.will_partner_share == null
+          ? null : money(Number(r.will_partner_share)),
         canApprove: r.status === 'pending' && ctx.role === 'super',
       })),
       totals: {

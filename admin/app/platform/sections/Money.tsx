@@ -160,7 +160,26 @@ export default function Money({ me }: { me: Me }) {
                   <span className="badge st-expired"><i className="dot" />отклонена</span>
                 )}
 
-                {/* Оплаченный отрезок записан при подтверждении и не
+                {/* У ждущих — что будет, если подтвердить. Считает
+                    сервер тем же способом, что и подтверждение. */}
+                {p.status === 'pending' && p.willExtendTo && (
+                  <span className="pay-note">
+                    продлит до {fullDate(p.willExtendTo)}
+                    {p.willPartnerShare ? ` · партнёру ${money(p.willPartnerShare)}` : ''}
+                  </span>
+                )}
+
+                {/* У подтверждённых — КТО и КОГДА. Когда владельцев
+                    несколько, вопрос «кто это пропустил» возникает
+                    первым, и отвечать на него журналом — лишний шаг в
+                    разговоре, который уже нервный. */}
+                {p.status === 'approved' && (
+                  <span className="pay-note">
+                    {p.approvedBy ?? '—'} · {dateTime(p.approvedAt)}
+                  </span>
+                )}
+
+                {/* Отрезок записан при подтверждении и не
                     пересчитывается: это ответ на вопрос «за что я
                     платил», он не меняется от того, что было потом. */}
                 {p.status === 'approved' && p.periodFrom && (
@@ -169,6 +188,7 @@ export default function Money({ me }: { me: Me }) {
                     {' '}партнёру {money(p.partnerShare)} · платформе {money(p.platformShare)}
                   </span>
                 )}
+
                 {p.status === 'rejected' && p.rejectReason && (
                   <span className="pay-note">{p.rejectReason}</span>
                 )}

@@ -156,5 +156,8 @@
 \echo '--- 062 касса новому клиенту ---'
 \i db/migrations/062_tenant_register.sql
 
+\echo '--- 063 кто подтвердил и что будет ---'
+\i db/migrations/063_money_note.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
