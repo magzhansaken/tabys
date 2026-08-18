@@ -144,39 +144,62 @@ export default function Partners({ me }: { me: Me }) {
       </div>
 
       <div className="toolbar">
-        <button className="btn primary" onClick={() => setAdding(!adding)}>
-          {adding ? 'Отмена' : '+ Новый партнёр'}
+        <button className="btn primary" onClick={() => setAdding(true)}>
+          + Партнёр
         </button>
       </div>
 
+      {/* Создание партнёра — окном, как у них: форма посреди списка
+          сдвигает таблицу и заставляет искать место, где остановился. */}
       {adding && (
-        <div className="pay-grid">
-          <article className="pay">
-            <div className="pay-top"><div className="pay-who"><b>Новый партнёр</b></div></div>
-            <label className="sub">Имя</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <label className="sub">Почта</label>
-            <input value={form.email} type="email"
-              onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <label className="sub">Пароль — от 8 знаков, передайте лично</label>
-            <input value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            <label className="sub">Доля партнёра, % — с каждой подтверждённой оплаты его клиентов</label>
-            <input value={String(form.commissionPercent)} inputMode="numeric"
-              onChange={(e) => setForm({ ...form, commissionPercent: Number(e.target.value) || 0 })} />
-            <div className="pay-actions">
-              <button className="btn primary" onClick={async () => {
-                try {
-                  await api('/partners', { method: 'POST', body: form });
-                  setShown({ title: 'Пароль партнёра', value: form.password,
-                    note: 'Показан один раз — передайте лично. В базе хранится отпечатком.' });
-                  setAdding(false);
-                  setForm({ name: '', email: '', password: '', commissionPercent: 15 });
-                  dropCache(); await load();
-                } catch (e: any) { setErr(e.message); }
-              }}>Завести</button>
+        <div className="modal"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setAdding(false); }}>
+          <div className="modal-card">
+            <div className="sheet-head">
+              <h2>Новый партнёр</h2>
+              <button className="btn small ghost sheet-x" aria-label="Закрыть"
+                onClick={() => setAdding(false)}>×</button>
             </div>
-          </article>
+
+            <label>Имя
+              <input value={form.name} autoFocus
+                onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </label>
+
+            <label>Почта
+              <input value={form.email} type="email"
+                onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <i className="split">Это будет его вход</i>
+            </label>
+
+            <label>Пароль (передайте лично)
+              <input value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <i className="split">Не короче восьми знаков</i>
+            </label>
+
+            <label>Доля партнёра, %
+              <input type="number" min={0} max={100} value={String(form.commissionPercent)}
+                onChange={(e) => setForm({ ...form, commissionPercent: Number(e.target.value) || 0 })} />
+              <i className="split">С каждой подтверждённой оплаты его клиентов</i>
+            </label>
+
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setAdding(false)}>Отмена</button>
+              <button className="btn primary"
+                disabled={!form.name.trim() || !form.email.trim() || form.password.length < 8}
+                onClick={async () => {
+                  try {
+                    await api('/partners', { method: 'POST', body: form });
+                    setShown({ title: 'Пароль партнёра', value: form.password,
+                      note: 'Показан один раз — передайте лично. В базе хранится отпечатком.' });
+                    setAdding(false);
+                    setForm({ name: '', email: '', password: '', commissionPercent: 15 });
+                    dropCache(); await load();
+                  } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                }}>Завести</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -205,9 +228,14 @@ export default function Partners({ me }: { me: Me }) {
               <tr key={p.id}>
                 <td>
                   {/* Правка на месте: опечатку в имени гонять через
-                      лист подтверждения незачем — это не деньги. */}
+                      лист подтверждения незачем — это не деньги.
+
+                      У владельцев платформы правка запрещена: долю им
+                      не считают, а пароль каждый меняет себе сам. */}
                   <InlineText value={p.name} label="Имя партнёра"
+                    disabled={p.isSuperUser}
                     onSave={(v) => save(p.id, { name: v }, 'Имя изменено')} />
+                  {p.isSuperUser && <span className="badge st-active">супер</span>}
                   {!p.isActive && <div className="sub">вход закрыт</div>}
                 </td>
                 <td>
@@ -225,7 +253,9 @@ export default function Partners({ me }: { me: Me }) {
                     {p.lostClients ? `, ушло ${p.lostClients}` : ''}
                   </div>
                 </td>
-                <td className="num">{p.commissionPercent}%</td>
+                <td className="num">
+                  {p.isSuperUser ? <span className="nobody">—</span> : `${p.commissionPercent}%`}
+                </td>
                 <td className="num">
                   {money(p.brought)}
                   <div className="sub">всего {money(p.broughtTotal)}</div>
@@ -244,7 +274,7 @@ export default function Partners({ me }: { me: Me }) {
                 <td className="actions">
                   {/* Два действия в меню, как у них: доля и пароль
                       нужны редко, но нужны — в строке им места нет. */}
-                  <RowMenu actions={[
+                  <RowMenu actions={p.isSuperUser ? [] : [
                     { label: 'Изменить долю…',
                       hint: `сейчас ${p.commissionPercent}%`,
                       onClick: () => editShare(p) },

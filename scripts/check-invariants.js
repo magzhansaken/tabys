@@ -547,6 +547,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Funnel.tsx', must: 'ещё не касались',
     why: 'Клиент, к которому не притрагивались ни разу, опаснее того, с кем говорили неделю назад — это отдельное состояние' },
 
+  { file: 'db/migrations/064_partners_all.sql', must: 'ВСЕ люди платформы',
+    why: 'Раздел отвечает на вопрос «кто имеет доступ»: забытая учётка совладельца открывает деньги всех клиентов' },
+  { file: 'admin/app/platform/sections/Partners.tsx', must: 'disabled={p.isSuperUser}',
+    why: 'Владельцев платформы не правят из списка: долю им не считают, пароль каждый меняет себе сам' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

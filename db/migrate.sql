@@ -159,5 +159,8 @@
 \echo '--- 063 кто подтвердил и что будет ---'
 \i db/migrations/063_money_note.sql
 
+\echo '--- 064 в партнёрах видны владельцы ---'
+\i db/migrations/064_partners_all.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

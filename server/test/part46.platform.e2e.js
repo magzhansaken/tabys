@@ -80,7 +80,8 @@ const shop = async (name, owner) => {
   const id1 = a1.employee.accountId, id2 = a2.employee.accountId;
 
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: null }, SUPER);
-  const partners = (await j('GET', '/platform/partners', null, SUPER)).d.rows;
+  const partners = (await j('GET', '/platform/partners', null, SUPER))
+    .d.rows.filter((p) => !p.isSuperUser);
   const pid = partners[0].id;
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: pid }, SUPER);
 
@@ -159,8 +160,9 @@ const shop = async (name, owner) => {
 
   // ---------- ЗАРАБОТОК ПАРТНЁРА ----------
   r = await j('GET', '/platform/partners', null, SUPER);
-  ok(r.d.rows[0].earned === 1035, `★ Заработок партнёра за 30 дней: ${r.d.rows[0].earned} ₸`);
-  ok(r.d.rows[0].clients === 1, 'Число клиентов партнёра');
+  const onlyP = r.d.rows.filter((p) => !p.isSuperUser);
+  ok(onlyP[0].earned === 1035, `★ Заработок партнёра за 30 дней: ${onlyP[0].earned} ₸`);
+  ok(onlyP[0].clients === 1, 'Число клиентов партнёра');
 
   r = await j('GET', '/platform/partners', null, PARTNER);
   ok(r.status === 403, 'Партнёр не видит список партнёров');
@@ -624,7 +626,7 @@ const shop = async (name, owner) => {
     ok(Array.isArray(v.d?.rows) && v.d?.totals,
        `★ Партнёры: ${v.d?.totals?.partners}, привели ${v.d?.totals?.brought} ₸`);
 
-    const p = v.d.rows[0];
+    const p = v.d.rows.filter((x) => !x.isSuperUser)[0];
     // ПРИВЁЛ и ЗАРАБОТАЛ — разные числа, и первое важнее: партнёр с
     // малой комиссией может приносить платформе больше.
     ok(typeof p.brought === 'number' && typeof p.earned === 'number' && p.brought >= p.earned,
@@ -664,7 +666,7 @@ const shop = async (name, owner) => {
 
     // Порядок: кто больше принёс — выше. Владелец читает сверху.
     v = await j('GET', '/platform/partners', null, SUPER);
-    const brought = v.d.rows.map((x) => x.brought);
+    const brought = v.d.rows.filter((x) => !x.isSuperUser).map((x) => x.brought);
     ok(brought.every((b, i) => i === 0 || brought[i - 1] >= b),
        '★ Порядок по принесённым деньгам: сверху те, кто кормит платформу');
 

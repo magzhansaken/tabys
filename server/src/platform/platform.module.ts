@@ -463,6 +463,11 @@ export class PlatformService {
     return {
       rows: rows.map((r: any) => ({
         id: r.id, name: r.full_name, email: r.email, phone: r.phone,
+        // Владельцы платформы тоже в списке: раздел отвечает на вопрос
+        // «кто имеет доступ», и забытая учётка совладельца открывает
+        // деньги всех клиентов.
+        role: r.role,
+        isSuperUser: r.role === 'super',
         commissionPercent: Number(r.commission_bp) / 100,
         isActive: r.is_active, lastLoginAt: r.last_login_at, createdAt: r.created_at,
 
@@ -484,7 +489,8 @@ export class PlatformService {
       })),
       days: n,
       totals: {
-        partners: rows.length,
+        // Считаем только партнёров: владельцы клиентов не приводят.
+        partners: rows.filter((r: any) => r.role === 'partner').length,
         brought: money(rows.reduce((a: number, r: any) => a + Number(r.brought_period), 0)),
         paidOut: money(rows.reduce((a: number, r: any) => a + Number(r.earned_period), 0)),
       },
