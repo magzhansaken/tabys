@@ -17,7 +17,7 @@
  */
 import { useRef, useState } from 'react';
 import { useEffect } from 'react';
-import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, daysWord, type Me } from '../lib';
 import { RowMenu } from '../ui/RowMenu';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
@@ -232,7 +232,7 @@ export default function Funnel({ me }: { me: Me }) {
                     {r.touchedAt
                       ? `касались ${fullDate(r.touchedAt)}${
                           r.daysSilent != null && r.daysSilent >= 7
-                            ? ` · молчим ${r.daysSilent} дн.` : ''}`
+                            ? ` · молчим ${daysWord(-r.daysSilent).replace(' назад', '')}` : ''}`
                       : 'ещё не касались'}
                   </div>
 

@@ -11,7 +11,7 @@
  * просто делала.
  */
 import { useEffect, useState } from 'react';
-import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, dateTime, daysWord, type Me } from '../lib';
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
@@ -168,9 +168,8 @@ export default function Requests({ me }: { me: Me }) {
                     {r.paidUntil
                       ? `оплачено до ${fullDate(r.paidUntil)}`
                       : 'без подписки'}
-                    {r.daysLeft != null && (r.daysLeft < 0
-                      ? ` · просрочен ${Math.abs(r.daysLeft)} дн.`
-                      : ` · осталось ${r.daysLeft} дн.`)}
+                    {r.daysLeft != null &&
+                      ` · ${r.daysLeft < 0 ? 'просрочен: ' : ''}${daysWord(r.daysLeft)}`}
                   </span>
                   {r.pendingAmount > 0 && (
                     <span className="req-money-pay">

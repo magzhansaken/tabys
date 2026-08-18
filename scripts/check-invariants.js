@@ -607,6 +607,9 @@ const RULES = [
   { file: 'admin/app/platform/sections/Today.tsx', must: "filter(Boolean).join(' · ')",
     why: 'Точка ставится только между непустыми частями: у клиента без города строка начиналась с висящей точки' },
 
+  { file: 'admin/app/platform/sections/Clients.tsx', must: 'daysWord(r.daysLeft)',
+    why: 'Склонение вместо «дн.»: «осталось 0 дн.» — это «сегодня», а «1 дн.» по-русски никто не говорит' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

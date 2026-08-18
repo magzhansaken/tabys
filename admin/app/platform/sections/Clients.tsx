@@ -14,7 +14,7 @@
  * Всё остальное — их: цвета, размеры, поведение при наведении.
  */
 import { useEffect, useState } from 'react';
-import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, fullDate, type Me , daysWord} from '../lib';
 import { RowMenu } from '../ui/RowMenu';
 import { PayForm } from '../ui/PayForm';
 import { AskForm } from '../ui/AskForm';
@@ -360,9 +360,11 @@ export default function Clients({ me }: { me: Me }) {
                     {r.paidUntil ? fullDate(r.paidUntil) : '—'}
                     {r.daysLeft != null && (
                       <div className="sub">
+                        {/* Склонение, а не «дн.»: «осталось 0 дн.» — это
+                            «сегодня», а «1 дн.» никто не говорит. */}
                         {r.daysLeft < 0
-                          ? `просрочен ${Math.abs(r.daysLeft)} дн.`
-                          : `осталось ${r.daysLeft} дн.`}
+                          ? `просрочен: ${daysWord(r.daysLeft)}`
+                          : daysWord(r.daysLeft)}
                       </div>
                     )}
                   </td>
