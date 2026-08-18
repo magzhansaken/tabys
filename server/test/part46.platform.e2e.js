@@ -897,6 +897,30 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── СВОДКА: снимок за день ОДИН и он свежий ─────────────────────
+  //
+  // Снимок пишется при каждом открытии сводки и в 03:00. Если он
+  // задвоится, график покажет два столбика за один день; если не
+  // обновится — карточка «сейчас» и последняя точка разойдутся.
+  {
+    await j('GET', '/platform/metrics?days=30', null, SUPER);
+    await j('GET', '/platform/metrics?days=30', null, SUPER);
+    let v = await j('GET', '/platform/metrics?days=30', null, SUPER);
+
+    const series = v.d?.series ?? [];
+    const today = series.filter((x) => x.tenants > 0);
+    const days = new Set(today.map((x) => String(x.day).slice(0, 10)));
+    ok(days.size === today.length,
+       '★ Снимок за день один: три открытия сводки не задвоили строку');
+
+    const last = today[today.length - 1];
+    ok(!last || last.tenants === v.d.now.tenants,
+       `★ Последняя точка графика и карточка «сейчас» сходятся: ${last?.tenants} = ${v.d.now.tenants}`);
+
+    ok(v.d.now.mrr >= 0 && v.d.now.revenueToday >= 0,
+       'Числа сводки не отрицательные');
+  }
+
   // ── ОТКЛЮЧЕНИЕ ПАРТНЁРА ДЕЙСТВУЕТ СРАЗУ ─────────────────────────
   //
   // Дописано после находки: партнёру закрыли вход, а его СТАРЫЙ КЛЮЧ
