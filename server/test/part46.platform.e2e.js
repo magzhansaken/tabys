@@ -897,6 +897,34 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── РАЗГРАНИЧЕНИЕ: партнёр не видит и не трогает чужое ────────────
+  //
+  // Дописано после сверки, на которой нашлись две утечки: партнёр
+  // видел долю платформы в оплатах и реквизиты в настройках. Обе не
+  // ломали работу и потому не всплывали сами.
+  {
+    const D = PARTNER;
+
+    if (D) {
+      let v = await j('GET', '/platform/pay-settings', null, D);
+      ok(v.status === 403, '★ Реквизиты закрыты от партнёра: клиенты платят напрямую платформе');
+
+      v = await j('GET', '/platform/price-book', null, D);
+      ok(v.d?.base > 0 && v.d?.payDetails == null,
+         '★ Прайс партнёру виден, реквизиты в нём — нет');
+
+      v = await j('GET', '/platform/payments', null, D);
+      ok(v.d?.totals?.platformShare == null,
+         '★ Доля платформы скрыта от партнёра: чужой доход не его дело');
+
+      v = await j('GET', '/platform/partners', null, D);
+      ok(v.status === 403, 'Раздел партнёров закрыт от партнёра');
+
+      v = await j('GET', '/platform/metrics', null, D);
+      ok(v.status === 403, 'Сводка платформы закрыта от партнёра');
+    }
+  }
+
   console.log(`\n=== ИТОГ: пройдено ${pass}, провалено ${fail} ===`);
   srv.kill();
   process.exit(fail ? 1 : 0);

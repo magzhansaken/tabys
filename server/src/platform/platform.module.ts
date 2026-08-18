@@ -766,13 +766,23 @@ export class PlatformService {
   }
 
   // ── ПРАЙС-ЛИСТ ──────────────────────────────────────────────────────
+  /**
+   * Прайс. Партнёру он НУЖЕН: он называет цену клиенту и подаёт заявку
+   * на устройство, где цена подставляется подсказкой.
+   *
+   * А вот РЕКВИЗИТЫ — не нужны: клиенты платят напрямую платформе,
+   * партнёр в этом не участвует, и знать чужой счёт ему незачем. Их
+   * отдаём только владельцу.
+   */
   async priceBook(ctx: PlatformCtx) {
     const s = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
+    const isSuper = ctx.role === 'super';
     return {
       base: money(Number(s.price_base)), pro: money(Number(s.price_pro)),
       extraPos: money(Number(s.price_extra_pos)), extraStore: money(Number(s.price_extra_store)),
       discount6m: Number(s.discount_6m_bp) / 100, discount12m: Number(s.discount_12m_bp) / 100,
-      payQr: s.pay_qr_url, payDetails: s.pay_details,
+      payQr: isSuper ? s.pay_qr_url : null,
+      payDetails: isSuper ? s.pay_details : null,
     };
   }
 
@@ -1459,6 +1469,10 @@ export class PlatformService {
    * перевод не проходит, и виноватой оказывается система.
    */
   async paySettings(ctx: PlatformCtx) {
+    // Реквизиты видит только владелец: клиенты платят напрямую ему,
+    // партнёр получает долю расчётом и чужой счёт знать не должен.
+    if (ctx.role !== 'super')
+      throw new ForbiddenException('Реквизиты видит владелец платформы');
     const s = (await this.q(
       `SELECT pay_url, pay_qr_url, pay_name, pay_phone, pay_note, pay_details
          FROM platform_settings WHERE id`)).rows[0] ?? {};
