@@ -1582,7 +1582,10 @@ export class PlatformService {
 
   /** Сдвинуть карточку. Ручной сдвиг сильнее вывода из фактов. */
   async funnelMove(ctx: PlatformCtx, accountId: string, stage: string, note?: string) {
-    const ok = ['new', 'contacted', 'trial', 'paid', 'lost'];
+    // 'auto' — снять ручную отметку и вернуть карточку к выводу из
+    // фактов. Без него карточка, двинутая в сердцах в «Отказ»,
+    // застревала там навсегда: клиент платит, а в воронке архив.
+    const ok = ['new', 'contacted', 'trial', 'paid', 'lost', 'auto'];
     if (!ok.includes(stage)) throw new BadRequestException('Неизвестный этап');
 
     if (ctx.role === 'partner') {
@@ -1592,11 +1595,10 @@ export class PlatformService {
       if (!own) throw new ForbiddenException('Это не ваш клиент');
     }
 
-    await this.q(`SELECT platform_funnel_move($1,$2,$3)`,
-      [accountId, stage, note?.trim() ?? null]);
+    const r = (await this.q(`SELECT * FROM platform_funnel_move($1,$2,$3)`,
+      [accountId, stage, note?.trim() ?? null])).rows[0];
     await this.audit(ctx, 'funnel_moved', accountId, { stage, note });
-    return { ok: true,
-      note: 'Этап поставлен руками — он сильнее того, что система выводит из фактов' };
+    return { ok: true, stage: r?.stage, manual: r?.manual, note: r?.note };
   }
 
   // ── ЖУРНАЛ ──────────────────────────────────────────────────────────

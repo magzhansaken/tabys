@@ -186,5 +186,8 @@
 \echo '--- 072 владелец в карточке клиента ---'
 \i db/migrations/072_card_owner.sql
 
+\echo '--- 073 вернуть воронку к фактам ---'
+\i db/migrations/073_funnel_auto.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

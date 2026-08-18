@@ -897,6 +897,35 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── ВОРОНКА: ручной этап сильнее, но его можно снять ─────────────
+  //
+  // Дописано после находки: карточка, двинутая в «Отказ» руками,
+  // застревала там навсегда. Клиент платит, работает, приносит
+  // деньги — а в воронке лежит в архиве, и вернуть её нечем.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((r) => r.paidUntil);
+    if (cl) {
+      // Двигаем в «Отказ» руками.
+      await j('POST', `/platform/funnel/${cl.id}`, { stage: 'lost' }, SUPER);
+      v = await j('GET', '/platform/funnel', null, SUPER);
+      let card = (v.d?.stages ?? []).flatMap((st) => st.cards.map((c) => ({ ...c, st: st.key })))
+        .find((c) => c.id === cl.id);
+      ok(card?.st === 'lost' && card?.isManual,
+         '★ Ручной этап сильнее фактов: карточка ушла в «Отказ»');
+
+      // Возвращаем к выводу из фактов.
+      const r = await j('POST', `/platform/funnel/${cl.id}`, { stage: 'auto' }, SUPER);
+      ok(/выводится из фактов/.test(r.d?.note ?? ''), `★ ${r.d?.note}`);
+
+      v = await j('GET', '/platform/funnel', null, SUPER);
+      card = (v.d?.stages ?? []).flatMap((st) => st.cards.map((c) => ({ ...c, st: st.key })))
+        .find((c) => c.id === cl.id);
+      ok(card && !card.isManual && card.st !== 'lost',
+         `★ Карточка вернулась из архива: этап «${card?.st}» выведен из фактов`);
+    }
+  }
+
   // ── ПОСЛЕДСТВИЯ ЗАЯВОК ДОХОДЯТ ДО СЧЁТА ─────────────────────────
   //
   // Одобрение должно МЕНЯТЬ ДЕЛО, а не просто ставить отметку. Проверка

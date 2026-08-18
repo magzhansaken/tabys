@@ -201,12 +201,21 @@ export default function Funnel({ me }: { me: Me }) {
                     </button>
 
                     {/* Кому перетаскивать неудобно — тот же сдвиг здесь. */}
-                    <RowMenu label="Сдвинуть" actions={
-                      data.stages.filter((x: any) => x.key !== st.key).map((x: any) => ({
+                    <RowMenu label="Сдвинуть" actions={[
+                      ...data.stages.filter((x: any) => x.key !== st.key).map((x: any) => ({
                         label: `→ ${x.title}`,
                         hint: x.hint,
                         onClick: () => move(r, x.key),
-                      }))} />
+                      })),
+                      // Вернуть к выводу из фактов. Без этого карточка,
+                      // двинутая в сердцах, застревала навсегда: клиент
+                      // платит, а в воронке лежит в «Отказе».
+                      ...(r.isManual ? [{
+                        label: 'Снова по фактам',
+                        hint: 'этап будет выводиться сам',
+                        onClick: () => move(r, 'auto'),
+                      }] : []),
+                    ]} />
                   </div>
 
                   <div className="sub">{[r.city, r.owner].filter(Boolean).join(' · ') || '—'}</div>
@@ -241,7 +250,17 @@ export default function Funnel({ me }: { me: Me }) {
                   {mark && <div className={`req-mark ${mark.tone}`}>{mark.text}</div>}
 
                   <div className="sub">
-                    {r.isManual ? 'этап поставлен вручную' : 'этап выведен из фактов'}
+                    {!r.isManual
+                      ? 'этап выведен из фактов'
+                      : r.derivedStage && r.derivedStage !== r.stage
+                        // Факты СПОРЯТ с ручным этапом: клиент платит,
+                        // а карточка в «Отказе». Ручной этап сильнее —
+                        // но молчать об этом нельзя, иначе живой
+                        // клиент так и останется в архиве.
+                        ? `поставлен вручную · по фактам «${
+                            data.stages.find((x: any) => x.key === r.derivedStage)?.title
+                            ?? r.derivedStage}»`
+                        : 'этап поставлен вручную'}
                   </div>
 
                   {/* Заметка правится прямо в карточке: это не
