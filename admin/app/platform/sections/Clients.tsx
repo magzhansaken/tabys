@@ -18,6 +18,8 @@ import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../l
 import { RowMenu } from '../ui/RowMenu';
 import { PayForm } from '../ui/PayForm';
 import { AskForm } from '../ui/AskForm';
+import { PlanLines } from '../ui/PlanLines';
+import { NewPassword, CopyValue } from '../ui/access';
 import { BulkPanel } from '../ui/BulkPanel';
 import { InlineText } from '../ui/InlineText';
 import { useAssign } from '../ui/useAssign';
@@ -49,6 +51,8 @@ export default function Clients({ me }: { me: Me }) {
   // Кнопка «Оплата» открывает окно отметки: партнёр получил деньги —
   // отмечает здесь, доступ продлевает владелец платформы.
   const [paying, setPaying] = useState<any>(null);
+  const [newPass, setNewPass] = useState<any>(null);
+  const [billFor, setBillFor] = useState<any>(null);
   // Партнёр не меняет деньги сам — он просит платформу. Их пункт
   // «Запросить у платформы» в меню строки.
   const [asking, setAsking] = useState<any>(null);
@@ -162,6 +166,34 @@ export default function Clients({ me }: { me: Me }) {
         <BulkPanel rows={data.rows} selected={selected}
           onClear={() => setSelected([])}
           onDone={() => { dropCache(); load(); }} />
+      )}
+
+      {newPass && (
+        <NewPassword phone={newPass.phone} password={newPass.password}
+          onClose={() => setNewPass(null)} />
+      )}
+
+      {/* Состав счёта: тариф это не одно число, а строки — основа,
+          доплаты, скидки. Каждую назначает владелец платформы. */}
+      {billFor && (
+        <div className="modal"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setBillFor(null); }}>
+          <div className="modal-card wide">
+            <div className="sheet-head">
+              <h2>Счёт · {billFor.name}</h2>
+              <button className="btn small ghost sheet-x" aria-label="Закрыть"
+                onClick={() => setBillFor(null)}>×</button>
+            </div>
+            <PlanLines accountId={billFor.id} lines={billFor.lines}
+              monthly={billFor.monthly}
+              onChanged={async () => {
+                dropCache();
+                const card = await api(`/clients/${billFor.id}/card`);
+                setBillFor({ ...card, id: billFor.id });
+                load();
+              }} />
+          </div>
+        </div>
       )}
 
       {asking && (
@@ -294,6 +326,15 @@ export default function Clients({ me }: { me: Me }) {
                         колонке — это панель управления, размноженная на
                         каждого клиента. Их довод. */}
                     <RowMenu actions={[
+                      { label: 'Состав счёта…',
+                        hint: 'основа, доплаты, скидки',
+                        onClick: async () => {
+                          try {
+                            const card = await api(`/clients/${r.id}/card`);
+                            setBillFor({ ...card, id: r.id });
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        } },
+
                       { label: 'Код для кассы',
                         hint: 'одноразовый, живёт 30 минут',
                         onClick: async () => {
@@ -309,8 +350,10 @@ export default function Clients({ me }: { me: Me }) {
                           try {
                             const x = await api(`/clients/${r.id}/reset-password`,
                               { method: 'POST', body: { tenantId: r.id } });
-                            setShown({ title: 'Новый пароль владельцу',
-                                       value: x.password, note: x.note });
+                            // Их окно: пароль и вход копируются одной
+                            // кнопкой — диктовать два поля подряд
+                            // значит один раз ошибиться.
+                            setNewPass({ phone: r.ownerPhone ?? r.phone, password: x.password });
                           } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
                         } },
 
