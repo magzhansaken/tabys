@@ -180,5 +180,11 @@
 \echo '--- 070 названия действий в журнале ---'
 \i db/migrations/070_journal_titles.sql
 
+\echo '--- 071 починка поиска клиентов ---'
+\i db/migrations/071_search_fix.sql
+
+\echo '--- 072 владелец в карточке клиента ---'
+\i db/migrations/072_card_owner.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

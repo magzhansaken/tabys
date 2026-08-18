@@ -897,6 +897,35 @@ const shop = async (name, owner) => {
   }
 
   await db.end();
+  // ── ПОИСК: он должен СУЖАТЬ, а не показывать всё ─────────────────
+  //
+  // Дописано после того, как поиск оказался сломан вовсе: любой запрос
+  // возвращал весь список. Заметить это на глаз нельзя — строки есть,
+  // поиск «работает», просто он всегда показывает всё.
+  {
+    let v = await j('GET', '/platform/clients?q=нетакогоклиента', null, SUPER);
+    ok((v.d?.rows ?? []).length === 0,
+       '★ Поиск сужает: несуществующее слово не находит ничего');
+
+    v = await j('GET', '/platform/clients', null, SUPER);
+    const all = (v.d?.rows ?? []).length;
+    ok(all > 0, 'Без запроса список полный');
+
+    const first = v.d.rows[0];
+    v = await j('GET', `/platform/clients?q=${encodeURIComponent(first.name)}`, null, SUPER);
+    ok((v.d?.rows ?? []).length < all || all === 1,
+       '★ Поиск по названию сужает список');
+
+    if (first.ownerPhone) {
+      v = await j('GET', `/platform/clients?q=${encodeURIComponent(first.ownerPhone)}`, null, SUPER);
+      ok((v.d?.rows ?? []).some((r) => r.id === first.id),
+         '★ Поиск по телефону находит клиента');
+    }
+
+    ok(first.owner && first.ownerPhone,
+       '★ Владелец и телефон записаны в карточку: без них некому звонить');
+  }
+
   // ── РАЗГРАНИЧЕНИЕ: партнёр не видит и не трогает чужое ────────────
   //
   // Дописано после сверки, на которой нашлись две утечки: партнёр
