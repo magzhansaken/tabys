@@ -174,5 +174,8 @@
 \echo '--- 068 счёт из тарифа и строк ---'
 \i db/migrations/068_monthly_base.sql
 
+\echo '--- 069 счёт в остальных трёх местах ---'
+\i db/migrations/069_monthly_rest.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

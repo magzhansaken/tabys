@@ -48,4 +48,21 @@ if (changed.length) {
   process.exit(1);
 }
 
+// Расчёт месячного счёта живёт в platform_monthly и нигде больше.
+// Если он снова появится руками в новой миграции — она разойдётся с
+// остальными, и клиент заплатит не ту сумму.
+const APPLIED = 69;
+let spread = [];
+for (const f of files) {
+  const n = Number(f.slice(0, 3));
+  if (!Number.isFinite(n) || n <= APPLIED) continue;
+  const t = fs.readFileSync(path.join(DIR, f), 'utf8');
+  if (/unit_price \* pl\.qty/.test(t) && /price_month/.test(t)) spread.push(f);
+}
+if (spread.length) {
+  console.log('✘ Расчёт счёта переписан руками в: ' + spread.join(', '));
+  console.log('  Зовите platform_monthly(account_id) — иначе цифры разойдутся.');
+  process.exit(1);
+}
+
 console.log(`✔ Миграции: ${files.length} файлов, применённые не тронуты`);
