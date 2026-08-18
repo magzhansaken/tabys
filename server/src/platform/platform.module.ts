@@ -1172,7 +1172,11 @@ export class PlatformService {
     }
 
     const [client, lines, pays, reqs] = await Promise.all([
-      this.q(`SELECT * FROM platform_clients($1,$2,NULL) WHERE id = $3`,
+      // Берём у ТОЙ ЖЕ функции, что и список клиентов: карточка
+      // смотрела в platform_clients, а та счёт вовсе не считает — в
+      // карточке стоял ноль, хотя в списке рядом 6 900.
+      this.q(`SELECT * FROM platform_clients_filtered($1,$2,NULL,'all','all','due')
+               WHERE id = $3`,
         [ctx.role, ctx.userId, accountId]),
       this.q(`SELECT id, kind, title, qty, unit_price, ends_at FROM plan_line
                WHERE account_id=$1 ORDER BY starts_at`, [accountId]),
@@ -1193,6 +1197,10 @@ export class PlatformService {
       owner: c.owner_name, ownerPhone: c.owner_phone,
       status: c.status, isDemo: c.is_demo,
       partner: c.partner_name, partnerId: c.partner_id,
+      // Тариф и доля: карточка их рисует, а сервер не отдавал —
+      // плашка тарифа была пустой, а «Ваша доля» показывала ноль.
+      tariff: c.tariff_name,
+      partnerPercent: Number(c.partner_bp ?? 0) / 100,
       dealStage: c.deal_stage, dealNote: c.deal_note, touchedAt: c.touched_at,
       paidUntil: c.paid_until, daysLeft: days,
       revenue30d: Math.round(Number(c.revenue_30d)),
@@ -1201,8 +1209,11 @@ export class PlatformService {
         id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
         price: money(Number(r.unit_price)), active: !r.ends_at,
       })),
-      monthly: lines.rows.filter((r: any) => !r.ends_at)
-        .reduce((a: number, r: any) => a + money(Number(r.unit_price) * Number(r.qty)), 0),
+      // Счёт берём у БАЗЫ, а не считаем заново: раньше карточка
+      // складывала только строки и у клиента без своих строк
+      // показывала НОЛЬ, хотя в списке рядом стояло 6 900. Седьмое
+      // место с тем же расчётом — теперь их снова одно.
+      monthly: money(Number(c.monthly ?? 0)),
       payments: pays.rows.map((r: any) => ({
         id: r.id, amount: money(Number(r.amount)), months: r.months,
         status: r.status, at: r.created_at,
