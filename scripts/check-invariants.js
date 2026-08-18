@@ -498,6 +498,13 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'Эта почта уже занята другим человеком',
     why: 'Почта партнёра — это ВХОД: два человека с одной почтой означали бы, что один не сможет войти' },
 
+  { file: 'admin/app/platform/ui/Chart.tsx', must: 'Данных пока мало',
+    why: 'Мало точек — говорим словами: огрызок графика хуже честной строки' },
+  { file: 'admin/app/platform/ui/Chart.tsx', must: 'span * 0.15',
+    why: 'Отступ 15% сверху и снизу: линия не липнет к краям, и видно, что она может расти' },
+  { file: 'admin/app/platform/sections/Journal.tsx', must: 'onlyMoney || weight',
+    why: 'Кнопка «Сбросить» появляется, только когда есть что сбрасывать: мёртвая кнопка учит себя не замечать' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

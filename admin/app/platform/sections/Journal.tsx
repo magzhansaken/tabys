@@ -13,6 +13,38 @@
  */
 import { useEffect, useState } from 'react';
 import { api, money, type Me } from '../lib';
+import { humanError } from '../ui/errors';
+import { Empty, Failed, SkeletonCards } from '../ui/States';
+
+/**
+ * Короткая метка вида — их приём: «оплата», «отказ», «массово». Она
+ * стоит рядом с текстом и позволяет пробежать глазами, не читая.
+ */
+const KIND_TITLE: Record<string, string> = {
+  payment_approved: 'оплата',
+  payment_rejected: 'отказ',
+  payment_recorded: 'отмечена',
+  bulk_grace: 'массово',
+  bulk_disable: 'массово',
+  bulk_enable: 'массово',
+  tier_changed: 'тариф',
+  funnel_moved: 'воронка',
+  signup_approved: 'заявка',
+  signup_rejected: 'заявка',
+  tenant_created: 'новый',
+  tenant_deleted: 'удаление',
+};
+
+/** Тон записи: хорошее зелёным, плохое красным, прочее ровным. */
+const TONE: Record<string, 'ok' | 'bad' | 'plain'> = {
+  payment_approved: 'ok',
+  signup_approved: 'ok',
+  tenant_created: 'ok',
+  payment_rejected: 'bad',
+  signup_rejected: 'bad',
+  tenant_deleted: 'bad',
+  partner_disabled: 'bad',
+};
 
 const WEIGHT = [
   { key: 'all',    label: 'Все' },
@@ -40,6 +72,7 @@ export default function Journal({ me }: { me: Me }) {
   const [hasMore, setHasMore] = useState(false);
   const [weight, setWeight] = useState('all');
   const [actorId, setActorId] = useState('all');
+  const [onlyMoney, setOnlyMoney] = useState(false);
   const [tenantId, setTenantId] = useState('all');
   const [people, setPeople] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -57,7 +90,7 @@ export default function Journal({ me }: { me: Me }) {
       const d = await api('/audit?' + p.toString());
       setRows(before ? [...rows, ...d.rows] : d.rows);
       setNext(d.nextBefore); setHasMore(d.hasMore); setErr('');
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(humanError(e)); }
     finally { setBusy(false); }
   };
   useEffect(() => { load(); }, []);
@@ -73,8 +106,10 @@ export default function Journal({ me }: { me: Me }) {
 
   // Группировка по дням: в журнале ищут «что было вчера», а не запись
   // номер сорок.
+  const shown = onlyMoney ? rows.filter((r) => r.amount != null || r.weight === 'money') : rows;
+
   const days = new Map<string, any[]>();
-  for (const r of rows) {
+  for (const r of shown) {
     const k = String(r.at).slice(0, 10);
     if (!days.has(k)) days.set(k, []);
     days.get(k)!.push(r);
@@ -96,10 +131,23 @@ export default function Journal({ me }: { me: Me }) {
             {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
 
-          <button className="btn small ghost"
-            onClick={() => { setActorId('all'); setTenantId('all'); setRows([]); load(weight); }}>
-            Сбросить
-          </button>
+          <label className="check">
+            <input type="checkbox" checked={onlyMoney}
+              onChange={(e) => setOnlyMoney(e.target.checked)} />
+            Только деньги
+          </label>
+
+          {/* Кнопка появляется, только когда есть что сбрасывать: их
+              приём. Мёртвая кнопка учит себя не замечать. */}
+          {(actorId !== 'all' || tenantId !== 'all' || onlyMoney || weight !== 'all') && (
+            <button className="btn small ghost"
+              onClick={() => {
+                setActorId('all'); setTenantId('all'); setOnlyMoney(false);
+                setWeight('all'); setRows([]); load('all');
+              }}>
+              Сбросить
+            </button>
+          )}
         </div>
       )}
 
@@ -115,10 +163,7 @@ export default function Journal({ me }: { me: Me }) {
       {err && <div className="err">{err}</div>}
 
       {rows.length === 0 && !busy ? (
-        <div className="all-clear">
-          <b>Записей нет</b>
-          <p>При этом отборе ничего не нашлось.</p>
-        </div>
+        <Empty title="Записей нет" text="При этом отборе ничего не нашлось." />
       ) : [...days.entries()].map(([day, list]) => (
         <section className="journal-day" key={day}>
           <h2>{dayTitle(day)}</h2>
@@ -128,7 +173,7 @@ export default function Journal({ me }: { me: Me }) {
               /* Денежные записи весомее прочих: цена ошибки в них
                  другая. Их класс weighty. */
               <article key={r.id}
-                className={`entry ${r.weight === 'money' ? 'weighty' : ''} ${r.weight}`}>
+                className={`entry ${r.amount != null || r.weight === 'money' ? 'weighty' : ''} ${TONE[r.action] ?? 'plain'}`}>
                 <span className="entry-time">{time(r.at)}</span>
 
                 <div className="entry-body">
@@ -137,6 +182,10 @@ export default function Journal({ me }: { me: Me }) {
                   </div>
 
                   <div className="entry-meta">
+                    {/* Короткая метка вида: пробежать глазами, не читая. */}
+                    {KIND_TITLE[r.action] && (
+                      <span className="entry-kind">{KIND_TITLE[r.action]}</span>
+                    )}
                     {r.detail && <span className="entry-kind">{r.detail}</span>}
                     {r.client && (
                       <button className="link-name entry-tenant"

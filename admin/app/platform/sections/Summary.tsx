@@ -11,6 +11,9 @@
  */
 import { useEffect, useState } from 'react';
 import { api, cached, putCache, money, type Me } from '../lib';
+import { Chart } from '../ui/Chart';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonCards, SkeletonMetrics } from '../ui/States';
 
 /** Знаки партнёров: у них у каждого свой, чтобы различать в списке
  *  быстрее, чем читая имя. */
@@ -35,12 +38,12 @@ export default function Summary({ me }: { me: Me }) {
         api('/partners').catch(() => ({ rows: [] })),
       ]);
       setData(m); putCache(path, m); setPartners(p.rows ?? []); setErr('');
-    } catch (e: any) { if (!hit) setErr(e.message); }
+    } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !data) return <div className="err">{err}</div>;
-  if (!data) return <div className="muted">Загрузка…</div>;
+  if (err && !data) return <Failed text={err} onRetry={() => load()} />;
+  if (!data) return <><SkeletonMetrics count={5} /><SkeletonCards count={2} height={210} /></>;
 
   const t = data.now;
   const ch = data.change;
@@ -61,7 +64,8 @@ export default function Summary({ me }: { me: Me }) {
       <div className="cards">
         <div className="card"><span>Всего магазинов</span><b>{t.tenants}</b></div>
         <div className="card ok"><span>Работают</span><b>{t.active}</b></div>
-        <div className="card bad"><span>Срок вышел</span><b>{t.expired}</b></div>
+        <div className="card warn"><span>На пробном</span><b>{t.trial}</b></div>
+        <div className="card bad"><span>Просрочены</span><b>{t.expired}</b></div>
         <div className="card money"><span>Доход в месяц</span><b>{money(t.mrr)}</b></div>
         <div className="card money"><span>Пришло за {data.days} дн.</span>
           <b>{money(data.period.amount)}</b></div>
@@ -78,7 +82,8 @@ export default function Summary({ me }: { me: Me }) {
               {ch.amount >= 0 ? '+' : '−'}{money(Math.abs(ch.amount))} к прошлым {data.days} дн.
             </span>
           </div>
-          <Bars series={data.series} max={maxAmount} pick={(d: any) => d.amount} />
+          <Chart format={(v) => money(v)}
+            points={data.series.map((d: any) => ({ label: short(d.day), value: d.amount }))} />
         </section>
 
         <section className="chart-box">
@@ -86,7 +91,8 @@ export default function Summary({ me }: { me: Me }) {
             <b>Доход в месяц</b>
             <span>{money(t.mrr)} сейчас</span>
           </div>
-          <Bars series={data.series} max={maxMrr} pick={(d: any) => d.mrr} />
+          <Chart format={(v) => money(v)}
+            points={data.series.map((d: any) => ({ label: short(d.day), value: d.mrr }))} />
         </section>
       </div>
 
@@ -107,21 +113,21 @@ export default function Summary({ me }: { me: Me }) {
           <tbody>
             {partners.map((p: any, i: number) => (
               <tr key={p.id}>
-                <td>
+                <td data-label="Место">
                   <span className="place">{i + 1}</span>
                   <span className="animal" title="знак партнёра">{SIGNS[i % SIGNS.length]}</span>
                   {p.name}
                   <div className="sub">{p.commissionPercent}%</div>
                 </td>
-                <td className="num">
+                <td className="num" data-label="Клиентов">
                   {p.clients}
                   <div className="sub">работают {p.activeClients}</div>
                 </td>
                 {/* Привёл и заработал — разные числа, и первое важнее:
                     партнёр с малой комиссией может приносить больше. */}
-                <td className="num">{money(p.brought)}</td>
-                <td className="num">{money(p.earned)}</td>
-                <td className="num">{money(p.mrr)}</td>
+                <td className="num" data-label="Привёл">{money(p.brought)}</td>
+                <td className="num" data-label="Заработал">{money(p.earned)}</td>
+                <td className="num" data-label="Их доход в месяц">{money(p.mrr)}</td>
               </tr>
             ))}
           </tbody>
@@ -130,19 +136,5 @@ export default function Summary({ me }: { me: Me }) {
 
       {data.note && <p className="note">{data.note}</p>}
     </>
-  );
-}
-
-/** Столбики без библиотеки — как у них: лишние сотни килобайт на
- *  странице, которую открывают с телефона в дороге, ни к чему. */
-function Bars({ series, max, pick }: { series: any[]; max: number; pick: (d: any) => number }) {
-  return (
-    <div className="bars">
-      {series.map((d) => (
-        <span key={d.day} title={`${short(d.day)}: ${money(pick(d))}`}
-          style={{ height: `${Math.max(2, (pick(d) / max) * 100)}%` }}
-          className={pick(d) > 0 ? 'on' : ''} />
-      ))}
-    </div>
   );
 }
