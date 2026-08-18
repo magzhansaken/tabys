@@ -750,7 +750,7 @@ const shop = async (name, owner) => {
     // номера съезжают — вторая страница показала бы то же, что первая.
     v = await j('GET', '/platform/audit?limit=2', null, SUPER);
     ok(v.d.rows.length === 2 && v.d.nextBefore,
-       '★ Листание курсором по времени последней записи');
+       '★ Листание курсором по номеру записи, а не по времени');
     const firstIds = v.d.rows.map((x) => x.id);
 
     v = await j('GET',
@@ -944,6 +944,37 @@ const shop = async (name, owner) => {
       ok(new Set(seen).size === all.length,
          `★ Листание журнала ничего не теряет: ${new Set(seen).size} из ${all.length}`);
       ok(seen.length === new Set(seen).size, '★ И ничего не повторяет');
+    }
+  }
+
+  // ── ЛИСТАНИЕ ЖУРНАЛА НИЧЕГО НЕ ТЕРЯЕТ ───────────────────────────
+  //
+  // Дописано после находки: листали по ВРЕМЕНИ записи, а массовое
+  // действие пишет несколько записей одним мгновением. Страница
+  // кончалась на такой записи, следующая просила «раньше этого
+  // момента» — и пропускала все остальные записи той же секунды.
+  //
+  // Проверено было: шесть записей одним моментом, листание по две —
+  // потеряно пять из двадцати одной. Человек листает журнал и не
+  // видит, что часть событий просто исчезла.
+  {
+    const all = (await j('GET', '/platform/audit?limit=200', null, SUPER)).d?.rows ?? [];
+    if (all.length >= 4) {
+      const seen = [];
+      let cursor = null;
+      for (let page = 0; page < 60; page++) {
+        const url = '/platform/audit?limit=2' + (cursor ? `&before=${cursor}` : '');
+        const v = await j('GET', url, null, SUPER);
+        const rows = v.d?.rows ?? [];
+        if (!rows.length) break;
+        seen.push(...rows.map((r) => r.id));
+        if (!v.d?.hasMore) break;
+        cursor = v.d.nextBefore;
+      }
+      ok(seen.length === new Set(seen).size,
+         '★ Листание журнала не повторяет записи');
+      ok(new Set(seen).size === all.length,
+         `★ Листание журнала ничего не теряет: ${new Set(seen).size} из ${all.length}`);
     }
   }
 
