@@ -171,5 +171,8 @@
 \echo '--- 067 цена при одобрении заявки ---'
 \i db/migrations/067_request_price.sql
 
+\echo '--- 068 счёт из тарифа и строк ---'
+\i db/migrations/068_monthly_base.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
