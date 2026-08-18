@@ -898,6 +898,20 @@ export class PlatformService {
           AND tp.approved_at <  current_date - ($1 - 1)
           AND coalesce(tc.is_demo, false) = false`, [n])).rows[0];
 
+    // Ждущие одобрения и приход за сегодня — одним заходом.
+    const extra = (await this.q(
+      `SELECT
+         (SELECT count(*) FROM account a
+            LEFT JOIN tenant_card tc ON tc.account_id = a.id
+           WHERE a.deleted_at IS NULL AND a.status = 'trial'
+             AND tc.partner_id IS NULL
+             AND coalesce(tc.is_demo, false) = false) AS pending,
+         (SELECT coalesce(sum(tp.amount), 0) FROM tenant_payment tp
+            LEFT JOIN tenant_card tc ON tc.account_id = tp.account_id
+           WHERE tp.status = 'approved'
+             AND tp.approved_at::date = current_date
+             AND coalesce(tc.is_demo, false) = false) AS today_amount`)).rows[0];
+
     const nowAmount = sum('amount');
     const prevAmount = money(Number(prev.amt));
 
@@ -908,6 +922,11 @@ export class PlatformService {
         tenants: last.tenants ?? 0, active: last.active ?? 0,
         trial: last.trial ?? 0, expired: last.expired ?? 0,
         mrr: last.mrr ?? 0,
+        // Ждут одобрения и поступило СЕГОДНЯ — их карточки. Первая
+        // говорит, что кто-то стоит у двери; вторая отвечает на
+        // вопрос, с которого начинается день владельца платформы.
+        pending: Number(extra.pending ?? 0),
+        revenueToday: money(Number(extra.today_amount ?? 0)),
       },
       period: {
         amount: nowAmount,

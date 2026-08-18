@@ -68,9 +68,13 @@ export default function Summary({ me }: { me: Me }) {
         <div className="card ok"><span>Работают</span><b>{t.active}</b></div>
         <div className="card warn"><span>На пробном</span><b>{t.trial}</b></div>
         <div className="card bad"><span>Просрочены</span><b>{t.expired}</b></div>
+        {/* Ждут одобрения: кто-то стоит у двери. Их карточка. */}
+        <div className="card warn"><span>Ждут одобрения</span><b>{t.pending}</b></div>
         <div className="card money"><span>Доход в месяц</span><b>{money(t.mrr)}</b></div>
-        <div className="card money"><span>Пришло за {data.days} дн.</span>
-          <b>{money(data.period.amount)}</b></div>
+        {/* «Поступило сегодня» — вопрос, с которого начинается день
+            владельца платформы. Их карточка. */}
+        <div className="card money"><span>Поступило сегодня</span>
+          <b>{money(t.revenueToday)}</b></div>
       </div>
 
       <div className="chart-grid">
@@ -107,6 +111,7 @@ export default function Summary({ me }: { me: Me }) {
             <tr>
               <th>Партнёр</th>
               <th className="num">Клиентов</th>
+              <th className="num">Платят</th>
               <th className="num">Привёл</th>
               <th className="num">Заработал</th>
               <th className="num">Дают в месяц</th>
@@ -121,10 +126,10 @@ export default function Summary({ me }: { me: Me }) {
                   {p.name}
                   <div className="sub">{p.commissionPercent}%</div>
                 </td>
-                <td className="num" data-label="Клиентов">
-                  {p.clients}
-                  <div className="sub">работают {p.activeClients}</div>
-                </td>
+                <td className="num" data-label="Клиентов">{p.clients}</td>
+                {/* «Платят» отдельным столбцом — их приём: заведено
+                    десять, а платят двое, и это разные вещи. */}
+                <td className="num" data-label="Платят"><b>{p.activeClients}</b></td>
                 {/* Привёл и заработал — разные числа, и первое важнее:
                     партнёр с малой комиссией может приносить больше. */}
                 <td className="num" data-label="Привёл">{money(p.brought)}</td>

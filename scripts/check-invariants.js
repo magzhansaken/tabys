@@ -552,6 +552,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Partners.tsx', must: 'disabled={p.isSuperUser}',
     why: 'Владельцев платформы не правят из списка: долю им не считают, пароль каждый меняет себе сам' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'revenueToday: money',
+    why: '«Поступило сегодня» — вопрос, с которого начинается день владельца платформы' },
+  { file: 'admin/app/platform/sections/Summary.tsx', must: 'data-label="Платят"',
+    why: '«Платят» отдельным столбцом: заведено десять, а платят двое — это разные вещи' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
