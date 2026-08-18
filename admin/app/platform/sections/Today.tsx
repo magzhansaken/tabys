@@ -15,6 +15,7 @@ import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } 
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
+import { useLive } from '../ui/useLive';
 import { Failed, SkeletonCards, PageHead } from '../ui/States';
 
 type Item = {
@@ -45,6 +46,10 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
     } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
+
+  // Обновляем сами: панель держат открытой весь день, и
+  // отмеченная партнёром оплата должна появиться без нажатий.
+  useLive(() => load(), 20_000);
 
   const isSuper = me.role === 'super';
 

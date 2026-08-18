@@ -15,6 +15,7 @@ import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } 
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
+import { useLive } from '../ui/useLive';
 import { describeRequest } from '../ui/describeRequest';
 import { Failed, SkeletonCards, Empty , PageHead } from '../ui/States';
 
@@ -39,6 +40,10 @@ export default function Requests({ me }: { me: Me }) {
     } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
+
+  // Обновляем сами: панель держат открытой весь день, и
+  // отмеченная партнёром оплата должна появиться без нажатий.
+  useLive(() => load(), 20_000);
 
   /** Решение по заявке. Одобрение САМО выполняет действие. */
   const decide = async (r: any, yes: boolean) => {

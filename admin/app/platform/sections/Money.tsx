@@ -17,6 +17,7 @@ import { api, cached, putCache, dropCache, money, fullDate, dateTime, type Me } 
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
+import { useLive } from '../ui/useLive';
 import { Failed, SkeletonMetrics, SkeletonCards, Empty , PageHead } from '../ui/States';
 
 export default function Money({ me }: { me: Me }) {
@@ -36,6 +37,10 @@ export default function Money({ me }: { me: Me }) {
     } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
+
+  // Обновляем сами: панель держат открытой весь день, и
+  // отмеченная партнёром оплата должна появиться без нажатий.
+  useLive(() => load(), 20_000);
 
   const [busy, setBusy] = useState(false);
 

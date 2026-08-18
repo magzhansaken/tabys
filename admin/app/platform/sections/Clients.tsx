@@ -30,6 +30,7 @@ import { statusView, STATUS_FILTERS, STATUS_FILTERS_PARTNER } from '../ui/status
 import { useAsk } from '../ui/Ask';
 import { useToast } from '../ui/Toast';
 import { humanError } from '../ui/errors';
+import { useLive } from '../ui/useLive';
 import { Failed, SkeletonMetrics, SkeletonTable, Empty , PageHead } from '../ui/States';
 
 const SORTS = [
@@ -101,6 +102,10 @@ export default function Clients({ me }: { me: Me }) {
     } catch (e: any) { if (!hit) setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
+
+  // Обновляем сами: панель держат открытой весь день, и
+  // отмеченная партнёром оплата должна появиться без нажатий.
+  useLive(() => load(), 30_000);
 
   // Их состояния: скелетон показывает форму будущего содержимого.
   // Открыта карточка — показываем её вместо списка.

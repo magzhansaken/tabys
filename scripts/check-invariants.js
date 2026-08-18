@@ -569,6 +569,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'вместо ${money(full)}',
     why: 'Скидка показана в тенге: «10%» само не говорит, сколько заплатит клиент и сколько потеряет платформа' },
 
+  { file: 'admin/app/platform/ui/useLive.ts', must: "document.visibilityState !== 'visible'",
+    why: 'Разделы обновляются сами, но не когда вкладка скрыта и не поверх открытого листа подтверждения' },
+  { file: 'db/migrations/065_today_order.sql', must: 'крупные выше',
+    why: 'Оплаты в очереди по сумме: потерять крупную дороже, а при длинной очереди до низа могут не дойти' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

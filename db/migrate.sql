@@ -162,5 +162,8 @@
 \echo '--- 064 в партнёрах видны владельцы ---'
 \i db/migrations/064_partners_all.sql
 
+\echo '--- 065 порядок внутри очереди ---'
+\i db/migrations/065_today_order.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
