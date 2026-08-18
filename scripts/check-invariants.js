@@ -566,8 +566,10 @@ const RULES = [
 
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'danger-title',
     why: 'Массовые действия живут в настройках: самая опасная возможность не должна стоять среди ежедневной работы' },
-  { file: 'admin/app/platform/sections/Settings.tsx', must: "dirtyPrices ? 'Сохранить цены' : 'Сохранено'",
+  { file: 'admin/app/platform/sections/Settings.tsx', must: "dirtyPay ? 'Сохранить реквизиты' : 'Сохранено'",
     why: 'Кнопка знает, есть ли что сохранять: кнопка, которая ничего не делает, учит нажимать наугад' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'КАЖДАЯ ЦЕНА СОХРАНЯЕТСЯ САМА',
+    why: 'Общая форма заставляет помнить, что ты что-то менял: уйти с неё, не нажав, значит потерять правку' },
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'вместо ${money(full)}',
     why: 'Скидка показана в тенге: «10%» само не говорит, сколько заплатит клиент и сколько потеряет платформа' },
 

@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { api, dropCache, money, type Me } from '../lib';
 import { useToast } from '../ui/Toast';
 import { BulkPanel } from '../ui/BulkPanel';
+import { InlineText } from '../ui/InlineText';
 import { humanError } from '../ui/errors';
 import { Failed, SkeletonCards , PageHead } from '../ui/States';
 
@@ -21,7 +22,7 @@ export default function Settings({ me }: { me: Me }) {
   const [prices, setPrices] = useState<any>(null);
   const [pay, setPay] = useState<any>(null);
   const [err, setErr] = useState('');
-  const [saved, setSaved] = useState('');
+  const toast = useToast();
   // Снимок с сервера: с ним сравниваем, чтобы понять, есть ли правки.
   const [basePrices, setBasePrices] = useState<any>(null);
   const [basePay, setBasePay] = useState<any>(null);
@@ -39,7 +40,7 @@ export default function Settings({ me }: { me: Me }) {
       setBasePrices(JSON.parse(JSON.stringify(p)));
       setBasePay(JSON.parse(JSON.stringify(s)));
       setErr('');
-    } catch (e: any) { setErr(humanError(e)); }
+    } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
@@ -48,7 +49,6 @@ export default function Settings({ me }: { me: Me }) {
 
   // Что изменено с последней загрузки: кнопка не должна предлагать
   // сохранить, когда сохранять нечего. Их приём.
-  const dirtyPrices = JSON.stringify(prices) !== JSON.stringify(basePrices);
   const dirtyPay = JSON.stringify(pay) !== JSON.stringify(basePay);
 
   const nothing = !pay.payUrl?.trim() && !pay.payQrUrl?.trim()
@@ -60,8 +60,9 @@ export default function Settings({ me }: { me: Me }) {
         ? await api('/price-book', { method: 'POST', body: prices })
         : await api('/pay-settings', { method: 'POST', body: pay });
       dropCache();
-      setSaved(what === 'prices' ? 'Цены сохранены' : 'Реквизиты сохранены');
-      setTimeout(() => setSaved(''), 3000);
+      // Ответ даёт ТОСТ, а не полоса поверх страницы: полоса
+      // сдвигает содержимое, и человек теряет место, куда смотрел.
+      toast({ text: 'Реквизиты сохранены' });
     } catch (e: any) { setErr(humanError(e)); }
   };
 
@@ -70,12 +71,12 @@ export default function Settings({ me }: { me: Me }) {
       <PageHead title={'Настройки'} sub={'Реквизиты видит владелец каждого магазина у себя в разделе «Подписка». Он платит напрямую вам — партнёр получает долю расчётом.'} />
 
       {err && <div className="err">{err}</div>}
-      {saved && <div className="all-clear"><b>{saved}</b></div>}
 
-      <h2 className="section-title">Цены платформы</h2>
+      <h2 className="section-title">Цены по умолчанию</h2>
       <p className="hint settings-hint">
-        Новые цены войдут в следующие счета. Оплаченные периоды не меняются —
-        клиент платит по той цене, о которой договорились.
+        Партнёр подставляет их сам — и при заведении клиента, и в заявке на устройство.
+        Отступить от прайса он может, но вы увидите это в заявке и решите сами.
+        Уже выставленные счета не меняются: прайс действует на новые строки.
       </p>
 
       <div className="price-book">
@@ -90,14 +91,28 @@ export default function Settings({ me }: { me: Me }) {
               <b>{title}</b>
               <div className="sub">{note}</div>
             </div>
-            <input value={String(prices[k] ?? 0)} inputMode="numeric"
-              onChange={(e) => setPrices({ ...prices, [k]: Number(e.target.value) || 0 })} />
+            {/* КАЖДАЯ ЦЕНА СОХРАНЯЕТСЯ САМА, без общей кнопки. Их
+                устройство, и оно вернее: поправил одну строку — она
+                ушла. Общая форма заставляет помнить, что ты что-то
+                менял, и уйти с неё, не нажав, значит потерять правку. */}
+            <InlineText value={String(prices[k] ?? 0)} label={`${title}, ₸ в месяц`} mono
+              onSave={async (v) => {
+                const n = Number(String(v).replace(/[^\d-]/g, ''));
+                if (!Number.isFinite(n) || n < 0) {
+                  toast({ text: 'Нужно число не меньше нуля', kind: 'err' }); return;
+                }
+                try {
+                  await api('/price-book', { method: 'POST', body: { ...prices, [k]: n } });
+                  toast({ text: 'Цена сохранена' });
+                  dropCache(); await load();
+                } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+              }} />
           </div>
         ))}
 
         {[
-          ['discount6', 'Скидка за полгода, %', 6],
-          ['discount12', 'Скидка за год, %', 12],
+          ['discount6m', 'Скидка за полгода, %', 6],
+          ['discount12m', 'Скидка за год, %', 12],
         ].map(([k, title, months]) => {
           const pct = Number(prices[k as string] ?? 0);
           const full = Number(prices.base ?? 0) * (months as number);
@@ -106,34 +121,32 @@ export default function Settings({ me }: { me: Me }) {
             <div className="price-row" key={k as string}>
               <div>
                 <b>{title}</b>
-                {/* Во что выльется скидка В ТЕНЬГЕ. Их приём: «10%»
-                    само по себе не говорит, сколько клиент заплатит и
-                    сколько платформа потеряет. */}
+                {/* Во что выльется скидка В ТЕНЬГЕ: «10%» само по себе
+                    не говорит, сколько заплатит клиент. */}
                 <div className="sub">
                   {pct > 0 && Number(prices.base) > 0
                     ? `при ${money(prices.base)}/мес — ${money(withPct)} вместо ${money(full)}`
                     : 'скидки нет — срок считается по полной цене'}
                 </div>
               </div>
-              <input value={String(prices[k as string] ?? 0)} inputMode="numeric"
-                onChange={(e) => setPrices({ ...prices, [k as string]: Number(e.target.value) || 0 })} />
+              <InlineText value={String(pct)} label={title as string} mono
+                onSave={async (v) => {
+                  const n = Number(String(v).replace(/[^\d]/g, ''));
+                  // Половина цены — предел: больше это уже не скидка,
+                  // а другой тариф, и заводить его надо строкой счёта.
+                  if (!Number.isFinite(n) || n < 0 || n > 50) {
+                    toast({ text: 'Скидка — от 0 до 50%', kind: 'err' }); return;
+                  }
+                  try {
+                    await api('/price-book', { method: 'POST',
+                      body: { ...prices, [k as string]: n } });
+                    toast({ text: 'Цена сохранена' });
+                    dropCache(); await load();
+                  } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                }} />
             </div>
           );
         })}
-      </div>
-
-      <div className="form-actions pay-save">
-        {/* «Сохранено» вместо «Сохранить», когда сохранять нечего:
-            кнопка, которая ничего не делает, учит нажимать наугад. */}
-        <button className="btn primary" disabled={!dirtyPrices}
-          onClick={() => save('prices')}>
-          {dirtyPrices ? 'Сохранить цены' : 'Сохранено'}
-        </button>
-        {dirtyPrices && (
-          <button className="btn" onClick={() => setPrices(JSON.parse(JSON.stringify(basePrices)))}>
-            Отменить правки
-          </button>
-        )}
       </div>
 
       <h2 className="section-title">Куда платят магазины</h2>
