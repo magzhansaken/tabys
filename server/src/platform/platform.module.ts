@@ -776,7 +776,41 @@ export class PlatformService {
     };
   }
 
+  /**
+   * Правка прайса. ПРОВЕРКИ ЖИВУТ ЗДЕСЬ, а не только в кабинете:
+   * кабинет — не единственная дверь, и запрос можно послать напрямую.
+   *
+   * Без них скидка 150% давала клиенту отрицательный счёт — платформа
+   * оказывалась должна ему 41 400 ₸. А цена ноль обнуляла доход со
+   * всех клиентов разом, и заметить это можно было только по пустой
+   * сводке через месяц.
+   */
   async setPriceBook(ctx: PlatformCtx, d: any) {
+    for (const [key, name] of [
+      ['base', 'Тариф «Старт»'], ['pro', 'Тариф «Стандарт»'],
+      ['extraPos', 'Вторая касса'], ['extraStore', 'Вторая точка'],
+    ] as const) {
+      if (d[key] == null) continue;
+      const v = Number(d[key]);
+      if (!Number.isFinite(v) || v < 0)
+        throw new BadRequestException(`${name}: цена не может быть отрицательной`);
+      // Верхний предел — от опечатки: 6900 с лишним нулём это 69 000,
+      // и клиент увидит его в своём счёте раньше, чем кто-то заметит.
+      if (v > 1_000_000)
+        throw new BadRequestException(`${name}: цена больше миллиона — проверьте, не лишний ли ноль`);
+    }
+
+    for (const [key, name] of [
+      ['discount6m', 'Скидка за полгода'], ['discount12m', 'Скидка за год'],
+    ] as const) {
+      if (d[key] == null) continue;
+      const v = Number(d[key]);
+      // Половина — предел: больше это уже не скидка, а другой тариф, и
+      // заводить его надо строкой счёта, а не процентом.
+      if (!Number.isFinite(v) || v < 0 || v > 50)
+        throw new BadRequestException(`${name}: от 0 до 50%`);
+    }
+
     if (ctx.role !== 'super') throw new ForbiddenException('Цены назначает владелец платформы');
     const t = (v: any) => v == null ? null : Math.round(Number(v) * 100);
     await this.q(
