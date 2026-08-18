@@ -826,6 +826,19 @@ const shop = async (name, owner) => {
     ok(/Уже подтверждённые хранят свою/.test(v.d?.note ?? ''),
        '★ Новая доля — для будущих оплат: уже подтверждённые хранят свою');
 
+    // Проверяем ДЕЛО, а не слова: доля выросла с 15% до 20%, но
+    // выплата по уже подтверждённой оплате обязана остаться прежней.
+    // Иначе отчёт за прошлый месяц менялся бы сам собой.
+    v = await j('GET', '/platform/payments?status=approved', null, SUPER);
+    const frozen = v.d?.rows?.find((x) => x.partnerShare === 1035);
+    ok(!!frozen,
+       '★ Прошлая выплата НЕ пересчиталась после смены доли: 1035 ₸ как было');
+
+    v = await j('GET', '/platform/partners', null, SUPER);
+    const afterEdit = v.d?.rows?.find((x) => x.id === pid);
+    ok(afterEdit?.commissionPercent === 20 && afterEdit?.earned === 1035,
+       `★ Доля стала ${afterEdit?.commissionPercent}%, заработок остался ${afterEdit?.earned} ₸`);
+
     // УЧЕБНЫЙ МАГАЗИН
     v = await j('POST', '/platform/demo', {}, PARTNER);
     ok(v.d?.isDemo && /не участвует в деньгах/.test(v.d?.note ?? ''),
