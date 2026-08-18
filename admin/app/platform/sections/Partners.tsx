@@ -71,9 +71,9 @@ export default function Partners({ me }: { me: Me }) {
     if (!r) return;
     const next = Number(r.value);
     if (!Number.isFinite(next) || next < 0 || next > 100) {
-      toast({ text: 'Доля от 0 до 100%', kind: 'err' }); return;
+      toast({ text: 'Доля партнёра — от 0 до 100%', kind: 'err' }); return;
     }
-    await save(p.id, { commissionPercent: next }, `Доля ${p.name}: ${next}%`);
+    await save(p.id, { commissionPercent: next }, `Доля «${p.name}» — ${next}%`);
   };
 
   /** Смена пароля партнёру. Показан один раз — передайте лично. */
@@ -87,7 +87,7 @@ export default function Partners({ me }: { me: Me }) {
       confirmLabel: 'Сменить пароль',
     });
     if (!r) return;
-    if (r.value.length < 8) { toast({ text: 'Не короче восьми знаков', kind: 'err' }); return; }
+    if (r.value.length < 8) { toast({ text: 'Пароль короче восьми знаков — не сохранил', kind: 'err' }); return; }
     try {
       await api(`/partners/${p.id}`, { method: 'PATCH', body: { password: r.value } });
       setShown({ title: 'Новый пароль партнёра', value: r.value,
@@ -96,26 +96,34 @@ export default function Partners({ me }: { me: Me }) {
     } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
   };
 
-  /** Отключение показывает последствие: сколько клиентов осиротеет. */
+  /**
+   * Отключить или включить партнёра. СПРАШИВАЕМ В ОБА КОНЦА, как у
+   * них: включение тоже меняет положение дел — человек снова получает
+   * доступ к деньгам клиентов, и нажать это мимо тоже можно.
+   */
   const toggle = async (p: any) => {
-    if (!p.isActive) { await save(p.id, { isActive: true }, `${p.name}: вход открыт`); return; }
-    let pv: any;
-    try { pv = await api(`/partners/${p.id}/off-preview`); }
-    catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
+    const off = p.isActive;
 
     const r = await ask({
-      title: `Закрыть вход · ${p.name}`,
-      sub: pv.effect,
+      title: off ? `Отключить «${p.name}»` : `Включить «${p.name}»`,
+      sub: off
+        ? 'Партнёр перестанет входить в панель. Его клиенты продолжат работать и платить — вести их будете вы.'
+        : 'Партнёр снова сможет вести своих клиентов и отмечать оплаты.',
+      // Четыре строки, как у них. Заработок здесь не случайно: решая
+      // про отключение, надо видеть, сколько человек принёс.
       effects: [
-        ['Клиентов', String(pv.clients)],
-        ['Работающих', String(pv.activeClients)],
-        ['Дают в месяц', money(pv.mrr)],
+        ['Партнёр', p.name],
+        ['Клиентов', `${p.activeClients} из ${p.clients}`],
+        ['Заработал за 30 дн.', money(p.earned)],
+        ['Доля', `${p.commissionPercent}%`],
+        ['Его клиенты дают', `${money(p.mrr)}/мес`],
       ],
-      danger: true,
-      confirmLabel: 'Да, закрыть вход',
+      danger: off,
+      confirmLabel: off ? 'Отключить' : 'Включить',
     });
     if (!r) return;
-    await save(p.id, { isActive: false }, `${p.name}: вход закрыт`);
+    await save(p.id, { isActive: !off },
+      off ? `«${p.name}» отключён` : `«${p.name}» включён`);
   };
 
   if (err && !data) return <Failed text={err} onRetry={load} />;
@@ -234,7 +242,7 @@ export default function Partners({ me }: { me: Me }) {
                       не считают, а пароль каждый меняет себе сам. */}
                   <InlineText value={p.name} label="Имя партнёра"
                     disabled={p.isSuperUser}
-                    onSave={(v) => save(p.id, { name: v }, 'Имя изменено')} />
+                    onSave={(v) => save(p.id, { name: v }, 'Имя сохранено')} />
                   {p.isSuperUser && <span className="badge st-active">супер</span>}
                   {!p.isActive && <div className="sub">вход закрыт</div>}
                 </td>
@@ -243,7 +251,7 @@ export default function Partners({ me }: { me: Me }) {
                       партнёра с одной почтой означали бы, что один не
                       сможет войти. */}
                   <InlineText value={p.email} label="Почта для входа" mono
-                    onSave={(v) => save(p.id, { email: v }, 'Почта изменена')} />
+                    onSave={(v) => save(p.id, { email: v }, 'Почта сохранена')} />
                   {p.phone && <div className="sub">{p.phone}</div>}
                 </td>
                 <td className="num">
