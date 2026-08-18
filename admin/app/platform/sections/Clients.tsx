@@ -18,6 +18,7 @@ import { api, cached, putCache, dropCache, money, fullDate, type Me } from '../l
 import { RowMenu } from '../ui/RowMenu';
 import { PayForm } from '../ui/PayForm';
 import { AskForm } from '../ui/AskForm';
+import { NewTenant } from '../ui/NewTenant';
 import { PlanLines } from '../ui/PlanLines';
 import { NewPassword, CopyValue, Credentials } from '../ui/access';
 import TenantCard from './TenantCard';
@@ -56,6 +57,7 @@ export default function Clients({ me }: { me: Me }) {
   // Доступы после заведения: показываются один раз, дальше партнёр
   // будет искать их заново, стоя в магазине.
   const [creds, setCreds] = useState<any[] | null>(null);
+  const [creating, setCreating] = useState(false);
   const [billFor, setBillFor] = useState<any>(null);
 
   // У карточки есть АДРЕС: её можно оставить открытой, вернуться к ней
@@ -150,7 +152,8 @@ export default function Clients({ me }: { me: Me }) {
               try { await api('/demo', { method: 'POST' }); dropCache(); await load(); }
               catch (e: any) { setErr(e.message); }
             }}>Учебный магазин</button>
-            <button className="btn primary">+ Новый клиент</button>
+            <button className="btn primary"
+              onClick={() => setCreating(true)}>+ Новый клиент</button>
           </div>
         )}
       </div>
@@ -204,6 +207,11 @@ export default function Clients({ me }: { me: Me }) {
         <BulkPanel rows={data.rows} selected={selected}
           onClear={() => setSelected([])}
           onDone={() => { dropCache(); load(); }} />
+      )}
+
+      {creating && (
+        <NewTenant isSuper={isSuper} partners={data.partners}
+          onDone={(made) => { setCreating(false); if (made) { dropCache(); load(); } }} />
       )}
 
       {creds && <Credentials rows={creds} onClose={() => setCreds(null)} />}
@@ -267,7 +275,18 @@ export default function Clients({ me }: { me: Me }) {
         <section key={g.key}>
           <div className="partner-strip">
             <span className={g.key === '—' ? 'nobody' : ''}>{g.title}</span>
-            <span className="strip-money">· {g.rows.length}</span>
+            {/* Сколько приносит эта группа: полоса с одним именем —
+                это подпись, а с суммой — уже довод. Их приём. */}
+            <span className="strip-money">
+              {g.rows.length} · приносит в месяц{' '}
+              <i>{money(g.rows.reduce((a: number, r: any) => a + r.monthly, 0))}</i>
+            </span>
+            {partner !== 'all' && (
+              <button className="btn small ghost"
+                onClick={() => { setPartner('all'); load(filter, sort, 'all', q); }}>
+                Сбросить
+              </button>
+            )}
           </div>
 
           <table className="grid tenants">
@@ -357,8 +376,54 @@ export default function Clients({ me }: { me: Me }) {
                   <td className="num">{money(r.revenue30d)}</td>
                   <td>{r.partner ?? <span className="nobody">без партнёра</span>}</td>
                   <td className="actions">
-                    <button className="btn small accent"
-                      onClick={() => setPaying(r)}>Оплата</button>
+                    {/* У самозаписавшихся вместо «Оплаты» — решение.
+                        Их приём: пока клиента не одобрили, платить ему
+                        не за что, и кнопка оплаты там бессмысленна. */}
+                    {r.state === 'approval' && isSuper ? (
+                      <>
+                        <button className="btn small accent" onClick={async () => {
+                          const ok = await ask({
+                            title: `Одобрить «${r.name}»`,
+                            sub: 'Клиент получит пробный период и сможет работать.',
+                            effects: [
+                              ['Магазин', r.name],
+                              ['Владелец', r.owner ?? '—'],
+                              ['Пробный период', '14 дней'],
+                            ],
+                            confirmLabel: 'Одобрить',
+                          });
+                          if (!ok) return;
+                          try {
+                            await api(`/signups/${r.id}/approve`,
+                              { method: 'POST', body: { trialDays: 14 } });
+                            toast({ text: `«${r.name}»: доступ открыт на 14 дней` });
+                            dropCache(); await load();
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        }}>Одобрить</button>
+
+                        <button className="btn small danger" onClick={async () => {
+                          const ok = await ask({
+                            title: `Отклонить «${r.name}»`,
+                            sub: 'Владелец увидит причину — напишите так, чтобы было понятно.',
+                            effects: [['Магазин', r.name], ['Телефон', r.phone ?? '—']],
+                            reason: { label: 'Причина отказа', required: true,
+                                      placeholder: 'Не наш профиль' },
+                            danger: true,
+                            confirmLabel: 'Отклонить',
+                          });
+                          if (!ok) return;
+                          try {
+                            await api(`/signups/${r.id}/reject`,
+                              { method: 'POST', body: { reason: ok.reason } });
+                            toast({ text: `«${r.name}»: отклонено` });
+                            dropCache(); await load();
+                          } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
+                        }}>Отклонить</button>
+                      </>
+                    ) : (
+                      <button className="btn small accent"
+                        onClick={() => setPaying(r)}>Оплата</button>
+                    )}
                     <button className="btn small" onClick={() => goClient(r.id)}>Карточка</button>
 
                     {/* Меню строки: в строке два действия каждого дня,
@@ -388,7 +453,7 @@ export default function Clients({ me }: { me: Me }) {
                         hint: 'показан один раз — продиктуйте',
                         onClick: async () => {
                           try {
-                            const x = await api(`/clients/${r.id}/reset-password`,
+                            const x = await api('/reset-owner-password',
                               { method: 'POST', body: { tenantId: r.id } });
                             // Их окно: пароль и вход копируются одной
                             // кнопкой — диктовать два поля подряд
@@ -458,6 +523,13 @@ export default function Clients({ me }: { me: Me }) {
           </table>
         </section>
       ))}
+
+      {/* «Показано N из M» — их подпись. При отборе видно, что список
+          неполный: иначе человек решает по части данных, думая, что
+          видит всё. */}
+      {data.rows.length > 0 && data.rows.length < c.all && (
+        <p className="table-foot">Показано {data.rows.length} из {c.all}</p>
+      )}
     </>
   );
 }

@@ -1111,17 +1111,29 @@ export class PlatformService {
     const abc = 'abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789';
     const pass = Array.from({ length: 10 }, () => abc[Math.floor(Math.random() * abc.length)]).join('');
 
-    const acc = (await this.q(
-      `SELECT platform_create_tenant($1,$2,$3,$4,$5,$6) AS id`,
+    // Функция отдаёт четыре поля: магазин, сотрудник, точка и КАССА.
+    // Касса нужна, чтобы сразу выдать код привязки — партнёр в этот
+    // момент стоит в магазине.
+    const made = (await this.q(
+      `SELECT * FROM platform_create_tenant($1,$2,$3,$4,$5,$6)`,
       [d.name.trim(), d.ownerPhone.trim(), d.ownerName?.trim() ?? 'Владелец',
        await bcrypt.hash(pass, 10), Math.max(1, Math.floor(Number(d.trialDays ?? 14))),
        ctx.role === 'partner' ? ctx.userId : null])).rows[0];
+    const acc = { id: made.out_account };
 
     if (d.city) await this.q(
       `UPDATE tenant_card SET city=$2 WHERE account_id=$1`, [acc.id, d.city]);
 
     await this.audit(ctx, 'tenant_created', acc.id, { name: d.name, trialDays: d.trialDays ?? 14 });
+
+    // Код привязки кассы отдаём СРАЗУ: партнёр в этот момент стоит в
+    // магазине, и заставлять его лезть за кодом отдельно — значит
+    // заставить приехать второй раз.
+    const code = (await this.q(`SELECT * FROM platform_pairing_code($1)`, [acc.id]))
+      .rows[0]?.code ?? null;
+
     return { id: acc.id, phone: d.ownerPhone, password: pass,
+      ownerPhone: d.ownerPhone, activationCode: code,
       note: 'Пароль показан один раз — продиктуйте владельцу сейчас. Пробный период открыт.' };
   }
 

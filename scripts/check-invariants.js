@@ -529,6 +529,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/PlanLines.tsx', must: 'Доплаты за устройства и',
     why: 'Смена уровня трогает только основную строку: доплаты и скидки — отдельные договорённости' },
 
+  { file: 'db/migrations/062_tenant_register.sql', must: "VALUES (v_acc, v_store, 'Касса 1')",
+    why: 'Новому клиенту заводится касса: без неё нет кода привязки, и владелец не может продавать в первый же день' },
+  { file: 'admin/app/platform/sections/Clients.tsx', must: "r.state === 'approval' && isSuper ?",
+    why: 'У самозаписавшихся вместо «Оплаты» — решение: пока клиента не одобрили, платить ему не за что' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
