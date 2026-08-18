@@ -604,6 +604,9 @@ const RULES = [
   { file: 'admin/app/platform/ui/Chart.tsx', must: 'role="img" aria-label',
     why: 'У графика есть название для тех, кто слушает страницу: линия им не видна' },
 
+  { file: 'admin/app/platform/sections/Today.tsx', must: "filter(Boolean).join(' · ')",
+    why: 'Точка ставится только между непустыми частями: у клиента без города строка начиналась с висящей точки' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

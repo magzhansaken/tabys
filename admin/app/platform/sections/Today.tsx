@@ -158,8 +158,14 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
                   </button>
                   <div className="queue-what">{item.what}</div>
                   <div className="sub">
-                    {item.meta}
-                    {item.actor && item.at ? ` · отметил ${item.actor}, ${dateTime(item.at)}` : ''}
+                    {/* Склеиваем точкой ТОЛЬКО непустые части: иначе у
+                        клиента без города строка начиналась с висящей
+                        точки — «· отметил Ерлан». */}
+                    {[
+                      item.meta,
+                      item.actor && item.at
+                        ? `отметил ${item.actor}, ${dateTime(item.at)}` : '',
+                    ].filter(Boolean).join(' · ')}
                   </div>
                   {item.why && <div className="queue-why">{item.why}</div>}
                   {/* Последствие без нажатия — их приём: «продлит до
