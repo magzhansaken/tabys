@@ -1309,17 +1309,47 @@ export class PlatformService {
 
   // ── РЕКВИЗИТЫ ОПЛАТЫ ────────────────────────────────────────────────
   /** Куда платить: картинка QR и текст с реквизитами. */
+  /**
+   * Куда платят магазины. Пять полей, а не одно «реквизиты словами»:
+   * каждое отвечает за свою строку на экране клиента.
+   *
+   * Разница житейская: «Kaspi 7777 7777 7777, получатель Магжан С.»
+   * одной строкой человек копирует ЦЕЛИКОМ и вставляет в поле номера —
+   * перевод не проходит, и виноватой оказывается система.
+   */
   async paySettings(ctx: PlatformCtx) {
-    const s = (await this.q(`SELECT pay_qr_url, pay_details FROM platform_settings WHERE id`)).rows[0] ?? {};
-    return { payQrUrl: s.pay_qr_url ?? null, payDetails: s.pay_details ?? null };
+    const s = (await this.q(
+      `SELECT pay_url, pay_qr_url, pay_name, pay_phone, pay_note, pay_details
+         FROM platform_settings WHERE id`)).rows[0] ?? {};
+    return {
+      payUrl: s.pay_url ?? '',
+      payQrUrl: s.pay_qr_url ?? '',
+      payName: s.pay_name ?? '',
+      payPhone: s.pay_phone ?? '',
+      payNote: s.pay_note ?? '',
+      payDetails: s.pay_details ?? '',
+    };
   }
 
-  async savePaySettings(ctx: PlatformCtx, d: { payQrUrl?: string; payDetails?: string }) {
+  async savePaySettings(ctx: PlatformCtx, d: {
+    payUrl?: string; payQrUrl?: string; payName?: string;
+    payPhone?: string; payNote?: string; payDetails?: string;
+  }) {
     if (ctx.role !== 'super') throw new ForbiddenException('Реквизиты меняет владелец платформы');
+    // Пустую строку СОХРАНЯЕМ: владелец может намеренно убрать поле,
+    // и coalesce вернул бы старое значение — поле нельзя было бы
+    // очистить вовсе.
     await this.q(
-      `UPDATE platform_settings SET pay_qr_url=coalesce($1,pay_qr_url),
-              pay_details=coalesce($2,pay_details), updated_at=now() WHERE id`,
-      [d.payQrUrl ?? null, d.payDetails ?? null]);
+      `UPDATE platform_settings SET
+         pay_url     = coalesce($1, pay_url),
+         pay_qr_url  = coalesce($2, pay_qr_url),
+         pay_name    = coalesce($3, pay_name),
+         pay_phone   = coalesce($4, pay_phone),
+         pay_note    = coalesce($5, pay_note),
+         pay_details = coalesce($6, pay_details),
+         updated_at  = now() WHERE id`,
+      [d.payUrl ?? null, d.payQrUrl ?? null, d.payName ?? null,
+       d.payPhone ?? null, d.payNote ?? null, d.payDetails ?? null]);
     await this.audit(ctx, 'pay_settings_changed', null, {});
     // Клиент видит их в своём кабинете на странице подписки.
     return { ok: true, note: 'Клиенты увидят новые реквизиты сразу' };

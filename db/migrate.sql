@@ -147,5 +147,8 @@
 \echo '--- 059 правка названия магазина ---'
 \i db/migrations/059_rename_account.sql
 
+\echo '--- 060 реквизиты оплаты пятью полями ---'
+\i db/migrations/060_pay_fields.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

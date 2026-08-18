@@ -238,9 +238,18 @@ export class BillingService {
         tariff: sub?.tariff_name ?? null,
       },
       // 2. Куда платить — вторым, а не в самом низу.
+      //
+      // Пять полей, а не одна строка «реквизиты»: владелец магазина
+      // копирует номер целиком и вставляет в поле перевода. Если номер
+      // слит с именем получателя в один текст, перевод не проходит — и
+      // виноватой оказывается система.
       pay: {
-        qr: set.pay_qr_url ?? null,
-        details: set.pay_details ?? null,
+        url: set.pay_url ?? null,          // «Оплатить» одним нажатием
+        qr: set.pay_qr_url ?? null,        // навёл камеру и заплатил
+        name: set.pay_name ?? null,        // проверить, туда ли платит
+        phone: set.pay_phone ?? null,      // отдельным полем — копируют
+        note: set.pay_note ?? null,        // что писать в комментарии
+        details: set.pay_details ?? null,  // остальное словами
       },
       pendingPayment: pending
         ? { amount: Math.round(Number(pending.amount) / 100), months: pending.months,

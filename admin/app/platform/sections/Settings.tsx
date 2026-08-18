@@ -12,6 +12,9 @@
  */
 import { useEffect, useState } from 'react';
 import { api, dropCache, money, type Me } from '../lib';
+import { useToast } from '../ui/Toast';
+import { humanError } from '../ui/errors';
+import { Failed, SkeletonCards } from '../ui/States';
 
 export default function Settings({ me }: { me: Me }) {
   const [prices, setPrices] = useState<any>(null);
@@ -23,12 +26,15 @@ export default function Settings({ me }: { me: Me }) {
     try {
       const [p, s] = await Promise.all([api('/price-book'), api('/pay-settings')]);
       setPrices(p); setPay(s); setErr('');
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
 
-  if (err && !prices) return <div className="err">{err}</div>;
-  if (!prices || !pay) return <div className="muted">Загрузка…</div>;
+  if (err && !prices) return <Failed text={err} onRetry={load} />;
+  if (!prices || !pay) return <SkeletonCards count={2} height={240} />;
+
+  const nothing = !pay.payUrl?.trim() && !pay.payQrUrl?.trim()
+    && !pay.payPhone?.trim() && !pay.payName?.trim();
 
   const save = async (what: 'prices' | 'pay') => {
     try {
@@ -38,7 +44,7 @@ export default function Settings({ me }: { me: Me }) {
       dropCache();
       setSaved(what === 'prices' ? 'Цены сохранены' : 'Реквизиты сохранены');
       setTimeout(() => setSaved(''), 3000);
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(humanError(e)); }
   };
 
   return (
@@ -99,21 +105,44 @@ export default function Settings({ me }: { me: Me }) {
           <h3>Как платят</h3>
           <p className="hint">Достаточно одного пути, но лучше оба.</p>
 
+          <label>Ссылка на оплату
+            <input value={pay.payUrl ?? ''} placeholder="https://pay.kaspi.kz/..."
+              onChange={(e) => setPay({ ...pay, payUrl: e.target.value })} />
+            <i className="split">Kaspi, Halyk — любая ссылка, по которой можно заплатить</i>
+          </label>
+
           <label>Картинка QR
             <input value={pay.payQrUrl ?? ''} placeholder="https://.../qr.png"
               onChange={(e) => setPay({ ...pay, payQrUrl: e.target.value })} />
             <i className="split">
-              Ссылка на картинку: клиент наводит камеру и платит, не набирая номер
+              Прямая ссылка на КАРТИНКУ, а не на страницу, где она показана
             </i>
           </label>
+        </section>
 
-          <label>Реквизиты словами
-            <textarea value={pay.payDetails ?? ''} rows={3}
-              placeholder="Kaspi 7777 7777 7777, получатель Магжан С."
-              onChange={(e) => setPay({ ...pay, payDetails: e.target.value })} />
-            <i className="split">
-              Запасной путь: показывается, если QR не открылся или его нет
-            </i>
+        <section className="pay-group">
+          <h3>Перевод руками</h3>
+          <p className="hint">Запасной путь: показывается, если ссылка не открылась.</p>
+
+          <label>Получатель
+            <input value={pay.payName ?? ''} placeholder="Магжан С."
+              onChange={(e) => setPay({ ...pay, payName: e.target.value })} />
+            <i className="split">Клиент проверяет, туда ли он платит</i>
+          </label>
+
+          <label>Номер для перевода
+            <input value={pay.payPhone ?? ''} placeholder="+7 777 777 77 77"
+              onChange={(e) => setPay({ ...pay, payPhone: e.target.value })} />
+            {/* Отдельным полем, а не в общем тексте: строку целиком
+                человек копирует и вставляет в поле номера — перевод не
+                проходит, и виноватой оказывается система. */}
+            <i className="split">Отдельным полем — его копируют целиком</i>
+          </label>
+
+          <label>Что писать в комментарии
+            <input value={pay.payNote ?? ''} placeholder="Название магазина"
+              onChange={(e) => setPay({ ...pay, payNote: e.target.value })} />
+            <i className="split">Чтобы платёж нашли, когда он придёт</i>
           </label>
 
           <div className="pay-save">
@@ -125,23 +154,42 @@ export default function Settings({ me }: { me: Me }) {
             не заходя под ним. */}
         <section className="pay-group">
           <h3>Что увидит клиент</h3>
-          <div className="cp-frame">
-            <div className="cp-main">
-              <div className="cp-line">
-                <span className="cp-label">К оплате</span>
-                <span className="cp-sum">{money(prices.base ?? 0)}</span>
+
+          {/* Их проверка: ссылка на страницу вместо картинки — частая
+              ошибка, и клиент увидит пустое место. */}
+          {pay.payQrUrl && !/\.(png|jpe?g|webp|svg)(\?|$)/i.test(pay.payQrUrl) && (
+            <p className="bad">
+              Ссылка не работает: клиент увидит пустое место. Нужна прямая ссылка
+              на картинку, а не страница, где она показана.
+            </p>
+          )}
+
+          <div className={`cp-frame ${nothing ? 'empty' : ''}`}>
+            {nothing ? (
+              <div className="cp-none">
+                <b>Реквизиты не настроены</b>
+                <span>Клиент не поймёт, куда платить</span>
               </div>
+            ) : (
+              <div className="cp-main">
+                <span className="cp-label">К оплате</span>
+                <b className="cp-sum">{money(prices.base ?? 0)}</b>
 
-              {pay.payQrUrl
-                ? <img className="cp-qr" src={pay.payQrUrl} alt="" />
-                : <div className="cp-none">QR не задан</div>}
-
-              {pay.payDetails
-                ? <div className="cp-line"><span>{pay.payDetails}</span></div>
-                : <div className="cp-none">Реквизиты не заданы</div>}
-
-              <button className="cp-btn" disabled>Я оплатил</button>
-            </div>
+                {pay.payUrl?.trim() && (
+                  <span className="cp-btn">Оплатить {money(prices.base ?? 0)}</span>
+                )}
+                {pay.payQrUrl?.trim() && <img className="cp-qr" src={pay.payQrUrl} alt="" />}
+                {pay.payName?.trim() && (
+                  <span className="cp-line">Получатель: {pay.payName}</span>
+                )}
+                {pay.payPhone?.trim() && (
+                  <span className="cp-line">Перевод: {pay.payPhone}</span>
+                )}
+                {pay.payNote?.trim() && (
+                  <span className="cp-line">В комментарии: {pay.payNote}</span>
+                )}
+              </div>
+            )}
           </div>
           <p className="hint">Сумма в примере условная — у клиента подставится его счёт.</p>
         </section>

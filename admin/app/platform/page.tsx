@@ -228,22 +228,23 @@ function Login({ onIn }: { onIn: (m: Me) => void }) {
   };
 
   return (
-    <div className="login">
-      <div className="login-card">
-        <b>Табыс</b>
-        <span>панель платформы</span>
-        <p>Вход для владельца сервиса и партнёров. Кабинет магазина — по другому адресу.</p>
+    /* Вход их разметкой: gate, gate-card. Отдельная страница на весь
+       экран — это другое место с другими людьми, и путать его с
+       кабинетом магазина нельзя. */
+    <div className="gate">
+      <div className="gate-card">
+        <h1>Панель платформы</h1>
+        <p className="hint">Управление клиентами и оплатами</p>
 
-        <label>Почта</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)}
-          type="email" autoComplete="username" placeholder="you@tabys.kz" />
-
-        <label>Пароль</label>
-        <input value={password} onChange={(e) => setPassword(e.target.value)}
-          type="password" autoComplete="current-password"
+        <input placeholder="Почта" value={email} autoComplete="username"
+          type="email" onChange={(e) => setEmail(e.target.value)} />
+        <input placeholder="Пароль" type="password" value={password}
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') go(); }} />
 
-        {err && <div className="err">{err}</div>}
+        {err && <p className="err">{err}</p>}
+
         <button className="btn primary" onClick={go} disabled={busy}>
           {busy ? 'Проверяем…' : 'Войти'}
         </button>

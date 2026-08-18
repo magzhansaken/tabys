@@ -446,7 +446,7 @@ const RULES = [
 
   { file: 'admin/app/platform/sections/Money.tsx', must: 'className="pay-grid"',
     why: 'Деньги сеткой карточек, а не таблицей: у оплаты мало полей и они разной длины — в таблице половина ячеек пустует' },
-  { file: 'admin/app/platform/sections/Settings.tsx', must: 'className="cp-frame"',
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'cp-frame',
     why: 'Живой предпросмотр экрана клиента рядом с полями: иначе понять, что получилось, можно только зайдя клиентом' },
   { file: 'admin/app/platform/page.tsx', must: "key: 'settings', label: 'Настройки', superOnly: true",
     why: 'Настройки последними и только владельцу: цены и реквизиты — самое опасное место платформы' },
@@ -516,6 +516,11 @@ const RULES = [
     why: 'У карточки есть адрес: её можно оставить открытой и вернуться. Раньше это было окно-тупик с одной кнопкой «Закрыть»' },
   { file: 'admin/app/platform/sections/TenantCard.tsx', must: 'Из чего складывается месяц',
     why: 'Разбивка месяца одной строкой: тариф, устройства, модули, скидка — иначе непонятно, откуда сумма' },
+
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'Нужна прямая ссылка',
+    why: 'Ссылка на страницу вместо картинки — частая ошибка: клиент увидит пустое место вместо QR' },
+  { file: 'server/src/billing/billing.service.ts', must: 'phone: set.pay_phone',
+    why: 'Номер отдельным полем: слитую строку копируют целиком и вставляют в поле перевода — платёж не проходит' },
 
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
