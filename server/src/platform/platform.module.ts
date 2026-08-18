@@ -1654,10 +1654,24 @@ export class PlatformController {
     return this.svc.createPartner(Pl(r), d);
   }
 
+  /**
+   * Правка партнёра: имя, почта, доля, пароль, включение и отключение.
+   *
+   * РАНЬШЕ ЭТОТ АДРЕС ВЁЛ ТОЛЬКО НА ОТКЛЮЧЕНИЕ, а правка жила на
+   * отдельном. Кабинет слал сюда всё — и имя с долей молча терялись,
+   * а в ответ приходило «Вход закрыт», хотя никто ничего не закрывал.
+   */
   @Public() @Patch('partners/:id')
-  togglePartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
+  async patchPartner(@Req() r: any, @Param('id') id: string, @Body() d: any) {
     new PlatformGuard().canActivate({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.togglePartner(Pl(r), id, !!d?.isActive);
+    const ctx = Pl(r);
+
+    // Включение и отключение — отдельным действием: у него свой
+    // ответ и своя запись в журнале.
+    if (d && typeof d.isActive === 'boolean' && Object.keys(d).length === 1) {
+      return this.svc.togglePartner(ctx, id, d.isActive);
+    }
+    return this.svc.updatePartner(ctx, id, d ?? {});
   }
 
   @Public() @Post('clients/:id/partner')

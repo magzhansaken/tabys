@@ -624,6 +624,9 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'mrr: money(Number(c.mrr',
     why: 'Доход в месяц над таблицей база считала, а сервер не передавал — карточка рисовала пустоту' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'РАНЬШЕ ЭТОТ АДРЕС ВЁЛ ТОЛЬКО НА ОТКЛЮЧЕНИЕ',
+    why: 'Правка партнёра шла на адрес отключения: имя, почта, доля и пароль молча терялись' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
