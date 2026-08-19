@@ -49,6 +49,7 @@ export default function Settings({ me }: { me: Me }) {
 
   // Что изменено с последней загрузки: кнопка не должна предлагать
   // сохранить, когда сохранять нечего. Их приём.
+  const [justSaved, setJustSaved] = useState(false);
   const dirtyPay = JSON.stringify(pay) !== JSON.stringify(basePay);
 
   const nothing = !pay.payUrl?.trim() && !pay.payQrUrl?.trim()
@@ -60,9 +61,23 @@ export default function Settings({ me }: { me: Me }) {
         ? await api('/price-book', { method: 'POST', body: prices })
         : await api('/pay-settings', { method: 'POST', body: pay });
       dropCache();
+      // ЗАПОМИНАЕМ СОХРАНЁННОЕ. Раньше basePay оставался прежним, и
+      // кнопка так и стояла «Сохранить реквизиты» — будто ничего не
+      // ушло. Правки сохранены, а вид говорит обратное.
+      if (what === 'pay') {
+        setBasePay(JSON.parse(JSON.stringify(pay)));
+        // «Только что сохранил» — это ДРУГОЕ состояние, чем «нечего
+        // сохранять». Держим его недолго и сами гасим: иначе после
+        // обновления страницы кнопка снова напишет «Сохранено», а
+        // человек ничего не сохранял.
+        setJustSaved(true);
+        window.setTimeout(() => setJustSaved(false), 2500);
+      } else {
+        setBasePrices(JSON.parse(JSON.stringify(prices)));
+      }
       // Ответ даёт ТОСТ, а не полоса поверх страницы: полоса
       // сдвигает содержимое, и человек теряет место, куда смотрел.
-      toast({ text: 'Реквизиты сохранены' });
+      toast({ text: what === 'pay' ? 'Реквизиты сохранены' : 'Цены сохранены' });
     } catch (e: any) { setErr(humanError(e)); }
   };
 
@@ -216,9 +231,15 @@ export default function Settings({ me }: { me: Me }) {
           </label>
 
           <div className="form-actions pay-save">
+            {/* ТРИ РАЗНЫХ СОСТОЯНИЯ, и слова у них разные.
+                Раньше их было два: «Сохранить» и «Сохранено», и второе
+                показывалось ВСЕГДА, когда правок нет — в том числе на
+                свежей странице. Человек искал, что он сохранил. */}
             <button className="btn primary" disabled={!dirtyPay}
               onClick={() => save('pay')}>
-              {dirtyPay ? 'Сохранить реквизиты' : 'Сохранено'}
+              {dirtyPay ? 'Сохранить реквизиты'
+                : justSaved ? 'Сохранено ✓'
+                  : 'Изменений нет'}
             </button>
             {dirtyPay && (
               <button className="btn" onClick={() => setPay(JSON.parse(JSON.stringify(basePay)))}>

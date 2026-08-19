@@ -566,8 +566,8 @@ const RULES = [
 
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'danger-title',
     why: 'Массовые действия живут в настройках: самая опасная возможность не должна стоять среди ежедневной работы' },
-  { file: 'admin/app/platform/sections/Settings.tsx', must: "dirtyPay ? 'Сохранить реквизиты' : 'Сохранено'",
-    why: 'Кнопка знает, есть ли что сохранять: кнопка, которая ничего не делает, учит нажимать наугад' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: "dirtyPay ? 'Сохранить реквизиты'",
+    why: 'Кнопка знает своё состояние: «Сохранить», «Сохранено ✓» ненадолго и «Изменений нет» — иначе слово «Сохранено» висит и на свежей странице' },
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'КАЖДАЯ ЦЕНА СОХРАНЯЕТСЯ САМА',
     why: 'Общая форма заставляет помнить, что ты что-то менял: уйти с неё, не нажав, значит потерять правку' },
   { file: 'admin/app/platform/sections/Settings.tsx', must: 'вместо ${money(full)}',
@@ -856,6 +856,11 @@ const RULES = [
     why: 'Правка тем же числом молчала: ни «сохранено», ни отказа — человек решал, что правка не работает' },
   { file: 'admin/app/platform/ui/InlineText.tsx', must: 'Сравниваем ЧИСЛА, а не строки',
     why: '«14 900» и «14900» — одно значение, но строки разные: уходил бессмысленный запрос' },
+
+  { file: 'admin/app/platform/sections/Settings.tsx', must: "justSaved ? 'Сохранено ✓'",
+    why: '«Сохранено» показывалось всегда, когда правок нет — и на свежей странице тоже: ложный отклик' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'ЗАПОМИНАЕМ СОХРАНЁННОЕ',
+    why: 'После сохранения кнопка так и стояла «Сохранить»: правки ушли, а вид говорил обратное' },
 
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
