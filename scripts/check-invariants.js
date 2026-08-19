@@ -752,6 +752,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/InlineText.tsx', must: "inputMode={numeric ? 'numeric' : undefined}",
     why: 'Цену и количество правят в ячейке: без этого на телефоне открывалась буквенная клавиатура' },
 
+  { file: 'admin/app/platform/style/admin.css', must: 'Ручку перетаскивания на телефоне ПРЯЧЕМ',
+    why: 'На телефоне виден один столбец: перетащить дальше соседнего нельзя, человек тянет и бросает' },
+  { file: 'admin/app/platform/sections/Funnel.tsx', must: 'showLabel',
+    why: '«···» не говорит, что за ним сдвиг, а на телефоне это единственный способ переставить карточку' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

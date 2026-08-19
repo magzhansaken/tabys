@@ -644,6 +644,9 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 /* Меню строки: два действия видны, остальное под одной кнопкой */
 .rowmenu { position: relative; display: inline-block; }
 .rowmenu-x { min-width: 32px; font-size: 16px; line-height: 1; letter-spacing: 0.06em; }
+/* С подписью — обычная кнопка: «···» не говорит, что за ним сдвиг, а в
+   воронке на телефоне это единственный способ переставить карточку. */
+.rowmenu-x.with-label { min-width: auto; font-size: var(--text-13); letter-spacing: normal; padding: 0 12px; }
 .rowmenu-list {
   position: absolute; right: 0; top: calc(100% + 4px); z-index: var(--z-sticky);
   min-width: 220px; padding: 6px; text-align: left;
@@ -1038,7 +1041,12 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   .copy-value { flex-direction: column; align-items: stretch; gap: var(--space-2); }
   .copy-value .btn { min-height: var(--tap-compact); }
   .chart-box { padding: var(--space-4) var(--space-3) 6px; }
-  .grip { min-width: 44px; min-height: 44px; }
+  /* Ручку перетаскивания на телефоне ПРЯЧЕМ.
+     Виден один столбец и краешек следующего: перетащить дальше
+     соседнего нельзя — список не прокручивается сам, пока тащишь.
+     Человек тянет, не доносит, бросает — и не догадывается, что рядом
+     есть меню «Сдвинуть», которое работает всегда и на любой этап. */
+  .grip { display: none; }
   .lead-actions .btn { min-height: var(--tap-compact); }
   .pay, .req { padding: var(--space-4); }
   .pay-amount b { font-size: var(--text-24); }

@@ -26,7 +26,12 @@ export type RowAction = {
   hint?: string;
 };
 
-export function RowMenu({ actions, label = 'Ещё' }: { actions: RowAction[]; label?: string }) {
+export function RowMenu({ actions, label = 'Ещё', showLabel }: {
+  actions: RowAction[];
+  label?: string;
+  /** Показать подпись вместо «···»: там, где меню — единственный путь. */
+  showLabel?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -70,8 +75,16 @@ export function RowMenu({ actions, label = 'Ещё' }: { actions: RowAction[]; l
 
   return (
     <div className="rowmenu" ref={box}>
-      <button className="btn small ghost rowmenu-x" aria-label={label}
-        onClick={() => setOpen((v) => !v)}>···</button>
+      {/* Подпись рядом с точками, если её просят.
+          В воронке на телефоне это ЕДИНСТВЕННЫЙ способ переставить
+          карточку: ручка перетаскивания там спрятана, потому что
+          дальше соседнего столбца пальцем не дотянуть. «···» сам по
+          себе не говорит, что за ним сдвиг. */}
+      <button className={`btn small ghost rowmenu-x${showLabel ? ' with-label' : ''}`}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}>
+        {showLabel ? label : '···'}
+      </button>
 
       {/* Поверх таблицы, а не внутри строки: иначе последняя строка
           обрежет меню нижним краем. */}

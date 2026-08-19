@@ -201,7 +201,7 @@ export default function Funnel({ me }: { me: Me }) {
                     </button>
 
                     {/* Кому перетаскивать неудобно — тот же сдвиг здесь. */}
-                    <RowMenu label="Сдвинуть" actions={[
+                    <RowMenu label="Сдвинуть" showLabel actions={[
                       ...data.stages.filter((x: any) => x.key !== st.key).map((x: any) => ({
                         label: `→ ${x.title}`,
                         hint: x.hint,
