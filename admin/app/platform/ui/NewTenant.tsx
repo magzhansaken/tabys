@@ -15,6 +15,7 @@
  * всех, почта — не у всех.
  */
 import { useState } from 'react';
+import { useSheet } from './useSheet';
 import { api } from '../lib';
 import { useToast } from './Toast';
 import { humanError } from './errors';
@@ -25,6 +26,7 @@ export function NewTenant({ isSuper, partners, onDone }: {
   partners: { id: string; name: string }[];
   onDone: (created: boolean) => void;
 }) {
+  const card = useSheet(() => onDone(false));
   const [f, setF] = useState({
     name: '', ownerName: '', ownerPhone: '', city: '',
     tier: 'base', partnerId: '', trialDays: '14',
@@ -65,7 +67,8 @@ export function NewTenant({ isSuper, partners, onDone }: {
   return (
     <div className="modal"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onDone(false); }}>
-      <div className="modal-card">
+      <div className="modal-card" ref={card}
+        role="dialog" aria-modal="true">
         <div className="sheet-head">
           <h2>Новый клиент</h2>
           <button className="btn small ghost sheet-x" aria-label="Закрыть"

@@ -20,7 +20,7 @@
  * Разметка их классами: modal, modal-card sheet, sheet-head, sheet-x,
  * effects, ask-list, split, hint, err, modal-actions.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export type AskDraft = { reason: string; value: string; choice: string };
 
@@ -92,9 +92,37 @@ function Sheet({ spec, onClose }: { spec: AskSpec; onClose: (r: AskResult | null
     spec.choice?.initial ?? spec.choice?.options[0]?.value ?? '');
   const [touched, setTouched] = useState(false);
 
-  // Escape возвращает как ни в чём не бывало — их правило.
+  const card = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * Escape возвращает как ни в чём не бывало — их правило.
+   *
+   * И ВНИМАНИЕ ЗАПЕРТО В ЛИСТЕ. Без этого Tab после последней кнопки
+   * уходил в страницу ПОД листом: человек ходил по кнопкам, которых не
+   * видит, и Enter срабатывал вслепую. А под листом — «Удалить
+   * магазин» и «Отклонить оплату».
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(null); return; }
+      if (e.key !== 'Tab') return;
+
+      const box = card.current;
+      if (!box) return;
+      const stops = box.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const live = Array.from(stops).filter((el) => !el.hasAttribute('disabled'));
+      if (live.length === 0) return;
+
+      const first = live[0];
+      const last = live[live.length - 1];
+      const here = document.activeElement;
+
+      // По кругу: с последней кнопки — на первую, и наоборот.
+      if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && here === first) { e.preventDefault(); last.focus(); }
+      else if (!box.contains(here)) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -117,7 +145,8 @@ function Sheet({ spec, onClose }: { spec: AskSpec; onClose: (r: AskResult | null
   return (
     <div className="modal"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(null); }}>
-      <div className="modal-card sheet" role="dialog" aria-modal="true" aria-label={spec.title}>
+      <div className="modal-card sheet" ref={card}
+        role="dialog" aria-modal="true" aria-label={spec.title}>
         <div className="sheet-head">
           <b>{spec.title}</b>
           <button className="btn small ghost sheet-x" onClick={() => onClose(null)}

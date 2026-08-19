@@ -776,14 +776,16 @@ export class PlatformService {
 
     if (d.kind === 'device') {
       if (!['pos', 'store'].includes(String(p.device ?? '')))
-        throw new BadRequestException('Устройство — «pos» (касса) или «store» (точка)');
+        // Говорим ЕГО словами: в кабинете он видит «Касса» и «Точка»,
+        // а «pos» и «store» ему ничего не скажут.
+        throw new BadRequestException('Выберите, что нужно: касса или точка');
     }
 
     if (d.kind === 'tariff') {
       // «алмазный» молча становился «Стартом»: партнёр просил одно,
       // клиент получал другое, и никто не замечал.
       if (!['base', 'pro'].includes(String(p.tier ?? '')))
-        throw new BadRequestException('Тариф — «base» («Старт») или «pro» («Стандарт»)');
+        throw new BadRequestException('Выберите тариф: «Старт» или «Стандарт»');
     }
 
     if (d.comment != null && String(d.comment).length > 1000)

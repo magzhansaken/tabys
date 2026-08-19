@@ -18,6 +18,7 @@
  * официанта, курьер), у магазина их два — касса и точка.
  */
 import { useState } from 'react';
+import { useSheet } from './useSheet';
 import { api } from '../lib';
 import { useToast } from './Toast';
 import { humanError } from './errors';
@@ -38,6 +39,7 @@ export function AskForm({ client, onDone }: {
   client: { id: string; name: string };
   onDone: (sent: boolean) => void;
 }) {
+  const card = useSheet(() => onDone(false));
   const [kind, setKind] = useState('device');
   const [device, setDevice] = useState('pos');
   const [tier, setTier] = useState('pro');
@@ -73,7 +75,8 @@ export function AskForm({ client, onDone }: {
   return (
     <div className="modal"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onDone(false); }}>
-      <div className="modal-card">
+      <div className="modal-card" ref={card}
+        role="dialog" aria-modal="true">
         <div className="sheet-head">
           <h2>Запрос по «{client.name}»</h2>
           <button className="btn small ghost sheet-x" aria-label="Закрыть"

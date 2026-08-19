@@ -19,6 +19,7 @@
  * modal-actions.
  */
 import { useState } from 'react';
+import { useSheet } from './useSheet';
 import { api, money } from '../lib';
 import { useToast } from './Toast';
 import { humanError } from './errors';
@@ -34,6 +35,7 @@ export function PayForm({ client, onDone }: {
   client: { id: string; name: string; monthly: number };
   onDone: (saved: boolean) => void;
 }) {
+  const card = useSheet(() => onDone(false));
   // Сумма из тарифа клиента: партнёр не должен вспоминать, сколько тот
   // платит. Поправить можно — но начинать с пустого поля незачем.
   const [amount, setAmount] = useState(String(Math.round(client.monthly)));
@@ -64,7 +66,8 @@ export function PayForm({ client, onDone }: {
   return (
     <div className="modal"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onDone(false); }}>
-      <div className="modal-card">
+      <div className="modal-card" ref={card}
+        role="dialog" aria-modal="true">
         <div className="sheet-head">
           <h2>Оплата · {client.name}</h2>
           <button className="btn small ghost sheet-x" aria-label="Закрыть"

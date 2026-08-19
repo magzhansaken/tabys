@@ -773,6 +773,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/access.tsx', must: 'Скопировать не вышло — выделите и скопируйте вручную',
     why: 'Тост говорил «скопировано» даже когда не вышло: пароль владельца показывают один раз, и потерять его нельзя' },
 
+  { file: 'deploy/12_deploy_git.sh', must: 'node scripts/check-language.js',
+    why: 'Сторож языка в выкладке: два ответа сервера говорили с владельцем словами «base» и «pos»' },
+  { file: 'server/src/platform/platform.module.ts', must: 'Выберите, что нужно: касса или точка',
+    why: 'Говорим словами кабинета: «pos» и «store» человеку ничего не значат' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

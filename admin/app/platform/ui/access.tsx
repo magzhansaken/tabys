@@ -14,6 +14,7 @@
  *     подряд — значит один раз ошибиться.
  */
 import { useState } from 'react';
+import { useSheet } from './useSheet';
 import { useToast } from './Toast';
 
 /** Одно значение моноширинно и с копированием: диктовать по телефону. */
@@ -78,11 +79,12 @@ export function CopyValue({ label, value, big }: {
 export function NewPassword({ phone, password, onClose }: {
   phone: string; password: string; onClose: () => void;
 }) {
+  const card = useSheet(onClose);
   const toast = useToast();
 
   return (
     <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-card">
+      <div className="modal-card" ref={card} role="dialog" aria-modal="true">
         <div className="sheet-head">
           <h2>Новый пароль владельцу</h2>
           <button className="btn small ghost sheet-x" aria-label="Закрыть"
@@ -123,12 +125,13 @@ export function Credentials({ rows, onClose }: {
   rows: { label: string; value: string }[];
   onClose: () => void;
 }) {
+  const card = useSheet(onClose);
   const toast = useToast();
   const all = rows.map((r) => `${r.label}: ${r.value}`).join('\n');
 
   return (
     <div className="modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-card">
+      <div className="modal-card" ref={card} role="dialog" aria-modal="true">
         <div className="sheet-head">
           <h2>Клиент создан</h2>
         </div>
