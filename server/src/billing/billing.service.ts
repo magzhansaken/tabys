@@ -198,9 +198,15 @@ export class BillingService {
                           price: Math.round(Number(r.unit_price) / 100),
                           sum: Math.round(Number(r.unit_price) * Number(r.qty) / 100) }));
 
-    const monthly = lines.length
-      ? lines.reduce((a: number, b: any) => a + b.sum, 0)
-      : Math.round(Number(sub?.price_month ?? 0));
+    // Счёт берём у БАЗЫ, из той же функции, что и панель платформы.
+    //
+    // Раньше здесь был свой расчёт: «есть строки — тариф не берём».
+    // Одобрили вторую кассу, появилась строка на 3 000 — и клиент
+    // видел в своём кабинете 3 000 вместо 9 900. Хуже, чем в панели:
+    // там неверную цифру видит владелец платформы, а здесь — сам
+    // клиент, и он по ней платит.
+    const monthly = Math.round(Number((await this.db.raw(
+      `SELECT platform_monthly($1) AS m`, [accountId])).rows[0]?.m ?? 0) / 100);
 
     // Варианты продления. Скидка за срок считается ЗДЕСЬ, а не в
     // кабинете: если считать по-своему, клиент увидит одно, а заплатит

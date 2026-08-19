@@ -786,6 +786,9 @@ const RULES = [
   { file: 'server/test/part46.platform.e2e.js', must: '★ Доли сходятся',
     why: 'Весь путь денег проверяется целиком: доля партнёра плюс доля платформы равны сумме до тиына' },
 
+  { file: 'server/src/billing/billing.service.ts', must: 'SELECT platform_monthly($1) AS m',
+    why: 'Кабинет клиента считал счёт по-своему: панель показывала 9 900, а клиент видел 3 000 и платил по ним' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
