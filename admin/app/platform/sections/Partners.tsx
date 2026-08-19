@@ -247,6 +247,7 @@ export default function Partners({ me }: { me: Me }) {
                       У владельцев платформы правка запрещена: долю им
                       не считают, а пароль каждый меняет себе сам. */}
                   <InlineText value={p.name} label="Имя партнёра"
+                onSame={() => toast({ text: 'Не изменилось' })}
                     disabled={p.isSuperUser}
                     onSave={(v) => save(p.id, { name: v }, 'Имя сохранено')} />
                   {p.isSuperUser && <span className="badge st-active">супер</span>}
@@ -257,6 +258,7 @@ export default function Partners({ me }: { me: Me }) {
                       партнёра с одной почтой означали бы, что один не
                       сможет войти. */}
                   <InlineText value={p.email} label="Почта для входа" mono
+                onSame={() => toast({ text: 'Не изменилось' })}
                     onSave={(v) => save(p.id, { email: v }, 'Почта сохранена')} />
                   {p.phone && <div className="sub">{p.phone}</div>}
                 </td>

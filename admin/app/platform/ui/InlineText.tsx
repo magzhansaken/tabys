@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-export function InlineText({ value, label, placeholder, mono, disabled, numeric, onSave }: {
+export function InlineText({ value, label, placeholder, mono, disabled, numeric, onSave , onSame }: {
   value: string;
   label?: string;
   placeholder?: string;
@@ -21,6 +21,8 @@ export function InlineText({ value, label, placeholder, mono, disabled, numeric,
   onSave: (v: string) => void | Promise<void>;
   /** Число: на телефоне откроется цифровая клавиатура, а не буквы. */
   numeric?: boolean;
+  /** Ввели то же самое: сказать об этом, а не молчать. */
+  onSame?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -32,7 +34,22 @@ export function InlineText({ value, label, placeholder, mono, disabled, numeric,
   const commit = () => {
     setEditing(false);
     const v = draft.trim();
-    if (v !== value) void onSave(v);
+
+    // Сравниваем ЧИСЛА, а не строки, если поле числовое: «14 900» и
+    // «14900» — одно значение, но строки разные, и без этого уходил
+    // бессмысленный запрос.
+    const same = numeric
+      ? Number(v.replace(/[^\d-]/g, '')) === Number(String(value).replace(/[^\d-]/g, ''))
+      : v === value;
+
+    if (same) {
+      // ТО ЖЕ ЗНАЧЕНИЕ — говорим об этом. Раньше тут была тишина:
+      // человек правил цену, возвращал прежнюю и не получал НИЧЕГО.
+      // Ни «сохранено», ни отказа — и решал, что правка не работает.
+      onSame?.();
+      return;
+    }
+    void onSave(v);
   };
 
   if (disabled) {

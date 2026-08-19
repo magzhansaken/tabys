@@ -91,17 +91,21 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
         <div>
           <h1>
             <InlineText value={data.name} label="Название магазина"
+                onSame={() => toast({ text: 'Не изменилось' })}
               onSave={(v) => save({ name: v }, 'Название изменено')} />
           </h1>
 
           <p className="hint client-fields">
             <InlineText value={data.city ?? ''} label="Город" placeholder="город"
+                onSame={() => toast({ text: 'Не изменилось' })}
               onSave={(v) => save({ city: v }, 'Город изменён')} />
             {' · '}
             <InlineText value={data.owner ?? ''} label="Владелец" placeholder="владелец"
+                onSame={() => toast({ text: 'Не изменилось' })}
               onSave={(v) => save({ ownerName: v }, 'Владелец изменён')} />
             {' · '}
             <InlineText value={data.ownerPhone ?? ''} label="Телефон владельца" mono
+                onSame={() => toast({ text: 'Не изменилось' })}
               placeholder="телефон"
               onSave={(v) => save({ ownerPhone: v }, 'Телефон изменён')} />
             {data.ownerPhone && (

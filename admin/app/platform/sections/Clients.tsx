@@ -331,6 +331,7 @@ export default function Clients({ me }: { me: Me }) {
                         значком рядом. */}
                     <button className="link-name" onClick={() => goClient(r.id)}>{r.name}</button>
                     <InlineText value={r.name} label="название" placeholder="✎"
+                onSame={() => toast({ text: 'Название не изменилось' })}
                       onSave={async (v) => {
                         try {
                           await api(`/clients/${r.id}`, { method: 'PATCH', body: { name: v } });

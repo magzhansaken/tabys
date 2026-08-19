@@ -96,6 +96,7 @@ export default function Settings({ me }: { me: Me }) {
                 ушла. Общая форма заставляет помнить, что ты что-то
                 менял, и уйти с неё, не нажав, значит потерять правку. */}
             <InlineText value={String(prices[k] ?? 0)} label={`${title}, ₸ в месяц`} mono numeric
+              onSame={() => toast({ text: 'Цена не изменилась' })}
               onSave={async (v) => {
                 const n = Number(String(v).replace(/[^\d-]/g, ''));
                 if (!Number.isFinite(n) || n < 0) {
@@ -129,7 +130,8 @@ export default function Settings({ me }: { me: Me }) {
                     : 'скидки нет — срок считается по полной цене'}
                 </div>
               </div>
-              <InlineText value={String(pct)} label={title as string} mono
+              <InlineText value={String(pct)} label={title as string} mono numeric
+                onSame={() => toast({ text: 'Скидка не изменилась' })}
                 onSave={async (v) => {
                   const n = Number(String(v).replace(/[^\d]/g, ''));
                   // Половина цены — предел: больше это уже не скидка,

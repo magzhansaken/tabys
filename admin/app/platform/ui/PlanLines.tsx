@@ -150,6 +150,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
             <tr key={l.id}>
               <td>
                 <InlineText value={l.title} label="Название строки"
+                onSame={() => toast({ text: 'Строка не изменилась' })}
                   onSave={(v) => save(l.id, { title: v }, 'Название изменено')} />
                 <div className="sub">{TITLE[l.kind] ?? l.kind}</div>
               </td>
@@ -158,6 +159,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
                     системное окошко, где «восемь тысяч» молча
                     превращалось в ноль. */}
                 <InlineText value={String(Math.abs(l.price))} label="Цена" numeric
+                onSame={() => toast({ text: 'Строка не изменилась' })}
                   onSave={(v) => {
                     const n = Number(v);
                     if (!Number.isFinite(n)) { toast({ text: 'Нужно число', kind: 'err' }); return; }
@@ -166,6 +168,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
               </td>
               <td className="num">
                 <InlineText value={String(l.qty ?? 1)} label="Количество" numeric
+                onSame={() => toast({ text: 'Строка не изменилась' })}
                   onSave={(v) => {
                     const n = Number(v);
                     if (!Number.isFinite(n) || n < 1) { toast({ text: 'Нужно число', kind: 'err' }); return; }
