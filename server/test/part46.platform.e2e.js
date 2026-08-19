@@ -242,7 +242,8 @@ const shop = async (name, owner) => {
 
   // ---------- ЗАЯВКИ ПАРТНЁРА ----------
   r = await j('POST', '/platform/requests',
-    { accountId: id1, kind: 'device', comment: 'Клиент просит вторую кассу' }, PARTNER);
+    { accountId: id1, kind: 'device', comment: 'Клиент просит вторую кассу',
+      payload: { device: 'pos' } }, PARTNER);
   const reqId = r.d?.id;
   ok(r.d?.status === 'pending', '★ Партнёр подал заявку — решает владелец');
 
@@ -944,6 +945,52 @@ const shop = async (name, owner) => {
       ok(new Set(seen).size === all.length,
          `★ Листание журнала ничего не теряет: ${new Set(seen).size} из ${all.length}`);
       ok(seen.length === new Set(seen).size, '★ И ничего не повторяет');
+    }
+  }
+
+  // ── КРАЙНИЕ ЗНАЧЕНИЯ В ЗАЯВКАХ И ГОНКА РЕШЕНИЙ ──────────────────
+  //
+  // Дописано после сверки. Содержимое заявки не проверялось вовсе:
+  //   отсрочка на 9999 дней проходила и продлевала клиента до 2054
+  //     года — двадцать семь лет бесплатной работы;
+  //   «просит вертолёт» доходил до владельца платформы, и тот получал
+  //     ошибку базы вместо ответа — разбираться ему, а ошибся партнёр;
+  //   выдуманный тариф «алмазный» МОЛЧА становился «Стартом»: партнёр
+  //     просил одно, клиент получал другое.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      let blocked = 0;
+      for (const body of [
+        { kind: 'grace', payload: { days: 9999 } },
+        { kind: 'grace', payload: { days: -30 } },
+        { kind: 'grace', payload: { days: 0 } },
+        { kind: 'device', payload: { device: 'вертолёт' } },
+        { kind: 'tariff', payload: { tier: 'алмазный' } },
+        { kind: 'other', payload: {}, comment: 'М'.repeat(5000) },
+      ]) {
+        const r = await j('POST', '/platform/requests',
+          { accountId: cl.id, ...body }, SUPER);
+        if (r.status === 400) blocked++;
+      }
+      ok(blocked === 6, `★ Крайние значения в заявках отбиты: ${blocked} из 6`);
+
+      // ГОНКА: два решения по одной заявке разом. Без защиты строка
+      // счёта задвоилась бы, и клиент платил бы за одну кассу дважды.
+      const r = await j('POST', '/platform/requests',
+        { accountId: cl.id, kind: 'device', payload: { device: 'pos' },
+          comment: 'гонка' }, SUPER);
+      const rid = r.d?.id;
+      if (rid) {
+        const [a, b] = await Promise.all([
+          j('POST', `/platform/requests/${rid}/decide`, { approve: true, unitPrice: 2500 }, SUPER),
+          j('POST', `/platform/requests/${rid}/decide`, { approve: true, unitPrice: 2500 }, SUPER),
+        ]);
+        const okCount = [a, b].filter((x) => x.status < 300).length;
+        ok(okCount === 1,
+           `★ Гонка решений отбита: прошло ${okCount} из 2 — строка не задвоилась`);
+      }
     }
   }
 

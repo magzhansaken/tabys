@@ -740,6 +740,35 @@ export class PlatformService {
   }) {
     if (!['device', 'tariff', 'grace', 'other'].includes(d.kind))
       throw new BadRequestException('Неизвестный вид заявки');
+
+    // СОДЕРЖИМОЕ заявки проверяем ЗДЕСЬ, а не при одобрении. Иначе
+    // владелец платформы видит в очереди «просит вертолёт», решает —
+    // и получает ошибку базы вместо ответа. Разбираться приходится ему,
+    // хотя ошибся партнёр неделю назад.
+    const p = d.payload ?? {};
+
+    if (d.kind === 'grace') {
+      const days = Number(p.days ?? 0);
+      // Отсрочка на 9999 дней проходила молча и продлевала клиента до
+      // 2054 года — двадцать семь лет бесплатной работы.
+      if (!Number.isInteger(days) || days < 1 || days > 90)
+        throw new BadRequestException('Отсрочка — от 1 до 90 дней');
+    }
+
+    if (d.kind === 'device') {
+      if (!['pos', 'store'].includes(String(p.device ?? '')))
+        throw new BadRequestException('Устройство — «pos» (касса) или «store» (точка)');
+    }
+
+    if (d.kind === 'tariff') {
+      // «алмазный» молча становился «Стартом»: партнёр просил одно,
+      // клиент получал другое, и никто не замечал.
+      if (!['base', 'pro'].includes(String(p.tier ?? '')))
+        throw new BadRequestException('Тариф — «base» («Старт») или «pro» («Стандарт»)');
+    }
+
+    if (d.comment != null && String(d.comment).length > 1000)
+      throw new BadRequestException('Комментарий длиннее 1000 знаков — сократите');
     if (ctx.role === 'partner') {
       const own = (await this.q(
         `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
