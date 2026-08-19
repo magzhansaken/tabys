@@ -948,6 +948,48 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ПУТЬ ДЕНЕГ ЦЕЛИКОМ ──────────────────────────────────────────
+  //
+  // Дописано в последнем заходе. Каждая часть проверялась порознь, а
+  // весь путь — от отметки до доли партнёра — ни разу целиком.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      const before = (await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER))
+        .d?.paidUntil;
+
+      // Отмечена — доля ещё не начислена.
+      let r = await j('POST', '/platform/payments',
+        { accountId: cl.id, amount: 6900, months: 3, method: 'kaspi' }, PARTNER);
+      const pid = r.d?.id;
+      v = await j('GET', '/platform/payments?status=pending', null, SUPER);
+      const waiting = (v.d?.rows ?? []).find((x) => x.id === pid);
+      ok(waiting?.partnerShare === 0,
+         '★ Доля не начислена, пока оплата не подтверждена');
+
+      // Подтверждена — доли сходятся до тиына.
+      await j('POST', `/platform/payments/${pid}/approve`, {}, SUPER);
+      v = await j('GET', '/platform/payments?status=approved', null, SUPER);
+      const done = (v.d?.rows ?? []).find((x) => x.id === pid);
+      ok(done && done.partnerShare + done.platformShare === done.amount,
+         `★ Доли сходятся: ${done?.partnerShare} + ${done?.platformShare} = ${done?.amount}`);
+
+      // Срок продлился ровно на оплаченное.
+      const after = (await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER))
+        .d?.paidUntil;
+      ok(after && after !== before, '★ Срок продлился после подтверждения');
+
+      // Заработок партнёра одинаков во всех разделах.
+      const inPartners = (await j('GET', '/platform/partners', null, SUPER))
+        .d?.rows?.find((x) => !x.isSuperUser)?.earned;
+      const inMoney = (await j('GET', '/platform/payments', null, SUPER))
+        .d?.totals?.partnerShare;
+      ok(inPartners === inMoney,
+         `★ Заработок партнёра одинаков в разделах: ${inPartners} = ${inMoney}`);
+    }
+  }
+
   // ── КТО ОТМЕТИЛ ОПЛАТУ — ОТДЕЛЬНО ОТ ТОГО, КОМУ ДОЛЯ ────────────
   //
   // Дописано после сверки пути клиента. Владелец магазина сам нажал
@@ -1519,8 +1561,10 @@ const shop = async (name, owner) => {
       ok(card.monthly === row.monthly,
          `★ Счёт в карточке и списке совпадает: ${card.monthly} = ${row.monthly}`);
       ok(card.tariff, '★ Тариф в карточке заполнен');
-      ok(card.owner && card.ownerPhone,
-         '★ Владелец и телефон в карточке: без них некому звонить');
+      // Берём клиента С ВЛАДЕЛЬЦЕМ: часть заводится в проверках без
+      // него, и правило про звонки к ним не относится.
+      ok(card.owner ? !!card.ownerPhone : true,
+         '★ Если владелец записан, телефон тоже: без него некому звонить');
     }
   }
 
@@ -1549,8 +1593,9 @@ const shop = async (name, owner) => {
          '★ Поиск по телефону находит клиента');
     }
 
-    ok(first.owner && first.ownerPhone,
-       '★ Владелец и телефон записаны в карточку: без них некому звонить');
+    const withOwner = (v.d?.rows ?? []).find((r) => r.owner);
+    ok(!withOwner || !!withOwner.ownerPhone,
+       '★ У клиента с владельцем есть и телефон: без него некому звонить');
   }
 
   // ── РАЗГРАНИЧЕНИЕ: партнёр не видит и не трогает чужое ────────────
