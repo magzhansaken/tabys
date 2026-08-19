@@ -948,6 +948,42 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── РЕКВИЗИТЫ: ЭТО ВИДИТ КАЖДЫЙ КЛИЕНТ ──────────────────────────
+  //
+  // Дописано после сверки: не проверялось НИЧЕГО, а ошибка здесь стоит
+  // дороже всего — платить не сможет никто, и заметят через день-два.
+  //
+  // «javascript:alert(1)» в кнопке «Оплатить» — это ЧУЖОЙ КОД в
+  // кабинете владельца магазина, который нажимает её, доверяя
+  // платформе.
+  {
+    let blocked = 0;
+    for (const body of [
+      { payUrl: 'просто текст' },
+      { payUrl: 'javascript:alert(1)' },
+      { payUrl: 'http://pay.kaspi.kz' },
+      { payQrUrl: 'https://kaspi.kz/page' },
+      { payPhone: 'позвоните мне' },
+      { payName: 'М'.repeat(500) },
+    ]) {
+      const r = await j('POST', '/platform/pay-settings', body, SUPER);
+      if (r.status === 400) blocked++;
+    }
+    ok(blocked === 6, `★ Негодные реквизиты отбиты: ${blocked} из 6`);
+
+    const good = await j('POST', '/platform/pay-settings', {
+      payUrl: 'https://pay.kaspi.kz/tabys',
+      payQrUrl: 'https://cdn.tabys.kz/qr.png',
+      payName: 'Магжан С.', payPhone: '+7 705 555 00 00',
+      payNote: 'название магазина',
+    }, SUPER);
+    ok(good.status < 300, '★ Обычные реквизиты сохраняются');
+
+    const v = await j('GET', '/platform/pay-settings', null, SUPER);
+    ok(v.d?.payUrl?.startsWith('https://') && v.d?.payPhone,
+       '★ Сохранённые реквизиты читаются обратно');
+  }
+
   // ── ЖУРНАЛ: МУСОР В АДРЕСЕ НЕ РОНЯЕТ СЕРВЕР ─────────────────────
   //
   // Дописано после сверки. «limit=abc» и «before=abc» роняли сервер:

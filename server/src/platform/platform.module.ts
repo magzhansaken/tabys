@@ -1700,6 +1700,43 @@ export class PlatformService {
     payPhone?: string; payNote?: string; payDetails?: string;
   }) {
     if (ctx.role !== 'super') throw new ForbiddenException('Реквизиты меняет владелец платформы');
+
+    // ЭТО ВИДИТ КАЖДЫЙ КЛИЕНТ при оплате. Ошибка здесь стоит дороже
+    // всего: не заплатит никто, и заметят это через день-два.
+    const link = (v: any, label: string) => {
+      const url = String(v ?? '').trim();
+      if (!url) return;
+      // «javascript:» в кнопке «Оплатить» — это ЧУЖОЙ КОД в кабинете
+      // владельца магазина, который нажимает её, доверяя платформе.
+      if (!/^https:\/\//i.test(url))
+        throw new BadRequestException(
+          `${label}: только адрес, начинающийся с https:// — по нему клиент платит`);
+      if (url.length > 500)
+        throw new BadRequestException(`${label}: адрес длиннее 500 знаков`);
+    };
+    link(d.payUrl, 'Ссылка на оплату');
+    link(d.payQrUrl, 'Картинка QR');
+
+    if (d.payQrUrl != null && String(d.payQrUrl).trim()
+        && !/\.(png|jpe?g|webp|svg)(\?|$)/i.test(String(d.payQrUrl)))
+      throw new BadRequestException(
+        'Картинка QR: нужна прямая ссылка на картинку, а не страница, где она показана');
+
+    if (d.payPhone != null && String(d.payPhone).trim()) {
+      const digits = String(d.payPhone).replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15)
+        throw new BadRequestException(
+          'Номер для перевода непохож на телефон — по нему клиент переводит деньги');
+    }
+
+    for (const [key, label, max] of [
+      ['payName', 'Получатель', 120],
+      ['payNote', 'Комментарий к платежу', 200],
+      ['payDetails', 'Реквизиты словами', 1000],
+    ] as const) {
+      if (d[key] != null && String(d[key]).length > max)
+        throw new BadRequestException(`${label}: не длиннее ${max} знаков`);
+    }
     // Пустую строку СОХРАНЯЕМ: владелец может намеренно убрать поле,
     // и coalesce вернул бы старое значение — поле нельзя было бы
     // очистить вовсе.
