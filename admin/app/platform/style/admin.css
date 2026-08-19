@@ -172,6 +172,15 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   font-size: 28px; font-weight: var(--weight-bold); line-height: 1;
   letter-spacing: var(--tracking-tight); font-variant-numeric: tabular-nums;
 }
+/* Подпись под числом: объясняет, что именно посчитано. Нужна там, где
+   рядом в другом разделе стоит похожая цифра с другим смыслом —
+   «Работают 3» в клиентах и «Платят 2» в сводке. Без подписи человек
+   решает, что одна из них врёт. */
+.card i {
+  display: block; margin-top: 2px;
+  font-size: var(--text-11); font-style: normal; line-height: 1.35;
+  color: var(--ink-faint);
+}
 .card.ok b { color: var(--ok); }
 .card.warn b { color: var(--warn); }
 .card.bad b { color: var(--danger); }

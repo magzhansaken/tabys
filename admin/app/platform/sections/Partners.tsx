@@ -148,7 +148,13 @@ export default function Partners({ me }: { me: Me }) {
       <div className="cards">
         <div className="card"><span>Партнёров</span><b>{data.totals.partners}</b></div>
         <div className="card money"><span>Привели за 30 дн.</span><b>{money(data.totals.brought)}</b></div>
-        <div className="card"><span>К выплате</span><b>{money(data.totals.paidOut)}</b></div>
+        <div className="card">
+          <span>К выплате</span><b>{money(data.totals.paidOut)}</b>
+          {/* Начислено за 30 дней. Переводит владелец платформы сам —
+              система деньги не отправляет, и «к выплате» это долг, а
+              не сделанный перевод. */}
+          <i>начислено за 30 дней</i>
+        </div>
       </div>
 
       <div className="toolbar">

@@ -82,7 +82,13 @@ export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void 
         {/* «Платят», а не «работают»: пробный тоже работает, и при
             прежней подписи карточки пересекались — человек складывал
             и получал больше, чем всего. */}
-        <div className="card ok"><span>Платят</span><b>{t.active}</b></div>
+        {/* «Платят» — уже была подтверждённая оплата. В «Клиентах»
+            рядом стоит «Работают» — там больше, потому что туда
+            входят и пробные. Подписи объясняют разницу. */}
+        <div className="card ok">
+          <span>Платят</span><b>{t.active}</b>
+          <i>была хоть одна оплата</i>
+        </div>
         <div className="card warn"><span>На пробном</span><b>{t.trial}</b></div>
         <div className="card bad"><span>Просрочены</span><b>{t.expired}</b></div>
         {/* Ждут одобрения: кто-то стоит у двери. Их карточка. */}
@@ -90,8 +96,13 @@ export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void 
         <div className="card money"><span>Доход в месяц</span><b>{money(t.mrr)}</b></div>
         {/* «Поступило сегодня» — вопрос, с которого начинается день
             владельца платформы. Их карточка. */}
-        <div className="card money"><span>Поступило сегодня</span>
-          <b>{money(t.revenueToday)}</b></div>
+        <div className="card money">
+          <span>Поступило сегодня</span>
+          <b>{money(t.revenueToday)}</b>
+          {/* Только ПОДТВЕРЖДЁННОЕ: отмеченное, но не подтверждённое
+              сюда не входит — денег ещё нет, а строка уже есть. */}
+          <i>подтверждённые оплаты</i>
+        </div>
       </div>
 
       <div className="chart-grid">

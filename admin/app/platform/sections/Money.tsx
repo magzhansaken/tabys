@@ -118,7 +118,12 @@ export default function Money({ me }: { me: Me }) {
 
       <div className="cards">
         <div className="card"><span>Записей</span><b>{t.count}</b></div>
-        <div className="card money"><span>Подтверждено</span><b>{money(t.amount)}</b></div>
+        <div className="card money">
+          <span>Подтверждено</span><b>{money(t.amount)}</b>
+          {/* Сумма ПОКАЗАННЫХ оплат: при отборе «отклонённые» она ноль,
+              и это верно — денег не пришло. */}
+          <i>по показанным оплатам</i>
+        </div>
         <div className="card"><span>Партнёрам</span><b>{money(t.partnerShare)}</b></div>
         {/* Доля платформы — только владельцу: партнёру чужой доход
             знать незачем, он видит свой. */}

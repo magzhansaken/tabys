@@ -138,7 +138,14 @@ export default function Clients({ me }: { me: Me }) {
       {/* Пять чисел — их блок cards с видами ok / warn / bad / money. */}
       <div className="cards">
         <div className="card"><span>Всего</span><b>{st.total}</b></div>
-        <div className="card ok"><span>Работают</span><b>{st.active}</b></div>
+        {/* «Работают» — могут продавать: срок не вышел. Сюда входят и
+            пробные, которые ещё не платили. В сводке рядом стоит
+            «Платят» — там их нет, и без подписи человек решит, что
+            одна из цифр врёт. */}
+        <div className="card ok">
+          <span>Работают</span><b>{st.active}</b>
+          <i>срок не вышел, включая пробных</i>
+        </div>
         <div className="card warn"><span>Ждут подтверждения</span><b>{st.pendingPay}</b></div>
         <div className="card bad"><span>Срок вышел</span><b>{st.expired}</b></div>
         <div className="card money"><span>Доход в месяц</span><b>{money(st.mrr)}</b></div>
