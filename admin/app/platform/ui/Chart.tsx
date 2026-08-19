@@ -87,16 +87,31 @@ export function Chart({ points, height = 180, format, title }: {
           </>
         )}
 
-        <text x={PAD_L} y={PAD_T - 2} className="tick">{format(Math.round(hi))}</text>
-        <text x={PAD_L} y={plotH + 16} className="tick">{points[0]?.label ?? ''}</text>
-        <text x={W / 2} y={plotH + 16} className="tick mid">{points[mid]?.label ?? ''}</text>
-        <text x={W - PAD_R} y={plotH + 16} className="tick end">
-          {points[points.length - 1]?.label ?? ''}
-        </text>
       </svg>
 
+      {/* ПОДПИСИ ЖИВУТ ВНЕ ХОЛСТА.
+          Холст растягивается «none» — так и надо линии графика, она
+          должна занять всю ширину. Но вместе с ней растягивался и
+          ТЕКСТ: на телефоне место вдвое уже холста, и надписи
+          сплющивались по горизонтали вдвое — «6 900 ₸» и даты
+          становились нечитаемыми. На широком экране этого не видно,
+          потому что холст и место почти совпадают. */}
+      <div className="chart-top">{format(Math.round(hi))}</div>
+      <div className="chart-dates">
+        <span>{points[0]?.label ?? ''}</span>
+        <span>{points[mid]?.label ?? ''}</span>
+        <span>{points[points.length - 1]?.label ?? ''}</span>
+      </div>
+
       {hover !== null && at && (
-        <div className="chart-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
+        <div className="chart-tip"
+          style={{
+            // Держим подсказку внутри графика. Предел в процентах не
+            // годится: половина подсказки — это 45 точек, а сколько
+            // это процентов, зависит от ширины экрана. Считает сам
+            // браузер — он знает настоящую ширину.
+            left: `clamp(48px, ${(x(hover) / W) * 100}%, calc(100% - 48px))`,
+          }}>
           <b>{format(at.value)}</b>
           <span>{at.label}</span>
         </div>

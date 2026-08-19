@@ -589,6 +589,19 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 @media (max-width: 720px) {
   .chart-grid { grid-template-columns: 1fr; }
 }
+/* Подписи графика: обычный текст, а не внутри холста. Холст
+   растягивается по ширине, и текст внутри него сплющивался бы. */
+.chart-top {
+  position: absolute; top: 6px; left: 10px;
+  font-size: var(--text-11); color: var(--ink-dim); font-family: var(--font-mono);
+}
+.chart-dates {
+  display: flex; justify-content: space-between;
+  margin-top: 2px; padding: 0 4px;
+  font-size: var(--text-11); color: var(--ink-dim);
+}
+.chart-dates span:nth-child(2) { text-align: center; }
+
 .chart-box {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow-1); padding: 16px 18px 10px;
@@ -604,9 +617,7 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 .chart .fill { fill: var(--accent); opacity: 0.08; stroke: none; }
 .chart .cursor { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; }
-.chart .tick { fill: var(--ink-label); font-size: 11px; font-family: var(--font-mono); }
-.chart .tick.mid { text-anchor: middle; }
-.chart .tick.end { text-anchor: end; }
+
 .chart-tip {
   position: absolute; top: 0; transform: translate(-50%, -6px);
   background: var(--surface); border: 1px solid var(--line-strong);
