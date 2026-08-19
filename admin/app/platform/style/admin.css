@@ -983,7 +983,13 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
     padding: var(--space-4); box-shadow: var(--shadow-1);
   }
   .grid tr:hover td, .grid tbody tr:nth-child(even) td { background: transparent; }
-  .grid td { display: block; padding: 2px 0; border: 0; }
+  .grid td {
+    display: block; padding: 2px 0; border: 0;
+    /* Длинные строки без пробелов переносим по знакам. Почта партнёра,
+       ссылка, код привязки — в них нечему переноситься, и такая строка
+       растягивала карточку за край экрана. */
+    overflow-wrap: anywhere;
+  }
   .grid td[data-label]::before {
     content: attr(data-label); display: block;
     font-size: var(--text-11); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim);
