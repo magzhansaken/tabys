@@ -260,7 +260,7 @@ const shop = async (name, owner) => {
   ok(r.d?.base > 0 && r.d?.extraPos > 0, `★ Прайс: тариф ${r.d?.base} ₸, вторая касса ${r.d?.extraPos} ₸`);
 
   r = await j('POST', '/platform/price-book', { extraPos: 3500 }, SUPER);
-  ok(/Оплаченные периоды не меняются/.test(r.d?.note ?? ''),
+  ok(/Оплаченное время остаётся/.test(r.d?.note ?? ''),
      '★ Смена цен не трогает оплаченные периоды');
 
   r = await j('POST', '/platform/price-book', { extraPos: 9999 }, PARTNER);
@@ -948,6 +948,31 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ПРАВКА ЦЕНЫ ДОХОДИТ ДО СЧЁТОВ ──────────────────────────────
+  //
+  // Дописано после находки: владелец менял цену «Старта» с 6 900 на
+  // 8 900, видел «новые цены применятся» — и ничего не применялось.
+  //
+  // Цена хранилась ДВАЖДЫ: в прайсе платформы, куда пишет правка, и в
+  // тарифе, откуда берётся счёт. Новые клиенты заводились по старой
+  // цене, и заметить это можно было только сложив: «я поднял до 8 900,
+  // а платят 6 900».
+  {
+    await j('POST', '/platform/price-book', { base: 8900 }, SUPER);
+
+    const r = await j('POST', '/platform/tenants',
+      { name: 'После правки цены', ownerName: 'Проверка',
+        ownerPhone: `+7701${Date.now() % 10000000}` }, SUPER);
+    if (r.d?.id) {
+      const card = (await j('GET', `/platform/clients/${r.d.id}/card`, null, SUPER)).d;
+      ok(card?.monthly === 8900,
+         `★ Новая цена дошла до счёта: ${card?.monthly} ₸/мес`);
+    }
+
+    // Возвращаем как было, чтобы не сбивать остальные проверки.
+    await j('POST', '/platform/price-book', { base: 6900 }, SUPER);
+  }
+
   // ── ЖУРНАЛ ЧИТАЕТСЯ ЧЕРЕЗ ПОЛГОДА ──────────────────────────────
   //
   // Дописано после сверки: прочитал журнал так, будто разбираю спорную
@@ -1145,9 +1170,10 @@ const shop = async (name, owner) => {
       await j('POST', '/platform/payments',
         { accountId: cl.id, amount: 6900, months: 1, method: 'kaspi' }, PARTNER);
       v = await j('GET', '/platform/payments', null, SUPER);
-      const byPartner = (v.d?.rows ?? [])[0];
-      ok(byPartner?.declaredBy === 'partner',
-         `★ Оплата партнёра помечена им: «${byPartner?.declaredBy}»`);
+      const byPartner = (v.d?.rows ?? []).find((x) => x.method === 'kaspi'
+        && x.declaredBy === 'partner');
+      ok(!!byPartner,
+         `★ Оплата партнёра помечена им: «${byPartner?.declaredBy ?? 'не найдена'}»`);
     }
   }
 
