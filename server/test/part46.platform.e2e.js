@@ -948,6 +948,47 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ЗАВЕДЕНИЕ ПАРТНЁРА: КРАЙНИЕ ЗНАЧЕНИЯ ───────────────────────
+  //
+  // Дописано после сверки. Проходило молча:
+  //   имя из 300 знаков — разрывает список клиентов, оплаты, журнал и
+  //     листы подтверждения разом;
+  //   почта «непочта» — по ней партнёр ВХОДИТ и получает письма.
+  //     Войти можно, а написать или продиктовать по телефону — нет;
+  //   доля 15,7% — даёт копейки, которые не сходятся при переводе, и
+  //     человек не понимает, откуда разница в тиынах.
+  {
+    let blocked = 0;
+    for (const body of [
+      { name: 'М'.repeat(300), email: 'x1@t.kz', password: 'parol123', commissionPercent: 15 },
+      { name: 'Тест', email: 'непочта', password: 'parol123', commissionPercent: 15 },
+      { name: 'Тест', email: 'кто@гдето', password: 'parol123', commissionPercent: 15 },
+      { name: 'Тест', email: 'x2@t.kz', password: 'parol123', commissionPercent: 15.7 },
+    ]) {
+      const r = await j('POST', '/platform/partners', body, SUPER);
+      if (r.status === 400) blocked++;
+    }
+    ok(blocked === 4, `★ Крайние значения партнёра отбиты: ${blocked} из 4`);
+
+    // Почта приводится к одному виду: иначе «Erlan@T.KZ» и
+    // «erlan@t.kz» станут двумя разными людьми с одним ящиком.
+    const mail = `Case${Date.now()}@Tabys.KZ`;
+    let r = await j('POST', '/platform/partners',
+      { name: 'Разный регистр', email: mail, password: 'parol123',
+        commissionPercent: 10 }, SUPER);
+    ok(r.status < 300, 'Партнёр с заглавными в почте заводится');
+
+    r = await j('POST', '/platform/partners',
+      { name: 'Двойник', email: mail.toUpperCase(), password: 'parol123',
+        commissionPercent: 10 }, SUPER);
+    ok(r.status === 400,
+       '★ Та же почта другим регистром отбита — иначе два человека с одним ящиком');
+
+    r = await j('POST', '/platform/login',
+      { email: mail.toLowerCase(), password: 'parol123' });
+    ok(!!r.d?.token, '★ Вход работает почтой в любом написании');
+  }
+
   // ── СПИСОК ЭТАПОВ ОДИН НА ВСЮ СИСТЕМУ ───────────────────────────
   //
   // Дописано после находки: списков было ТРИ и они расходились.

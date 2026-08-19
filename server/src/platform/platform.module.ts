@@ -562,11 +562,30 @@ export class PlatformService {
     name: string; email: string; password: string; commissionPercent?: number; phone?: string;
   }) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    if (!d.name?.trim() || !d.email?.trim() || !d.password) 
+    if (!d.name?.trim() || !d.email?.trim() || !d.password)
       throw new BadRequestException('Нужны имя, почта и пароль');
+
+    const pname = String(d.name).trim();
+    // Имя партнёра стоит в списке клиентов, в оплатах, в журнале и в
+    // листах подтверждения. Триста знаков разорвут их все разом.
+    if (pname.length > 80)
+      throw new BadRequestException('Имя длиннее 80 знаков — сократите');
+
+    // Почта — это ВХОД партнёра и адрес, по которому ему пишут.
+    // «непочта» принималась молча: войти по ней можно, а написать
+    // письмо или продиктовать по телефону — нет.
+    const email = String(d.email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
+      throw new BadRequestException('Почта непохожа на адрес — по ней партнёр входит и получает письма');
+
     if (String(d.password).length < 8) throw new BadRequestException('Пароль от 8 знаков');
 
-    const bp = Math.round(Number(d.commissionPercent ?? 0) * 100);
+    // Доля ЦЕЛЫМИ процентами: 15,7% даёт копейки, которые не сходятся
+    // при переводе, и человек не понимает, откуда разница в тиынах.
+    const pct = Number(d.commissionPercent ?? 0);
+    if (!Number.isInteger(pct))
+      throw new BadRequestException('Доля — целое число процентов');
+    const bp = Math.round(pct * 100);
     if (bp < 0 || bp > 10000) throw new BadRequestException('Комиссия от 0 до 100%');
 
     const exists = (await this.q(
@@ -576,7 +595,7 @@ export class PlatformService {
     const row = (await this.q(
       `INSERT INTO platform_user (email, password_hash, full_name, role, commission_bp, phone)
        VALUES ($1,$2,$3,'partner',$4,$5) RETURNING id, email, full_name`,
-      [d.email.trim(), await bcrypt.hash(d.password, 10), d.name.trim(), bp, d.phone ?? null])).rows[0];
+      [email, await bcrypt.hash(d.password, 10), pname, bp, d.phone ?? null])).rows[0];
 
     await this.audit(ctx, 'partner_created', null, { partner: row.full_name, commissionBp: bp });
     return { ...row,
