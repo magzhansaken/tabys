@@ -237,5 +237,8 @@
 \echo '--- 087 рейтинг партнёров ---'
 \i db/migrations/087_partner_ranking.sql
 
+\echo '--- 088 стереть магазины для проверки ---'
+\i db/migrations/088_wipe_accounts.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
