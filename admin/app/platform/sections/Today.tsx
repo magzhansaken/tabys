@@ -127,6 +127,20 @@ export default function Today({ me, goTo }: { me: Me; goTo: (t: any) => void }) 
           дублировала бы то, что уже сказано в тосте. */}
       <PageHead title={`Сегодня, ${data.dateLabel}`} sub={data.headline ?? undefined} />
 
+      {/* ИТОГ ДНЯ ПАРТНЁРУ. Лента — очередь решений, и подтверждённая
+          оплата из неё уходит. Владельцу платформы так и надо: он
+          решение принял. А партнёр иначе не узнает, что деньги
+          подтвердили и доля начислена — лента снова «спокойна». */}
+      {data.dayTotal && Number(data.dayTotal.approved) > 0 && (
+        <div className="all-clear">
+          <b>
+            Сегодня подтверждено {data.dayTotal.approved}{' '}
+            {Number(data.dayTotal.approved) === 1 ? 'оплата' : 'оплаты'}
+            {' · '}ваша доля {money(Number(data.dayTotal.earned))}
+          </b>
+        </div>
+      )}
+
       {data.total === 0 ? (
         <div className="all-clear">
           <b>Разобрано. Ни одного решения не ждёт</b>

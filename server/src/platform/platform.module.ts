@@ -141,6 +141,21 @@ export class PlatformService {
       headline: ctx.role === 'super'
         ? (n > 0 ? `${n} ${word} вас` : 'Решений нет — всё разобрано')
         : (n > 0 ? `${n} дел по вашим клиентам` : 'По вашим клиентам всё спокойно'),
+
+      // ИТОГ ДНЯ ДЛЯ ПАРТНЁРА. Лента у нас — очередь решений, и
+      // подтверждённая оплата из неё уходит: для владельца платформы
+      // это верно, он своё решение принял.
+      //
+      // А партнёр так и не узнавал, что деньги подтвердили и доля
+      // начислена: лента снова «спокойна», и надо идти проверять в
+      // «Деньги». Показываем итог дня прямо здесь.
+      dayTotal: ctx.role === 'partner' ? (await this.q(
+        `SELECT count(*) FILTER (WHERE tp.status = 'approved'
+                                   AND tp.approved_at::date = current_date) AS approved,
+                coalesce(sum(tp.partner_share) FILTER (WHERE tp.status = 'approved'
+                                   AND tp.approved_at::date = current_date), 0) AS earned
+           FROM tenant_payment tp
+          WHERE tp.partner_id = $1`, [ctx.userId])).rows[0] : null,
       // Дата в заголовке: «Сегодня, 17 августа». Кабинет открывают
       // утром и держат весь день — без даты непонятно, свежее ли это.
       dateLabel: new Date().toLocaleDateString('ru-RU',
