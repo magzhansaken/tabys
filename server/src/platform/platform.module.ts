@@ -1434,7 +1434,9 @@ export class PlatformService {
   /** Отметить, на каком этапе разговор с заявкой. */
   async setLead(ctx: PlatformCtx, id: string, status: string, note?: string) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    const ok = ['new', 'called', 'demo', 'won', 'lost'];
+    // Список этапов ОДИН на всю систему: база, сервер и воронка. Раньше
+    // их было три разных, и обычный сдвиг в «Пробный» падал ошибкой.
+    const ok = ['new', 'contacted', 'trial', 'paid', 'lost'];
     if (!ok.includes(status)) throw new BadRequestException('Неизвестный этап');
     await this.q(
       `UPDATE lead SET status=$2, comment=coalesce($3, comment) WHERE id=$1`,
@@ -1735,6 +1737,10 @@ export class PlatformService {
     // застревала там навсегда: клиент платит, а в воронке архив.
     const ok = ['new', 'contacted', 'trial', 'paid', 'lost', 'auto'];
     if (!ok.includes(stage)) throw new BadRequestException('Неизвестный этап');
+    // Заметка видна на карточке воронки: пять тысяч знаков растянут её
+    // на весь столбец и закроют остальные.
+    if (note != null && String(note).length > 500)
+      throw new BadRequestException('Заметка длиннее 500 знаков — сократите');
 
     if (ctx.role === 'partner') {
       const own = (await this.q(

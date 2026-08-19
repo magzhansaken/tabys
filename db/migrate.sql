@@ -198,5 +198,8 @@
 \echo '--- 076 клиент не за призраком ---'
 \i db/migrations/076_ghost_partner.sql
 
+\echo '--- 077 один список этапов воронки ---'
+\i db/migrations/077_stage_list.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

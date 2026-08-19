@@ -272,13 +272,13 @@ const shop = async (name, owner) => {
 
   // ---------- ВОРОНКА: ЗАМЕТКА И ДАТА КАСАНИЯ ----------
   await j('PATCH', `/platform/clients/${id1}`,
-    { dealStage: 'demo', dealNote: 'Показал кассу, думает до пятницы' }, PARTNER);
+    { dealStage: 'contacted', dealNote: 'Показал кассу, думает до пятницы' }, PARTNER);
   r = await j('GET', '/platform/clients', null, PARTNER);
   const card = r.d.rows[0];
   ok(card?.dealNote === 'Показал кассу, думает до пятницы',
      '★ Заметка видна в списке: без неё через две недели «показали» ничего не значит');
   ok(!!card?.touchedAt, 'Дата последнего касания есть');
-  ok(card?.dealStage === 'demo', 'Этап воронки сохранён');
+  ok(card?.dealStage === 'contacted', 'Этап воронки сохранён');
 
   // ---------- КАБИНЕТ КЛИЕНТА ----------
   // Порядок ответа обратный привычному, как у соседей: сначала
@@ -945,6 +945,40 @@ const shop = async (name, owner) => {
       ok(new Set(seen).size === all.length,
          `★ Листание журнала ничего не теряет: ${new Set(seen).size} из ${all.length}`);
       ok(seen.length === new Set(seen).size, '★ И ничего не повторяет');
+    }
+  }
+
+  // ── СПИСОК ЭТАПОВ ОДИН НА ВСЮ СИСТЕМУ ───────────────────────────
+  //
+  // Дописано после находки: списков было ТРИ и они расходились.
+  //   база:    new · contacted · demo · proposal · won · lost
+  //   сервер:  new · called · demo · won · lost
+  //   воронка: new · contacted · trial · paid · lost
+  //
+  // Обычный сдвиг карточки в «Пробный» падал с «Internal server
+  // error». Работало только потому, что воронка двигает карточки сама
+  // и ручной сдвиг делали редко.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      let moved = 0;
+      for (const st of ['new', 'contacted', 'trial', 'paid', 'lost']) {
+        const r = await j('POST', `/platform/funnel/${cl.id}`, { stage: st }, SUPER);
+        if (r.status < 300) moved++;
+      }
+      ok(moved === 5, `★ Все пять этапов воронки работают: ${moved} из 5`);
+
+      const bad = await j('POST', `/platform/funnel/${cl.id}`, { stage: 'золотой' }, SUPER);
+      ok(bad.status === 400, '★ Выдуманный этап отбит');
+
+      const long = await j('POST', `/platform/funnel/${cl.id}`,
+        { stage: 'contacted', note: 'М'.repeat(5000) }, SUPER);
+      ok(long.status === 400,
+         '★ Заметка в 5000 знаков отбита: она растянула бы карточку на весь столбец');
+
+      // Возвращаем к выводу из фактов.
+      await j('POST', `/platform/funnel/${cl.id}`, { stage: 'auto' }, SUPER);
     }
   }
 
