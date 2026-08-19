@@ -213,5 +213,8 @@
 \echo '--- 081 журнал читается через полгода ---'
 \i db/migrations/081_journal_readable.sql
 
+\echo '--- 082 значения в журнале ---'
+\i db/migrations/082_journal_values.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

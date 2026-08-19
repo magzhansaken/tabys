@@ -974,6 +974,41 @@ const shop = async (name, owner) => {
        `★ Название магазина не задвоено в записи: ${dbl.length} повторов`);
   }
 
+  // ── В ЖУРНАЛЕ ЗНАЧЕНИЯ, А НЕ НАЗВАНИЯ ПОЛЕЙ ─────────────────────
+  //
+  // Дописано после чтения журнала глазами человека, который через
+  // полгода разбирает спор. Три записи не давали ответа:
+  //   «Изменены цены платформы» — и всё, что менялось неизвестно;
+  //   «этап: paid» — кодом, а в воронке столбец «Оплатил»;
+  //   «правка карточки · город» — какой стал, неизвестно.
+  //
+  // Данные для всего этого в журнале УЖЕ ЛЕЖАЛИ — их просто не
+  // разбирали при показе.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      await j('PATCH', `/platform/clients/${cl.id}`, { city: 'Шымкент' }, SUPER);
+      await j('POST', `/platform/funnel/${cl.id}`, { stage: 'paid' }, SUPER);
+      await j('POST', '/platform/price-book', { base: 7900 }, SUPER);
+
+      v = await j('GET', '/platform/audit?limit=20', null, SUPER);
+      const rows = v.d?.rows ?? [];
+
+      const card = rows.find((r) => r.action === 'card_updated');
+      ok(/Шымкент/.test(card?.detail ?? ''),
+         `★ Правка карточки называет НОВОЕ значение: ${card?.detail}`);
+
+      const move = rows.find((r) => r.action === 'funnel_moved');
+      ok(/Оплатил/.test(move?.detail ?? ''),
+         `★ Этап в журнале словами, а не кодом: ${move?.detail}`);
+
+      const price = rows.find((r) => r.action === 'price_book_changed');
+      ok(/7900/.test(price?.detail ?? ''),
+         `★ Правка цен называет новую цену: ${price?.detail}`);
+    }
+  }
+
   // ── ПАРТНЁР УЗНАЁТ, ЧТО ЕГО ОПЛАТУ ПОДТВЕРДИЛИ ─────────────────
   //
   // Дописано после сверки пути партнёра. Лента у нас — ОЧЕРЕДЬ
