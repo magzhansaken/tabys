@@ -65,7 +65,23 @@ export class PlatformService {
     // Одинаковый ответ на «нет такого» и «неверный пароль»: иначе по
     // разнице ответов подбирают существующие адреса.
     const ok = u && await bcrypt.compare(String(password ?? ''), u.password_hash);
-    if (!ok) throw new UnauthorizedException('Неверная почта или пароль');
+    if (!ok) {
+      // НЕУДАЧНАЯ ПОПЫТКА — В ЖУРНАЛ. Подбор пароля к панели, где все
+      // деньги платформы, проходил молча: владелец узнал бы об этом
+      // только когда вход УДАЛСЯ, то есть поздно.
+      //
+      // Успешный вход не пишем: он бывает по десять раз в день и
+      // засорит след. Неудачный — редкость, и каждый стоит записи.
+      //
+      // Ошибку записи глотаем: журнал не должен мешать отказу во
+      // входе, иначе его падение откроет дверь.
+      await this.q(
+        `INSERT INTO platform_audit (actor_id, actor_name, action, account_id, details)
+         VALUES (NULL, $1, 'login_failed', NULL, $2)`,
+        [String(email ?? '').trim().slice(0, 80) || 'без почты',
+         JSON.stringify({ known: !!u })]).catch(() => {});
+      throw new UnauthorizedException('Неверная почта или пароль');
+    }
     if (!u.is_active) throw new ForbiddenException('Доступ отключён владельцем платформы');
 
     await this.q(`UPDATE platform_user SET last_login_at = now() WHERE id = $1`, [u.id]);

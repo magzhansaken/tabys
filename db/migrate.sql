@@ -231,5 +231,8 @@
 \echo '--- 085 заметка о клиенте ---'
 \i db/migrations/085_client_note.sql
 
+\echo '--- 086 неудачный вход в журнал ---'
+\i db/migrations/086_login_failed.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
