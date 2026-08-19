@@ -187,16 +187,22 @@ export class BillingService {
 
     const set = (await this.db.raw(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
 
-    // Строки счёта. Если их нет — показываем сам тариф одной строкой:
-    // человек всё равно должен видеть, за что платит.
+    // Счёт СТРОКАМИ ЦЕЛИКОМ, включая тариф.
+    //
+    // Замысел был верный — «нет строк, покажем тариф». Но условие
+    // срабатывало, только когда строк НЕТ ВОВСЕ. Стоило появиться
+    // доплате за вторую кассу — и тариф пропадал: клиент видел
+    // «К оплате 9 900 ₸», а в составе одну «Кассу №2 — 3 000 ₸».
+    //
+    // Теперь основа приходит из базы всегда: своя строка, если она
+    // заведена, иначе тариф подписки. Сумма строк равна итогу.
     const lines = (await this.db.raw(
-      `SELECT kind, title, qty, unit_price FROM plan_line
-        WHERE account_id = $1 AND ends_at IS NULL ORDER BY
-          CASE kind WHEN 'base' THEN 1 WHEN 'pos' THEN 2 WHEN 'store' THEN 3
-                    WHEN 'module' THEN 4 ELSE 5 END`, [accountId])).rows
-      .map((r: any) => ({ kind: r.kind, title: r.title, qty: Number(r.qty),
-                          price: Math.round(Number(r.unit_price) / 100),
-                          sum: Math.round(Number(r.unit_price) * Number(r.qty) / 100) }));
+      `SELECT * FROM platform_bill_lines($1)`, [accountId])).rows
+      .map((r: any) => ({
+        kind: r.kind, title: r.title, qty: Number(r.qty),
+        price: Math.round(Number(r.unit_price) / 100),
+        sum: Math.round(Number(r.unit_price) * Number(r.qty) / 100),
+      }));
 
     // Счёт берём у БАЗЫ, из той же функции, что и панель платформы.
     //

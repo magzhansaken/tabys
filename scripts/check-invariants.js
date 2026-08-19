@@ -789,6 +789,9 @@ const RULES = [
   { file: 'server/src/billing/billing.service.ts', must: 'SELECT platform_monthly($1) AS m',
     why: 'Кабинет клиента считал счёт по-своему: панель показывала 9 900, а клиент видел 3 000 и платил по ним' },
 
+  { file: 'db/migrations/080_base_line_shown.sql', must: 'счёт объясняет сам себя',
+    why: 'Клиент видел «К оплате 9 900 ₸», а в составе одну «Кассу №2 — 3 000 ₸»: тариф не был строкой' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

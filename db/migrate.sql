@@ -207,5 +207,8 @@
 \echo '--- 079 кто отметил оплату ---'
 \i db/migrations/079_who_declared.sql
 
+\echo '--- 080 счёт объясняет сам себя ---'
+\i db/migrations/080_base_line_shown.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
