@@ -95,7 +95,7 @@ export default function Settings({ me }: { me: Me }) {
                 устройство, и оно вернее: поправил одну строку — она
                 ушла. Общая форма заставляет помнить, что ты что-то
                 менял, и уйти с неё, не нажав, значит потерять правку. */}
-            <InlineText value={String(prices[k] ?? 0)} label={`${title}, ₸ в месяц`} mono
+            <InlineText value={String(prices[k] ?? 0)} label={`${title}, ₸ в месяц`} mono numeric
               onSave={async (v) => {
                 const n = Number(String(v).replace(/[^\d-]/g, ''));
                 if (!Number.isFinite(n) || n < 0) {
@@ -186,7 +186,7 @@ export default function Settings({ me }: { me: Me }) {
           </label>
 
           <label>Номер для перевода
-            <input value={pay.payPhone ?? ''} placeholder="+7 777 777 77 77"
+            <input value={pay.payPhone ?? ''} placeholder="+7 777 777 77 77" inputMode="tel"
               onChange={(e) => setPay({ ...pay, payPhone: e.target.value })} />
             {/* Отдельным полем, а не в общем тексте: строку целиком
                 человек копирует и вставляет в поле номера — перевод не

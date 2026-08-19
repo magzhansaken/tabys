@@ -749,6 +749,9 @@ const RULES = [
   { file: 'admin/app/platform/style/admin.css', must: 'max-height: 92dvh',
     why: 'Лист подтверждения при поднятой клавиатуре уходил низом под неё: 92vh считались от полного экрана' },
 
+  { file: 'admin/app/platform/ui/InlineText.tsx', must: "inputMode={numeric ? 'numeric' : undefined}",
+    why: 'Цену и количество правят в ячейке: без этого на телефоне открывалась буквенная клавиатура' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

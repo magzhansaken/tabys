@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-export function InlineText({ value, label, placeholder, mono, disabled, onSave }: {
+export function InlineText({ value, label, placeholder, mono, disabled, numeric, onSave }: {
   value: string;
   label?: string;
   placeholder?: string;
@@ -19,6 +19,8 @@ export function InlineText({ value, label, placeholder, mono, disabled, onSave }
   mono?: boolean;
   disabled?: boolean;
   onSave: (v: string) => void | Promise<void>;
+  /** Число: на телефоне откроется цифровая клавиатура, а не буквы. */
+  numeric?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -54,6 +56,11 @@ export function InlineText({ value, label, placeholder, mono, disabled, onSave }
     <input
       ref={ref}
       className={`cell-input inline-input ${mono ? 'inline-mono' : ''}`}
+      /* Цену и количество правят В ЯЧЕЙКЕ. Без этого на телефоне
+         открывалась буквенная клавиатура, и цифры приходилось искать
+         через переключение — при правке цены это лишний шаг там, где
+         человек и так осторожничает. */
+      inputMode={numeric ? 'numeric' : undefined}
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}

@@ -157,7 +157,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
                 {/* Цена правится в ячейке: у них раньше это было
                     системное окошко, где «восемь тысяч» молча
                     превращалось в ноль. */}
-                <InlineText value={String(Math.abs(l.price))} label="Цена"
+                <InlineText value={String(Math.abs(l.price))} label="Цена" numeric
                   onSave={(v) => {
                     const n = Number(v);
                     if (!Number.isFinite(n)) { toast({ text: 'Нужно число', kind: 'err' }); return; }
@@ -165,7 +165,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
                   }} />
               </td>
               <td className="num">
-                <InlineText value={String(l.qty ?? 1)} label="Количество"
+                <InlineText value={String(l.qty ?? 1)} label="Количество" numeric
                   onSave={(v) => {
                     const n = Number(v);
                     if (!Number.isFinite(n) || n < 1) { toast({ text: 'Нужно число', kind: 'err' }); return; }

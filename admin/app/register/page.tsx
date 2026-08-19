@@ -54,7 +54,7 @@ export default function RegisterPage() {
       {step === 1 ? (
         <>
           <label style={lbl}>Номер телефона</label>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+77011234567" style={inp} />
+          <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+77011234567" style={inp} />
           {err && <div style={{ color: '#c00', fontSize: 13, marginBottom: 10 }}>{err}</div>}
           <button onClick={sendCode} disabled={busy}
                   style={{ width: '100%', padding: 11, background: '#0a7', color: '#fff', border: 0, borderRadius: 8, fontSize: 15, cursor: 'pointer' }}>
