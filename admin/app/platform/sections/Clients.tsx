@@ -457,7 +457,7 @@ export default function Clients({ me }: { me: Me }) {
                           } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
                         } },
 
-                      { label: 'Новый пароль владельцу',
+                      { label: 'Новый пароль',
                         hint: 'показан один раз — продиктуйте',
                         onClick: async () => {
                           try {
@@ -474,17 +474,17 @@ export default function Clients({ me }: { me: Me }) {
                       // деньги не меняет. Владельцу этот пункт не
                       // нужен, он решает напрямую.
                       ...(!isSuper ? [{
-                        label: 'Запросить у платформы…',
+                        label: 'Запросить…',
                         hint: 'устройство, тариф или отсрочку',
                         onClick: () => setAsking(r),
                       }] : []),
 
-                      ...(isSuper ? [{ label: 'Добавить устройство…',
+                      ...(isSuper ? [{ label: 'Добавить кассу…',
                         hint: 'касса или точка, с доплатой',
                         onClick: () => addDevice(r) }] : []),
 
                       ...(isSuper ? [{
-                        label: r.partner ? 'Передать другому партнёру…' : 'Назначить партнёра…',
+                        label: r.partner ? 'Сменить партнёра…' : 'Назначить партнёра…',
                         hint: 'доля считается с будущих оплат',
                         onClick: () => assign(r, data.partners),
                       }] : []),

@@ -61,9 +61,17 @@ export function RowMenu({ actions, label = 'Ещё', showLabel }: {
     if (!btn) return;
     const r = btn.getBoundingClientRect();
     const width = 240;
-    // 44 — высота пункта под палец, та же, что в CSS. Разойдутся —
-    // разворот вверх посчитается неверно, и меню упрётся в край.
-    const height = Math.min(actions.length * 44 + 12, 320);
+    // 44 — высота пункта под палец, та же, что в CSS.
+    //
+    // Предел был 320, и это ВРАЛО: восемь пунктов дают 364, разворот
+    // считался по 320, и последний пункт уезжал за край экрана. В
+    // клиентах последний — «Удалить магазин…».
+    //
+    // Теперь предел считается от экрана, а список умеет прокручиваться
+    // (см. .rowmenu-list в стилях): меню не бывает выше того, что
+    // видно, и ничего не теряется.
+    const room = Math.max(200, window.innerHeight - 24);
+    const height = Math.min(actions.length * 44 + 12, room);
     const below = window.innerHeight - r.bottom;
     // Снизу мало места — разворачиваем вверх.
     const top = below < height + 12 ? r.top - height - 6 : r.bottom + 6;

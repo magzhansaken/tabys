@@ -684,13 +684,24 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius-md); box-shadow: var(--shadow-3);
   display: flex; flex-direction: column; gap: 2px;
+  /* Прокрутка: восемь пунктов не всегда влезают в экран телефона, а
+     терять последний нельзя — там «Удалить магазин…». */
+  max-height: calc(100dvh - 24px); overflow-y: auto;
 }
 .rowmenu-list button {
   display: block; width: 100%; text-align: left; border: 0; background: none;
   color: var(--ink); min-height: 38px; padding: 0 10px; border-radius: 7px; font-size: var(--text-14);
 }
 .rowmenu-list button:hover { background: var(--surface-sunk); }
-.rowmenu-list button.danger { color: var(--danger-strong); }
+/* Черта перед опасным пунктом. «Отключить магазин» и «Удалить
+   магазин…» стоят рядом: без разделителя палец соскальзывает с одного
+   на другое, а последствия разные — заморозка и потеря навсегда. */
+.rowmenu-list button.danger {
+  color: var(--danger-strong);
+  margin-top: 6px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+}
 .rowmenu-list button.danger:hover { background: var(--danger-quiet); }
 
 /* Партнёр: сколько он приносит — рядом с фильтром по нему */

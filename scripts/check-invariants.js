@@ -838,6 +838,11 @@ const RULES = [
   { file: 'db/migrations/087_partner_ranking.sql', must: 'ЧУЖИЕ ИМЕНА СКРЫТЫ',
     why: 'Партнёр видит место и отставание, но не знает, у кого переманивать клиентов' },
 
+  { file: 'admin/app/platform/ui/RowMenu.tsx', must: 'const room = Math.max(200, window.innerHeight - 24)',
+    why: 'Предел 320 врал: восемь пунктов дают 364, и «Удалить магазин» уезжало за край экрана' },
+  { file: 'admin/app/platform/style/admin.css', must: 'Черта перед опасным пунктом',
+    why: '«Отключить» и «Удалить» стоят рядом, а последствия разные: заморозка и потеря навсегда' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
