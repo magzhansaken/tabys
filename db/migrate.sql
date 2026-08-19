@@ -201,5 +201,8 @@
 \echo '--- 077 один список этапов воронки ---'
 \i db/migrations/077_stage_list.sql
 
+\echo '--- 078 разрывы в графике ---'
+\i db/migrations/078_series_gaps.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

@@ -719,6 +719,11 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'Доля — целое число процентов',
     why: '15,7% даёт копейки, которые не сходятся при переводе, и человек не понимает разницу в тиынах' },
 
+  { file: 'db/migrations/078_series_gaps.sql', must: 'ПУСТОТУ НЕ ПРЯЧЕМ ЗА НОЛЬ',
+    why: 'День без снимка показывался нулём, и график падал в пол — человек видел обвал дохода, которого не было' },
+  { file: 'server/src/platform/platform.module.ts', must: 'const ALLOWED = [7, 30, 90]',
+    why: '«days=abc» роняло сервер, «days=9999» давало год на одном экране, где ничего не разобрать' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

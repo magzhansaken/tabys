@@ -1045,6 +1045,13 @@ export class PlatformService {
    * снимка нет. Дыра портит счётчики клиентов, но не деньги.
    */
   async metrics(ctx: PlatformCtx, days = 30) {
+    // Период приводим к одному из трёх, которые есть в кабинете.
+    // «abc» роняло сервер: Number('abc') давало «не число», и оно
+    // доходило до запроса. «9999» давало график из 365 точек — год на
+    // одном экране, где ничего не разобрать.
+    const ALLOWED = [7, 30, 90];
+    const asked = Math.round(Number(days));
+    days = ALLOWED.includes(asked) ? asked : 30;
 
     // Срез пишется ДВУМЯ путями, и это не лишнее.
     //
@@ -1063,15 +1070,37 @@ export class PlatformService {
 
     const rows = (await this.q(`SELECT * FROM platform_summary_series($1)`, [n])).rows;
 
-    const series = rows.map((r: any) => ({
-      day: r.day,
-      tenants: Number(r.tenants), active: Number(r.active),
-      trial: Number(r.trial), expired: Number(r.expired),
-      mrr: money(Number(r.mrr)),
-      payments: Number(r.paid_count),
-      amount: money(Number(r.paid_amount)),
-      partnerShare: money(Number(r.partner_share)),
-    }));
+    // День без снимка берёт значение ПРЕДЫДУЩЕГО дня, а не ноль.
+    //
+    // Снимок пишется, когда открывают панель или в 03:00 планировщиком.
+    // Если и того и другого не было — дня в истории нет, и график
+    // падал в пол: «30 июля 6 900 ₸, 31 июля 0 ₸». Человек видел обвал
+    // и шёл разбираться, что случилось, — а клиенты никуда не девались
+    // и деньги шли.
+    //
+    // ПОВТОРЯЕМ только СОСТОЯНИЕ (сколько клиентов, какой доход): оно
+    // и вправду не менялось. Приход денег за день НЕ повторяем — его
+    // не было, и ноль тут честен.
+    let carried: any = null;
+    const series = rows.map((r: any) => {
+      const empty = r.tenants == null;
+      const point = {
+        day: r.day,
+        tenants: empty && carried ? carried.tenants : Number(r.tenants ?? 0),
+        active:  empty && carried ? carried.active  : Number(r.active ?? 0),
+        trial:   empty && carried ? carried.trial   : Number(r.trial ?? 0),
+        expired: empty && carried ? carried.expired : Number(r.expired ?? 0),
+        mrr:     empty && carried ? carried.mrr     : money(Number(r.mrr ?? 0)),
+        // Деньги за день не повторяем: их не было.
+        payments: Number(r.paid_count ?? 0),
+        amount: money(Number(r.paid_amount ?? 0)),
+        partnerShare: money(Number(r.partner_share ?? 0)),
+        /** День без снимка: значение взято у предыдущего. */
+        filled: empty && !!carried,
+      };
+      if (!empty) carried = point;
+      return point;
+    });
 
     const sum = (k: string) => series.reduce((a: number, d: any) => a + d[k], 0);
     const last: any = series[series.length - 1] ?? {};
