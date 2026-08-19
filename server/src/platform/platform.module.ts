@@ -1136,7 +1136,36 @@ export class PlatformService {
   }
 
   // ── ВОРОНКА И КАРТОЧКА ──────────────────────────────────────────────
+  /**
+   * Правка карточки клиента.
+   *
+   * ПРОВЕРКИ ТЕ ЖЕ, ЧТО ПРИ ЗАВЕДЕНИИ. Без них можно было испортить
+   * правкой то, что не пропустили при создании: стереть название,
+   * вписать телефон буквами (а по нему владелец входит в кабинет),
+   * растянуть имя на двести знаков и разорвать таблицу.
+   */
   async updateCard(ctx: PlatformCtx, accountId: string, d: any) {
+    if (d.name != null) {
+      const n = String(d.name).trim();
+      if (!n) throw new BadRequestException('Название не может быть пустым');
+      if (n.length > 80)
+        throw new BadRequestException('Название длиннее 80 знаков — сократите');
+      d = { ...d, name: n };
+    }
+    if (d.ownerPhone != null && String(d.ownerPhone).trim() !== '') {
+      const digits = String(d.ownerPhone).replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15)
+        throw new BadRequestException(
+          'Телефон владельца непохож на номер — по нему он входит в кабинет');
+    }
+    for (const [key, label, max] of [
+      ['city', 'Город', 60], ['ownerName', 'Имя владельца', 80],
+      ['dealNote', 'Заметка', 500],
+    ] as const) {
+      if (d[key] != null && String(d[key]).length > max)
+        throw new BadRequestException(`${label}: не длиннее ${max} знаков`);
+    }
+
     if (ctx.role === 'partner') {
       const own = (await this.q(
         `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
@@ -1264,9 +1293,34 @@ export class PlatformService {
    */
   async createTenant(ctx: PlatformCtx, d: {
     name: string; ownerName: string; ownerPhone: string; city?: string; trialDays?: number;
+    /** Учебный магазин: ему срок не нужен, он не продаётся. */
+    isDemo?: boolean;
   }) {
-    if (!d.name?.trim()) throw new BadRequestException('Укажите название магазина');
-    if (!d.ownerPhone?.trim()) throw new BadRequestException('Укажите телефон владельца');
+    const name = String(d.name ?? '').trim();
+    if (!name) throw new BadRequestException('Укажите название магазина');
+    // Длина: имя выводится в таблице, в ленте, в листах подтверждения
+    // и в чужих кабинетах. Двести знаков разрывают строку везде разом.
+    if (name.length > 80)
+      throw new BadRequestException('Название длиннее 80 знаков — сократите');
+
+    const phone = String(d.ownerPhone ?? '').trim();
+    if (!phone) throw new BadRequestException('Укажите телефон владельца');
+    // Телефон — это ВХОД владельца. «не телефон» и «+7701» принимались
+    // молча, магазин заводился, а войти по такому нельзя: человек
+    // получал доступ, которым не может воспользоваться.
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15)
+      throw new BadRequestException(
+        'Телефон владельца непохож на номер — по нему он будет входить в кабинет');
+
+    // Пробный период: отрицательный кончается до начала, а десять лет
+    // это не пробный, а бесплатный навсегда.
+    //
+    // Учебный магазин — исключение: ему десять лет дают НАРОЧНО. Он не
+    // продаётся, на нём показывают систему, и срок ему не нужен.
+    const trial = Number(d.trialDays ?? 14);
+    if (!Number.isFinite(trial) || trial < 1 || (trial > 90 && !d.isDemo))
+      throw new BadRequestException('Пробный период — от 1 до 90 дней');
 
     const dup = (await this.q(
       `SELECT id, name FROM platform_find_by_phone($1)`, [d.ownerPhone])).rows[0];
@@ -1281,8 +1335,8 @@ export class PlatformService {
     // момент стоит в магазине.
     const made = (await this.q(
       `SELECT * FROM platform_create_tenant($1,$2,$3,$4,$5,$6)`,
-      [d.name.trim(), d.ownerPhone.trim(), d.ownerName?.trim() ?? 'Владелец',
-       await bcrypt.hash(pass, 10), Math.max(1, Math.floor(Number(d.trialDays ?? 14))),
+      [name, phone, d.ownerName?.trim() || 'Владелец',
+       await bcrypt.hash(pass, 10), Math.floor(trial),
        ctx.role === 'partner' ? ctx.userId : null])).rows[0];
     const acc = { id: made.out_account };
 
@@ -1487,7 +1541,7 @@ export class PlatformService {
 
     const r = await this.createTenant(ctx, {
       name, ownerName: ctx.name, ownerPhone: '+7700' + Math.floor(1000000 + Math.random() * 8999999),
-      trialDays: 3650,
+      trialDays: 3650, isDemo: true,
     });
     await this.q(
       `UPDATE tenant_card SET is_demo = true, partner_id = coalesce($2, partner_id)
