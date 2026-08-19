@@ -1828,15 +1828,40 @@ export class PlatformService {
     before?: string; accountId?: string; actorId?: string;
     weight?: string; limit?: number;
   } = {}) {
+    // Всё, что приходит из адреса, — ТЕКСТ. «limit=abc» и «before=abc»
+    // роняли сервер: Number давал «не число», и оно доходило до
+    // запроса. Приводим здесь, а не надеемся на кабинет: адрес
+    // человек может набрать и руками.
+    const num = (v: any, def: number) => {
+      const n = Math.floor(Number(v));
+      return Number.isFinite(n) ? n : def;
+    };
+    const limit = Math.min(200, Math.max(1, num(opts.limit, 50)));
+
+    // Курсор — ПОРЯДКОВЫЙ НОМЕР, а не время: массовое действие пишет
+    // несколько записей одним мгновением, и листание по времени
+    // пропускало все, кроме первой.
+    const before = opts.before == null || opts.before === ''
+      ? null
+      : (Number.isFinite(Math.floor(Number(opts.before)))
+          ? Math.floor(Number(opts.before)) : null);
+
+    // Ключи людей и магазинов должны быть ключами, иначе запрос падает
+    // на разборе. Непохожее просто пропускаем: пусть покажет всё, чем
+    // упадёт с невнятной ошибкой.
+    const uuid = (v: any) =>
+      typeof v === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+        ? v : null;
+
+    const WEIGHTS = ['money', 'access', 'other'];
+    const weight = WEIGHTS.includes(String(opts.weight)) ? opts.weight : null;
+
     const rows = (await this.q(
       `SELECT * FROM platform_journal($1,$2,$3,$4,$5,$6,$7)`,
-      [ctx.role, ctx.userId,
-       // Курсор — ПОРЯДКОВЫЙ НОМЕР, а не время: массовое действие
-       // пишет несколько записей одним мгновением, и листание по
-       // времени пропускало все, кроме первой.
-       opts.before ? Number(opts.before) : null,
-       opts.accountId || null, opts.actorId || null,
-       opts.weight || null, Math.min(200, Math.max(1, Number(opts.limit ?? 50)))])).rows;
+      [ctx.role, ctx.userId, before,
+       uuid(opts.accountId), uuid(opts.actorId),
+       weight, limit])).rows;
 
     return {
       rows: rows.map((r: any) => ({

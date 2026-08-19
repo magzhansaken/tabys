@@ -724,6 +724,11 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'const ALLOWED = [7, 30, 90]',
     why: '«days=abc» роняло сервер, «days=9999» давало год на одном экране, где ничего не разобрать' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'Всё, что приходит из адреса, — ТЕКСТ',
+    why: '«limit=abc» и «before=abc» роняли сервер: адрес человек может набрать руками, приводить надо здесь' },
+  { file: 'server/test/part46.platform.e2e.js', must: '★ Мусор в адресе журнала не роняет сервер',
+    why: 'Девять видов мусора в отборе проверяются разом: каждый из них клал сервер или падал на разборе' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

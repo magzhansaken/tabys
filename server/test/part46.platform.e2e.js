@@ -948,6 +948,37 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ЖУРНАЛ: МУСОР В АДРЕСЕ НЕ РОНЯЕТ СЕРВЕР ─────────────────────
+  //
+  // Дописано после сверки. «limit=abc» и «before=abc» роняли сервер:
+  // Number давал «не число», и оно доходило до запроса. Ключ человека
+  // «непохоже-на-ключ» падал на разборе.
+  //
+  // Всё, что приходит из адреса, — ТЕКСТ, и человек может набрать его
+  // руками. Приводим на сервере, а не надеемся на кабинет.
+  {
+    const junk = [
+      'limit=0', 'limit=-5', 'limit=99999', 'limit=abc',
+      'before=abc', 'before=-1',
+      'weight=' + encodeURIComponent('выдуманный'),
+      'actorId=' + encodeURIComponent('непохоже-на-ключ'),
+      'accountId=' + encodeURIComponent('мусор'),
+    ];
+    let alive = 0;
+    for (const q of junk) {
+      const v = await j('GET', `/platform/audit?${q}`, null, SUPER);
+      if (v.status === 200 && Array.isArray(v.d?.rows)) alive++;
+    }
+    ok(alive === junk.length,
+       `★ Мусор в адресе журнала не роняет сервер: ${alive} из ${junk.length}`);
+
+    // Предел строк соблюдается: без него можно попросить сто тысяч
+    // записей разом и подвесить и сервер, и кабинет.
+    const v = await j('GET', '/platform/audit?limit=99999', null, SUPER);
+    ok((v.d?.rows ?? []).length <= 200,
+       `★ Больше 200 записей за раз не отдаётся: пришло ${v.d?.rows?.length}`);
+  }
+
   // ── СВОДКА: ПЕРИОДЫ И РАЗРЫВЫ В ГРАФИКЕ ─────────────────────────
   //
   // Дописано после сверки. «days=abc» роняло сервер, «days=9999» давало
