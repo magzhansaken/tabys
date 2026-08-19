@@ -587,6 +587,8 @@ export class BillingController {
   @Get('access') @RequirePermission('billing', 'view')
   access(@Ctx() ctx: EmployeeContext) { return this.bill.access(ctx.accountId); }
 
+
+
   @Post('subscribe') @RequirePermission('billing', 'edit')
   subscribe(@Ctx() ctx: EmployeeContext, @Body() d: { tariffCode: string; stores?: number }) {
     return this.bill.subscribe(ctx.accountId, d.tariffCode, d.stores ?? 1);

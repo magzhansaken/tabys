@@ -22,12 +22,18 @@ export default function BillingPage() {
   const [payAmount, setPayAmount] = useState('');
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
+  const [sub, setSub] = useState<any>(null);
 
   const load = async () => {
     try {
       setAccess(await api('/billing/access'));
       setTariffs(await api('/billing/tariffs'));
       setHistory(await api('/billing/history'));
+      // КУДА ПЛАТИТЬ. Сервер это отдавал всегда, а страница не
+      // спрашивала: владелец магазина открывал «Подписку» и не видел
+      // ни реквизитов, ни суммы — платить было некуда, и он звонил
+      // партнёру спрашивать номер.
+      setSub(await api('/billing/subscription'));
     } catch (e: any) { setErr(e.message); }
   };
   useEffect(() => { setErr(''); load(); }, []);
@@ -50,6 +56,56 @@ export default function BillingPage() {
       <PageHeader title="Подписка" fact={fact} />
       <ErrLine err={err} />
       {msg && <div style={{ color: C.accentDark, fontSize: 13, margin: '8px 0' }}>{msg}</div>}
+
+      {/* КУДА ПЛАТИТЬ — первым блоком. Человек заходит сюда с одним
+          вопросом: «куда перевести деньги». Держать ответ под
+          тарифами и историей значит заставлять его листать. */}
+      {sub?.pay && (sub.pay.url || sub.pay.qr || sub.pay.phone) && (
+        <Card>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Куда платить</div>
+          <div style={{ fontSize: 13, color: C.dim, marginBottom: 10 }}>
+            К оплате {money(sub.monthly)}/мес
+            {sub.state?.paidUntil
+              ? ` · оплачено до ${new Date(sub.state.paidUntil).toLocaleDateString('ru-RU')}`
+              : ''}
+          </div>
+
+          {sub.pay.url && (
+            <a href={sub.pay.url} target="_blank" rel="noreferrer"
+              style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 8,
+                background: C.accent, color: '#fff', fontWeight: 600, marginBottom: 10 }}>
+              Оплатить {money(sub.monthly)}
+            </a>
+          )}
+
+          {sub.pay.qr && (
+            <div style={{ marginBottom: 10 }}>
+              <img src={sub.pay.qr} alt="QR для оплаты"
+                style={{ width: 160, height: 160, objectFit: 'contain' }} />
+            </div>
+          )}
+
+          {/* Перевод руками: показываем каждое поле ОТДЕЛЬНО. Слитую
+              строку человек копирует целиком и вставляет в поле
+              номера — перевод не проходит. */}
+          {(sub.pay.name || sub.pay.phone || sub.pay.note) && (
+            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+              {sub.pay.name && <div>Получатель: <b>{sub.pay.name}</b></div>}
+              {sub.pay.phone && <div>Перевод на: <b>{sub.pay.phone}</b></div>}
+              {sub.pay.note && <div>В комментарии: <b>{sub.pay.note}</b></div>}
+            </div>
+          )}
+
+          {sub.periods?.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 13, color: C.dim }}>
+              Выгоднее вперёд:{' '}
+              {sub.periods.filter((x: any) => x.percent > 0)
+                .map((x: any) => `${x.months} мес. — ${money(x.amount)} (−${x.percent}%)`)
+                .join(' · ') || 'скидок за срок нет'}
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card>
         {access ? (
