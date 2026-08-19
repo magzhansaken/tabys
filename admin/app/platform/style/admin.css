@@ -679,7 +679,12 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
    воронке на телефоне это единственный способ переставить карточку. */
 .rowmenu-x.with-label { min-width: auto; font-size: var(--text-13); letter-spacing: normal; padding: 0 12px; }
 .rowmenu-list {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: var(--z-sticky);
+  /* fixed, а НЕ absolute. Место считается по getBoundingClientRect —
+     это отступ от верха ВИДИМОЙ части экрана. А absolute отсчитывает
+     от верха ВСЕЙ страницы: пока не прокручено, совпадает, но стоит
+     прокрутить на 500 точек — и меню появляется на 500 выше пальца,
+     за верхним краем. Начинка «уходит куда-то вверх». */
+  position: fixed; z-index: var(--z-sheet);
   min-width: 220px; padding: 6px; text-align: left;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius-md); box-shadow: var(--shadow-3);
