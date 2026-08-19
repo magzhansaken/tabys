@@ -228,5 +228,8 @@
 \echo '--- 085 кто решил заявку ---'
 \i db/migrations/085_request_decider.sql
 
+\echo '--- 085 заметка о клиенте ---'
+\i db/migrations/085_client_note.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

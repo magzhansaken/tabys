@@ -813,6 +813,9 @@ const RULES = [
   { file: 'db/migrations/085_request_decider.sql', must: 'кто решил заявку',
     why: 'Партнёр получил отказ и не знал, к кому идти переспрашивать: поле было, но не доходило' },
 
+  { file: 'admin/app/platform/sections/TenantCard.tsx', must: 'О клиенте: {data.note}',
+    why: 'Заметка о клиенте писалась в базу и нигде не показывалась — человек записывал важное и терял' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

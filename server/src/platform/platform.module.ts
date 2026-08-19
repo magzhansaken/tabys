@@ -1413,6 +1413,11 @@ export class PlatformService {
       tariff: c.tariff_name,
       partnerPercent: Number(c.partner_bp ?? 0) / 100,
       dealStage: c.deal_stage, dealNote: c.deal_note, touchedAt: c.touched_at,
+      // Общая заметка о клиенте. Она ПИСАЛАСЬ И ПРОПАДАЛА: поле есть,
+      // правка его сохраняет, а прочитать было негде. Человек
+      // записывал «владелец глухой на левое ухо, звонить громче» — и
+      // никто этого не видел.
+      note: c.note,
       paidUntil: c.paid_until, daysLeft: days,
       revenue30d: Math.round(Number(c.revenue_30d)),
       stores: Number(c.stores), registers: Number(c.registers),

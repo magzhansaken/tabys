@@ -169,7 +169,13 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
         </div>
       )}
 
-      {data.dealNote && <p className="client-note">Заметка: {data.dealNote}</p>}
+      {/* ДВЕ РАЗНЫЕ ЗАМЕТКИ, и обе нужны.
+          О сделке — «позвонил, ждёт счёт до пятницы»: устаревает.
+          О клиенте — «владелец глухой на левое ухо, звонить громче»:
+          нужна всегда. Вторая писалась в базу и нигде не
+          показывалась — человек записывал важное и терял. */}
+      {data.dealNote && <p className="client-note">По сделке: {data.dealNote}</p>}
+      {data.note && <p className="client-note">О клиенте: {data.note}</p>}
 
       <div className="tabs" role="tablist">
         {([
