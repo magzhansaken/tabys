@@ -243,5 +243,8 @@
 \echo '--- 089 стирание по ссылкам ---'
 \i db/migrations/089_wipe_all.sql
 
+\echo '--- 090 рейтинг: при равенстве решают деньги ---'
+\i db/migrations/090_ranking_tie.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

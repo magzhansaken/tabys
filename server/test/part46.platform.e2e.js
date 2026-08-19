@@ -1805,10 +1805,22 @@ const shop = async (name, owner) => {
       ok(rows[0].place === 1 && rows[0].name,
          'Владелец платформы видит имена всех');
 
-      // Порядок: по числу платящих, по убыванию.
-      const paid = rows.map((r) => r.paid);
-      ok(paid.every((x, i) => i === 0 || paid[i - 1] >= x),
-         `★ Место по числу платящих: ${paid.join(' ≥ ')}`);
+      // Порядок по ТРЁМ ключам: платящие, потом клиенты, потом
+      // деньги. Третий добавлен нами: без него двое с равным числом
+      // клиентов вставали случайно, и приносящий больше был ниже.
+      const keys = rows.map((r) => [r.paid, r.clients, r.mrr ?? 0]);
+      const sorted = keys.every((k, i) => {
+        if (i === 0) return true;
+        const p = keys[i - 1];
+        for (let j = 0; j < 3; j++) {
+          if (p[j] > k[j]) return true;
+          if (p[j] < k[j]) return false;
+        }
+        return true;
+      });
+      ok(sorted,
+         `★ Порядок по платящим, клиентам и деньгам: ${
+           keys.map((k) => k.join('/')).join(' ≥ ')}`);
     }
 
     // ПАРТНЁР: свою строку видит с именем, чужие — только зверя.
