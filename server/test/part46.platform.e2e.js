@@ -948,6 +948,26 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ПРОЦЕНТ ДОЛИ ВИДЕН РЯДОМ С СУММОЙ ──────────────────────────
+  //
+  // Дописано после описи полей. У оплаты хранится доля партнёра на
+  // момент подтверждения — она заморожена. Но в кабинет не доходила.
+  //
+  // При споре «почему мне начислили 1 035, а не 2 070» ответить нечем:
+  // сумма верная, а объяснить её нельзя — сегодня в настройках может
+  // стоять 30%, и партнёр считает по ним.
+  {
+    const v = await j('GET', '/platform/payments?status=approved', null, SUPER);
+    const paid = (v.d?.rows ?? []).find((r) => r.partnerShare > 0);
+    ok(!paid || paid.partnerPercent > 0,
+       `★ Процент доли виден: ${paid?.partnerShare} ₸ (${paid?.partnerPercent}%)`);
+    if (paid) {
+      const calc = Math.round(paid.amount * paid.partnerPercent / 100);
+      ok(Math.abs(calc - paid.partnerShare) <= 1,
+         `★ Процент объясняет сумму: ${paid.amount} × ${paid.partnerPercent}% = ${calc}`);
+    }
+  }
+
   // ── ЗАПИСАВШЕМУСЯ С САЙТА ЕСТЬ КУДА ПОЗВОНИТЬ ──────────────────
   //
   // Дописано после сверки возможностей. Человек записался с сайта сам:

@@ -222,5 +222,8 @@
 \echo '--- 083 карточка записавшемуся с сайта ---'
 \i db/migrations/083_signup_card.sql
 
+\echo '--- 084 процент доли на момент оплаты ---'
+\i db/migrations/084_payment_percent.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

@@ -807,6 +807,9 @@ const RULES = [
   { file: 'server/src/auth/auth.service.ts', must: 'platform_ensure_card',
     why: 'Записавшийся с сайта оставался без карточки: позвонить ему было нечем, а он самый важный — пришёл сам' },
 
+  { file: 'db/migrations/084_payment_percent.sql', must: 'процент доли на момент оплаты',
+    why: 'При споре «почему 1 035, а не 2 070» ответить было нечем: доля заморожена, а показать её не показывали' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

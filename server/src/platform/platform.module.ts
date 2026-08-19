@@ -489,6 +489,11 @@ export class PlatformService {
         // заработал он; сколько осталось платформе — не его дело.
         platformShare: ctx.role === 'super'
           ? money(Number(r.platform_share)) : null,
+        // ПРОЦЕНТ НА МОМЕНТ ОПЛАТЫ. Он заморожен: если долю потом
+        // меняли, старая оплата хранит свой. Без него при споре
+        // «почему 1 035, а не 2 070» ответить нечем — сумма верная, а
+        // объяснить её нельзя.
+        partnerPercent: r.partner_bp == null ? null : Number(r.partner_bp) / 100,
         createdAt: r.created_at, approvedAt: r.approved_at,
         // Кто подтвердил: когда владельцев платформы несколько, вопрос
         // «кто это пропустил» возникает первым.

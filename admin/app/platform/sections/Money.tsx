@@ -216,6 +216,7 @@ export default function Money({ me }: { me: Me }) {
                   <span className="pay-note">
                     за {fullDate(p.periodFrom)} — {fullDate(p.periodTo)} ·
                     {' '}партнёру {money(p.partnerShare)}
+                    {p.partnerPercent ? ` (${p.partnerPercent}%)` : ''}
                     {p.platformShare != null && ` · платформе ${money(p.platformShare)}`}
                   </span>
                 )}
