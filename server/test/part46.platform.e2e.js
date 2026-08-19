@@ -947,6 +947,53 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── КРАЙНИЕ СУММЫ И СРОКИ ───────────────────────────────────────
+  //
+  // Дописано после сверки. Срок оплаты МОЛЧА ЧИНИЛСЯ: «0» и «−3»
+  // превращались в единицу, а «999» проходил — и подтверждение
+  // продлевало клиента до 2109 года.
+  //
+  // Молчаливая починка хуже отказа: человек уверен, что ввёл одно, а
+  // система записала другое, и узнает об этом через месяц.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      let blocked = 0;
+      for (const body of [
+        { amount: 6900, months: 0 }, { amount: 6900, months: -3 },
+        { amount: 6900, months: 999 }, { amount: 6900, months: 1.5 },
+        { amount: 1000000000, months: 1 },
+      ]) {
+        const r = await j('POST', '/platform/payments',
+          { accountId: cl.id, method: 'kaspi', ...body }, SUPER);
+        if (r.status === 400) blocked++;
+      }
+      ok(blocked === 5, `★ Крайние суммы и сроки отбиты: ${blocked} из 5`);
+
+      const r = await j('POST', '/platform/payments',
+        { accountId: cl.id, method: 'kaspi', amount: 6900, months: 12 }, SUPER);
+      ok(!!r.d?.id, '★ Обычная оплата на год проходит');
+
+      // Строки счёта: миллиард в строке делал счёт бессмысленным.
+      let n = 0;
+      for (const body of [
+        { kind: 'module', title: 'Минус', price: -5000 },
+        { kind: 'module', title: 'Много', price: 1000000000 },
+        { kind: 'module', title: 'М'.repeat(300), price: 1000 },
+        { kind: 'pos', title: 'Касса', price: 3000, qty: 0 },
+      ]) {
+        const x = await j('POST', `/platform/clients/${cl.id}/lines`, body, SUPER);
+        if (x.status === 400) n++;
+      }
+      ok(n === 4, `★ Крайние строки счёта отбиты: ${n} из 4`);
+
+      const ok1 = await j('POST', `/platform/clients/${cl.id}/lines`,
+        { kind: 'discount', title: 'Скидка за год', price: 500 }, SUPER);
+      ok(ok1.status < 300, '★ Скидка минусом разрешена — это её вид');
+    }
+  }
+
   // ── КРАЙНИЕ ЗНАЧЕНИЯ ПРИ ЗАВЕДЕНИИ И ПРАВКЕ ─────────────────────
   //
   // Дописано после сверки крайних состояний. Проходило молча:

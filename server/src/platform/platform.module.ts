@@ -272,9 +272,23 @@ export class PlatformService {
     accountId: string; amount: number; months?: number; method?: string; comment?: string;
   }) {
     if (!d.accountId) throw new BadRequestException('Выберите клиента');
+
     const amount = Math.round(Number(d.amount) * 100);          // тенге → тиыны
-    if (!(amount > 0)) throw new BadRequestException('Сумма должна быть больше нуля');
-    const months = Math.max(1, Math.floor(Number(d.months ?? 1)));
+    if (!Number.isFinite(amount) || amount <= 0)
+      throw new BadRequestException('Сумма должна быть больше нуля');
+    // Верхний предел — от опечатки: 69 000 с лишними нулями это
+    // 69 миллионов, и такая оплата продлит клиента молча.
+    if (amount > 100_000_000_00)
+      throw new BadRequestException(
+        'Сумма больше ста миллионов — проверьте, не лишние ли нули');
+
+    // Месяцы РАНЬШЕ МОЛЧА ЧИНИЛИСЬ: Math.max(1, …) превращал «0» и
+    // «−3» в единицу, а «999» пропускал — и подтверждение продлевало
+    // клиента до 2109 года. Молчаливая починка хуже отказа: человек
+    // уверен, что ввёл одно, а система записала другое.
+    const months = Number(d.months ?? 1);
+    if (!Number.isInteger(months) || months < 1 || months > 36)
+      throw new BadRequestException('Срок оплаты — от 1 до 36 месяцев');
 
     // Партнёр может отметить оплату только своему клиенту.
     if (ctx.role === 'partner') {
@@ -626,7 +640,29 @@ export class PlatformService {
     kind: string; title: string; qty?: number; price: number;
   }) {
     if (ctx.role !== 'super') throw new ForbiddenException('Цены назначает владелец платформы');
-    if (!d.title?.trim()) throw new BadRequestException('Назовите строку: «Касса №2», «Скидка за год»');
+    const title = String(d.title ?? '').trim();
+    if (!title) throw new BadRequestException('Назовите строку: «Касса №2», «Скидка за год»');
+    // Название видно в счёте клиента и в его кабинете: триста знаков
+    // разорвут строку у обоих.
+    if (title.length > 60)
+      throw new BadRequestException('Название строки длиннее 60 знаков — сократите');
+
+    // Цена. Отрицательная у обычной строки — это скидка наоборот:
+    // счёт уменьшается, а человек думал, что добавляет плату.
+    // Миллиард — опечатка, после которой счёт клиента теряет смысл.
+    const asked = Number(d.price);
+    if (!Number.isFinite(asked))
+      throw new BadRequestException('Цена строки — число');
+    if (d.kind !== 'discount' && asked < 0)
+      throw new BadRequestException(
+        'Отрицательная цена бывает только у скидки — выберите вид «Скидка»');
+    if (Math.abs(asked) > 10_000_000)
+      throw new BadRequestException(
+        'Цена больше десяти миллионов — проверьте, не лишние ли нули');
+
+    const qty = Number(d.qty ?? 1);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 999)
+      throw new BadRequestException('Количество — целое от 1 до 999');
     const kinds = ['base', 'pos', 'store', 'module', 'discount'];
     if (!kinds.includes(d.kind)) throw new BadRequestException('Неизвестный вид строки');
 
@@ -638,7 +674,7 @@ export class PlatformService {
     const r = (await this.q(
       `INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
        VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [accountId, d.kind, d.title.trim(), Math.max(1, Math.floor(Number(d.qty ?? 1))), price])).rows[0];
+      [accountId, d.kind, title, Math.max(1, Math.floor(Number(d.qty ?? 1))), price])).rows[0];
 
     await this.audit(ctx, 'plan_line_added', accountId,
       { title: d.title, price: money(price), kind: d.kind });
