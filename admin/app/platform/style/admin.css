@@ -460,6 +460,11 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 /* Ждущая решения карточка светится латунью: её ждут от вас */
 .pay.waiting, .req.waiting { border-color: var(--brass-300); box-shadow: var(--shadow-2); }
 .pay-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); }
+/* Левая часть сжимается, сумма остаётся видна. Имя магазина бывает до
+   80 знаков — вдвое шире экрана телефона, и без этого правила flex не
+   давал ему сжаться, выталкивая сумму за край. А сумма здесь
+   главное: по ней решают. */
+.pay-who { min-width: 0; }
 .pay-who b { font-size: 17px; font-weight: var(--weight-bold); }
 .pay-amount { text-align: right; white-space: nowrap; }
 .pay-amount b {
@@ -540,7 +545,10 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 .lead.dragging { opacity: 0.4; }
 .lead-top { display: flex; align-items: center; gap: 6px; }
-.lead-top b { flex: 1; font-size: var(--text-14); }
+/* min-width: 0 — иначе длинное имя магазина вытолкнет кнопку меню
+   «Сдвинуть» за край столбца, а на телефоне это единственный способ
+   переставить карточку. */
+.lead-top b { flex: 1; min-width: 0; font-size: var(--text-14); }
 /* Ручка для пальца: только она перехватывает жест, остальная
    карточка прокручивает колонку, как и ожидается */
 .grip {
@@ -849,7 +857,13 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   font-size: var(--text-12); color: var(--ink-faint); min-width: 42px;
 }
 .entry-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px var(--space-2); align-items: baseline; }
-.entry-meta { display: flex; align-items: baseline; gap: var(--space-2); }
+.entry-meta {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  /* С переносом: «ДЕНЬГИ · цена 4200 · Магазин Береке на Абая» не
+     помещается на телефоне, и без него flex ужимал части до предела,
+     а остаток выталкивал за край. */
+  flex-wrap: wrap; min-width: 0;
+}
 .entry-kind {
   font-size: var(--text-11); letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--ink-faint); border: 1px solid var(--line); border-radius: var(--radius-full);

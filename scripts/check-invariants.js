@@ -765,6 +765,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/Chart.tsx', must: 'clamp(48px',
     why: 'Подсказка у краёв графика уходила за край экрана: на телефоне палец чаще попадает по краям' },
 
+  { file: 'admin/app/platform/style/admin.css', must: '.pay-who { min-width: 0; }',
+    why: 'Имя магазина бывает до 80 знаков и выталкивало сумму за край — а по сумме решают' },
+  { file: 'admin/app/platform/style/admin.css', must: '.lead-top b { flex: 1; min-width: 0;',
+    why: 'Длинное имя выталкивало кнопку «Сдвинуть» за край столбца — на телефоне это единственный способ переставить карточку' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
