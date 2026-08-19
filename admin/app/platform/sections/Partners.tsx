@@ -234,7 +234,7 @@ export default function Partners({ me }: { me: Me }) {
           <tbody>
             {data.rows.map((p: any) => (
               <tr key={p.id}>
-                <td>
+                <td data-label="Имя">
                   {/* Правка на месте: опечатку в имени гонять через
                       лист подтверждения незачем — это не деньги.
 
@@ -246,7 +246,7 @@ export default function Partners({ me }: { me: Me }) {
                   {p.isSuperUser && <span className="badge st-active">супер</span>}
                   {!p.isActive && <div className="sub">вход закрыт</div>}
                 </td>
-                <td>
+                <td data-label="Почта">
                   {/* Почта — это ВХОД. Занятую сервер не примет: два
                       партнёра с одной почтой означали бы, что один не
                       сможет войти. */}
@@ -254,25 +254,25 @@ export default function Partners({ me }: { me: Me }) {
                     onSave={(v) => save(p.id, { email: v }, 'Почта сохранена')} />
                   {p.phone && <div className="sub">{p.phone}</div>}
                 </td>
-                <td className="num">
+                <td className="num" data-label="Клиентов">
                   {p.clients}
                   <div className="sub">
                     работают {p.activeClients}
                     {p.lostClients ? `, ушло ${p.lostClients}` : ''}
                   </div>
                 </td>
-                <td className="num">
+                <td className="num" data-label="Доля партнёра">
                   {p.isSuperUser ? <span className="nobody">—</span> : `${p.commissionPercent}%`}
                 </td>
-                <td className="num">
+                <td className="num" data-label="Привёл 30 дн.">
                   {money(p.brought)}
                   <div className="sub">всего {money(p.broughtTotal)}</div>
                 </td>
-                <td className="num">
+                <td className="num" data-label="Заработал 30 дн.">
                   {money(p.earned)}
                   <div className="sub">клиенты дают {money(p.mrr)}/мес</div>
                 </td>
-                <td>
+                <td data-label="Был в системе">
                   {p.neverLoggedIn
                     ? <span className="badge st-expired"><i className="dot" />ни разу</span>
                     : p.inactive

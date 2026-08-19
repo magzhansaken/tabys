@@ -312,7 +312,7 @@ export default function Clients({ me }: { me: Me }) {
                           ? [...p, r.id] : p.filter((x) => x !== r.id))} />
                     </td>
                   )}
-                  <td>
+                  <td data-label="Магазин">
                     {/* Правка на месте: опечатку в названии гонять
                         через лист подтверждения незачем — это не
                         деньги. Enter сохраняет, Esc возвращает, уход с
@@ -338,13 +338,13 @@ export default function Clients({ me }: { me: Me }) {
                       {r.isDemo ? ' · учебный' : ''}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Владелец">
                     {r.owner ?? '—'}
                     {r.ownerPhone && <div className="sub">
                       <a href={`tel:${r.ownerPhone}`}>{r.ownerPhone}</a>
                     </div>}
                   </td>
-                  <td>
+                  <td data-label="Статус">
                     <span className={`badge ${statusView(r.state).cls}`}>
                       {statusView(r.state).text}
                     </span>
@@ -356,7 +356,7 @@ export default function Clients({ me }: { me: Me }) {
                         : statusView(r.state).hint}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Оплачено до">
                     {r.paidUntil ? fullDate(r.paidUntil) : '—'}
                     {r.daysLeft != null && (
                       <div className="sub">
@@ -368,14 +368,14 @@ export default function Clients({ me }: { me: Me }) {
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td data-label="Тариф">
                     {r.tariff ?? '—'}
                     <div className="sub">{money(r.monthly)}/мес</div>
                   </td>
                   {/* Выручка магазина: отвечает, живёт ли клиент.
                       Продаж нет — продлевать не будет. */}
-                  <td className="num">{money(r.revenue30d)}</td>
-                  <td>{r.partner ?? <span className="nobody">без партнёра</span>}</td>
+                  <td className="num" data-label="Выручка 30 дн.">{money(r.revenue30d)}</td>
+                  <td data-label="Партнёр">{r.partner ?? <span className="nobody">без партнёра</span>}</td>
                   <td className="actions">
                     {/* У самозаписавшихся вместо «Оплаты» — решение.
                         Их приём: пока клиента не одобрили, платить ему

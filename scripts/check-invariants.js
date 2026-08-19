@@ -734,6 +734,11 @@ const RULES = [
   { file: 'server/test/part46.platform.e2e.js', must: '★ Негодные реквизиты отбиты',
     why: 'Реквизиты видит каждый клиент при оплате: ошибка здесь стоит дороже всего — не заплатит никто' },
 
+  { file: 'admin/app/platform/style/tokens.css', must: '--tap-compact: 40px',
+    why: 'Двенадцать правил телефонного слоя ссылались на эту переменную, а объявлена она не была — кнопки оставались без высоты' },
+  { file: 'admin/app/platform/style/admin.css', must: '.chart-grid { grid-template-columns: 1fr; }',
+    why: 'График в 420 точек не помещался в экран телефона: правая часть уходила за край' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

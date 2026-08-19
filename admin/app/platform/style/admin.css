@@ -580,6 +580,11 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 .section-title.danger-title { color: var(--danger-strong); }
 .settings-hint { max-width: 620px; margin-bottom: var(--space-3); }
 .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--space-4); }
+/* На телефоне графики идут ОДИН ПОД ДРУГИМ: 420 точек не помещаются в
+   360, и правая часть графика уходила за край экрана. */
+@media (max-width: 720px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
 .chart-box {
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow-1); padding: 16px 18px 10px;
