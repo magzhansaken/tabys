@@ -17,6 +17,31 @@ import { useState } from 'react';
 import { useToast } from './Toast';
 
 /** Одно значение моноширинно и с копированием: диктовать по телефону. */
+/**
+ * Скопировать и честно сказать, вышло ли.
+ *
+ * Копирование работает ТОЛЬКО по защищённому соединению. Раньше тост
+ * говорил «скопировано» в любом случае: человек шёл вставлять, а буфер
+ * пуст — и решал, что промахнулся сам.
+ *
+ * Для пароля владельца это дороже всего: его показывают ОДИН РАЗ, и
+ * если он не скопировался, а человек закрыл окно — пароль потерян.
+ */
+async function copyOrTell(
+  text: string, okText: string,
+  toast: (t: { text: string; kind?: 'err' }) => void,
+): Promise<boolean> {
+  try {
+    if (!navigator.clipboard) throw new Error('нет доступа к буферу');
+    await navigator.clipboard.writeText(text);
+    toast({ text: okText });
+    return true;
+  } catch {
+    toast({ text: 'Скопировать не вышло — выделите и скопируйте вручную', kind: 'err' });
+    return false;
+  }
+}
+
 export function CopyValue({ label, value, big }: {
   label: string; value: string; big?: boolean;
 }) {
@@ -30,11 +55,14 @@ export function CopyValue({ label, value, big }: {
         <b>{value}</b>
       </div>
       <button className="btn small"
-        onClick={() => {
-          void navigator.clipboard?.writeText(value);
-          setDone(true);
-          toast({ text: `${label} скопирован` });
-          window.setTimeout(() => setDone(false), 1600);
+        onClick={async () => {
+          // Копирование работает ТОЛЬКО по защищённому соединению.
+          // Раньше тост говорил «скопирован» в любом случае: человек
+          // шёл вставлять, а буфер пуст — и решал, что промахнулся сам.
+          if (await copyOrTell(value, `${label} скопирован`, toast)) {
+            setDone(true);
+            window.setTimeout(() => setDone(false), 1600);
+          }
         }}>
         {done ? 'Скопировано' : 'Скопировать'}
       </button>
@@ -70,10 +98,9 @@ export function NewPassword({ phone, password, onClose }: {
         <CopyValue label="Пароль" value={password} big />
 
         <div className="modal-actions">
-          <button className="btn" onClick={() => {
-            void navigator.clipboard?.writeText(`Вход: ${phone}\nПароль: ${password}`);
-            toast({ text: 'Вход и пароль скопированы' });
-          }}>Скопировать оба</button>
+          <button className="btn" onClick={() => void copyOrTell(
+            `Вход: ${phone}\nПароль: ${password}`, 'Вход и пароль скопированы', toast,
+          )}>Скопировать оба</button>
           <button className="btn primary" onClick={onClose}>Готово</button>
         </div>
       </div>
@@ -117,10 +144,9 @@ export function Credentials({ rows, onClose }: {
         </p>
 
         <div className="modal-actions">
-          <button className="btn" onClick={() => {
-            void navigator.clipboard?.writeText(all);
-            toast({ text: 'Все доступы скопированы' });
-          }}>Скопировать всё</button>
+          <button className="btn" onClick={() => void copyOrTell(
+            all, 'Все доступы скопированы', toast,
+          )}>Скопировать всё</button>
           <button className="btn primary" onClick={onClose}>Готово</button>
         </div>
       </div>
