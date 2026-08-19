@@ -121,6 +121,15 @@ export class AuthService {
       await c.query(`UPDATE employee SET password_hash=$1 WHERE id=$2`,
         [await bcrypt.hash(dto.password, BCRYPT_COST), employee_id]);
     });
+    // КАРТОЧКА КЛИЕНТА для платформы. Записавшийся с сайта — самый
+    // важный клиент: он пришёл сам, его никто не ведёт, и если не
+    // позвонить в первый день, он уйдёт.
+    //
+    // Без карточки у владельца платформы в списке пусто в колонках
+    // «владелец» и «телефон» — позвонить нечем, и поиск по имени его
+    // не находит.
+    await this.db.raw(`SELECT platform_ensure_card($1)`, [account_id]).catch(() => {});
+
     return this.issueTokens(account_id, employee_id);
   }
 

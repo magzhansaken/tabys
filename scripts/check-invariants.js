@@ -804,6 +804,9 @@ const RULES = [
   { file: 'db/migrations/082_journal_values.sql', must: 'ЗНАЧЕНИЯ, а не только',
     why: 'Через полгода спросят «когда подняли Старт» — запись была, а что менялось, нет' },
 
+  { file: 'server/src/auth/auth.service.ts', must: 'platform_ensure_card',
+    why: 'Записавшийся с сайта оставался без карточки: позвонить ему было нечем, а он самый важный — пришёл сам' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

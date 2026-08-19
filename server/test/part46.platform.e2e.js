@@ -948,6 +948,38 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ЗАПИСАВШЕМУСЯ С САЙТА ЕСТЬ КУДА ПОЗВОНИТЬ ──────────────────
+  //
+  // Дописано после сверки возможностей. Человек записался с сайта сам:
+  // магазин создан, войти может. А КАРТОЧКИ КЛИЕНТА НЕТ — её заводила
+  // только платформа, когда клиента приводит партнёр.
+  //
+  // У владельца платформы в списке пусто в колонках «владелец» и
+  // «телефон»: позвонить и помочь завести товары НЕЧЕМ, поиск по
+  // имени не находит. А это самый важный клиент — он пришёл сам, его
+  // никто не ведёт, и если не позвонить в первый день, он уйдёт.
+  {
+    const phone = `+7701${String(Date.now()).slice(-7)}`;
+    const otp = await j('POST', '/auth/otp', { phone });
+    const reg = await j('POST', '/auth/register', {
+      phone, code: otp.d?.devCode, businessName: 'Записался сам',
+      ownerName: 'Асхат Нурланов', password: 'Password123',
+    });
+    if (reg.status < 300) {
+      const v = await j('GET', '/platform/clients?filter=approval', null, SUPER);
+      const lead = (v.d?.rows ?? []).find((r) => r.name === 'Записался сам');
+      ok(lead?.ownerPhone === phone,
+         `★ Записавшемуся с сайта есть куда позвонить: ${lead?.ownerPhone ?? 'НЕЧЕМ'}`);
+      ok(!!lead?.owner,
+         `★ Имя владельца записано: ${lead?.owner ?? 'пусто'}`);
+
+      const found = await j('GET',
+        `/platform/clients?q=${encodeURIComponent('Асхат')}`, null, SUPER);
+      ok((found.d?.rows ?? []).length > 0,
+         '★ Записавшийся находится поиском по имени владельца');
+    }
+  }
+
   // ── ПРАВКА ЦЕНЫ ДОХОДИТ ДО СЧЁТОВ ──────────────────────────────
   //
   // Дописано после находки: владелец менял цену «Старта» с 6 900 на
@@ -1063,9 +1095,13 @@ const shop = async (name, owner) => {
   // видит итог, который не сходится с тем, что перед ним.
   {
     const v = await j('GET', '/platform/clients', null, SUPER);
-    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo && x.monthly > 0);
+    let cl = null, card = null;
+    for (const x of (v.d?.rows ?? [])) {
+      if (x.isDemo || !(x.monthly > 0)) continue;
+      const c = (await j('GET', `/platform/clients/${x.id}/card`, null, SUPER)).d;
+      if ((c?.lines ?? []).some((l) => l.active)) { cl = x; card = c; break; }
+    }
     if (cl) {
-      const card = (await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER)).d;
       const lines = (card?.lines ?? []).filter((l) => l.active);
       const sum = lines.reduce((a, l) => a + l.price * (l.qty ?? 1), 0);
       ok(sum === card?.monthly,
@@ -1111,7 +1147,9 @@ const shop = async (name, owner) => {
   // весь путь — от отметки до доли партнёра — ни разу целиком.
   {
     let v = await j('GET', '/platform/clients', null, SUPER);
-    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    // Берём клиента С ПАРТНЁРОМ: у ничьего доля не начисляется, и
+    // проверять сложение долей на нём нечего.
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo && x.partner);
     if (cl) {
       const before = (await j('GET', `/platform/clients/${cl.id}/card`, null, SUPER))
         .d?.paidUntil;

@@ -219,5 +219,8 @@
 \echo '--- 082 одна цена тарифа ---'
 \i db/migrations/082_one_price.sql
 
+\echo '--- 083 карточка записавшемуся с сайта ---'
+\i db/migrations/083_signup_card.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
