@@ -690,6 +690,43 @@ export class PlatformService {
 
   // ── СТРОКИ СЧЁТА ────────────────────────────────────────────────────
   /**
+   * РЕЙТИНГ ПАРТНЁРОВ со шкалой зверей.
+   *
+   * Взято у донора: восемь зверей от крысы до орла, место по числу
+   * платящих клиентов, зверь по ДОЛЕ в списке — восемь растягиваются
+   * на любое число участников.
+   *
+   * Их комментарий: «Дешёвая мотивация, которая работает: люди
+   * смотрят, кто выше».
+   *
+   * ОТЛИЧИЕ ОДНО, И ОНО ВАЖНОЕ. У донора рейтинг лежит внутри сводки,
+   * а сводка закрыта партнёру целиком — то есть соревнование видит
+   * только тот, кто в нём не участвует.
+   *
+   * У нас это ОТДЕЛЬНЫЙ адрес, открытый партнёру. Сводку ему
+   * открывать нельзя — там доход платформы и чужие доли. А рейтинг
+   * можно: чужие имена в нём скрыты, вместо имени стоит зверь.
+   *
+   * Партнёр видит, на каком он месте и насколько отстал, но не знает,
+   * у кого именно переманивать клиентов.
+   */
+  async ranking(ctx: PlatformCtx) {
+    const rows = (await this.q(
+      `SELECT * FROM platform_ranking($1,$2)`, [ctx.role, ctx.userId])).rows;
+    return {
+      rows: rows.map((r: any) => ({
+        place: Number(r.place), animal: r.animal,
+        name: r.name, isMe: r.is_me,
+        clients: Number(r.clients), paid: Number(r.paid),
+        // Доход чужих клиентов — ЧУЖИЕ ДЕНЬГИ. Партнёру видно только
+        // своё: у соседа он видит место и число клиентов, этого
+        // довольно, чтобы понять, насколько отстал.
+        mrr: ctx.role === 'super' || r.is_me ? money(Number(r.mrr)) : null,
+      })),
+    };
+  }
+
+  /**
    * Состав счёта клиента. Владелец платформы видит, из чего сложилась
    * сумма, и правит по строке — а не меняет итог одним числом.
    */
@@ -1217,6 +1254,7 @@ export class PlatformService {
           ? Math.round((nowAmount - prevAmount) / prevAmount * 100) : null,
         prevAmount,
       },
+
       // Если снимков нет вовсе — сказать об этом, а не рисовать нули.
       // Пустой график читается как «дела плохи», хотя дело в другом.
       note: series.every((d: any) => d.tenants === 0)
@@ -2233,6 +2271,17 @@ export class PlatformController {
   async metrics(@Req() r: any, @Query('days') days?: string) {
     await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
     return this.svc.metrics(Pl(r), Number(days ?? 30));
+  }
+
+  /**
+   * Рейтинг партнёров. ОТДЕЛЬНО от сводки: сводка закрыта партнёру
+   * (там доход платформы и чужие доли), а рейтинг открыт — в нём
+   * чужие имена и суммы скрыты.
+   */
+  @Public() @Get('ranking')
+  async ranking(@Req() r: any) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.ranking(Pl(r));
   }
 
   @Public() @Post('reset-owner-password')

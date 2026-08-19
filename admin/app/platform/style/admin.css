@@ -653,6 +653,9 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 .ranking tr:first-child .place { background: var(--accent-quiet); border-color: var(--accent); color: var(--ink-on-warm); }
 .ranking .animal { margin-left: 8px; opacity: 0.75; }
+/* Своя строка в рейтинге — подсвечена. Без неё человек ищет себя
+   глазами по всей таблице, а ради этого он её и открыл. */
+.ranking .me-row td { background: var(--accent-quiet); }
 .audit { list-style: none; padding: 0; margin: 6px 0 14px; }
 .audit li { padding: 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
 .audit .sub { margin-right: 6px; display: inline; }

@@ -17,7 +17,6 @@ import { Empty, Failed, SkeletonCards, SkeletonMetrics, PageHead } from '../ui/S
 
 /** Знаки партнёров: у них у каждого свой, чтобы различать в списке
  *  быстрее, чем читая имя. */
-const SIGNS = ['◆', '●', '▲', '■', '★', '✦', '◈', '▼'];
 
 const short = (iso: string) =>
   new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
@@ -25,6 +24,7 @@ const short = (iso: string) =>
 export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void }) {
   const [data, setData] = useState<any>(null);
   const [partners, setPartners] = useState<any[]>([]);
+  const [rank, setRank] = useState<any[]>([]);
   const [days, setDays] = useState(30);
   const [err, setErr] = useState('');
 
@@ -33,11 +33,15 @@ export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void 
     const hit = cached(path);
     if (hit) setData(hit.data);
     try {
-      const [m, p] = await Promise.all([
+      const [m, p, r] = await Promise.all([
         api(path),
         api('/partners').catch(() => ({ rows: [] })),
+        // Рейтинг ОТДЕЛЬНЫМ адресом: сводка закрыта партнёру, а
+        // рейтинг ему открыт — чужие имена и суммы в нём скрыты.
+        api('/ranking').catch(() => ({ rows: [] })),
       ]);
-      setData(m); putCache(path, m); setPartners(p.rows ?? []); setErr('');
+      setData(m); putCache(path, m); setPartners(p.rows ?? []);
+      setRank(r.rows ?? []); setErr('');
     } catch (e: any) { if (!hit) setErr(humanError(e)); }
   };
   useEffect(() => { load(); }, []);
@@ -147,39 +151,52 @@ export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void 
         </section>
       </div>
 
-      <h2 className="section-title">Партнёры за {data.days} дней</h2>
-      {partners.length === 0 ? (
+      {/* РЕЙТИНГ ПАРТНЁРОВ. Взято у донора: восемь зверей от крысы до
+          орла, место по числу ПЛАТЯЩИХ клиентов, зверь по ДОЛЕ в
+          списке — восемь растягиваются на любое число участников.
+
+          Их комментарий: «Дешёвая мотивация, которая работает: люди
+          смотрят, кто выше».
+
+          ОТЛИЧИЕ: у донора рейтинг лежит в сводке, а сводка закрыта
+          партнёру целиком — соревнование видит только тот, кто в нём
+          не участвует. У нас партнёр его видит, но ЧУЖИЕ ИМЕНА И
+          СУММЫ СКРЫТЫ: вместо имени зверь, вместо дохода прочерк.
+
+          Он видит, на каком месте и насколько отстал, но не знает, у
+          кого переманивать клиентов. */}
+      <h2 className="section-title">Партнёры за 30 дней</h2>
+      {rank.length === 0 ? (
         <p className="note">Партнёров пока нет — заведите их во вкладке «Партнёры».</p>
       ) : (
         <table className="grid ranking">
           <thead>
             <tr>
-              <th>Партнёр</th>
+              <th>Место</th><th>Партнёр</th>
               <th className="num">Клиентов</th>
               <th className="num">Платят</th>
-              <th className="num">Привёл</th>
-              <th className="num">Заработал</th>
-              <th className="num">Дают в месяц</th>
+              <th className="num">Их доход в месяц</th>
             </tr>
           </thead>
           <tbody>
-            {partners.map((p: any, i: number) => (
-              <tr key={p.id}>
+            {rank.map((p: any) => (
+              <tr key={p.place} className={p.isMe ? 'me-row' : undefined}>
                 <td data-label="Место">
-                  <span className="place">{i + 1}</span>
-                  <span className="animal" title="знак партнёра">{SIGNS[i % SIGNS.length]}</span>
-                  {p.name}
-                  <div className="sub">{p.commissionPercent}%</div>
+                  <span className="place">{p.place}</span>
+                  <span className="animal" title="знак партнёра">{p.animal}</span>
                 </td>
-                <td className="num" data-label="Клиентов">{p.clients}</td>
-                {/* «Платят» отдельным столбцом — их приём: заведено
-                    десять, а платят двое, и это разные вещи. */}
-                <td className="num" data-label="Платят"><b>{p.activeClients}</b></td>
-                {/* Привёл и заработал — разные числа, и первое важнее:
-                    партнёр с малой комиссией может приносить больше. */}
-                <td className="num" data-label="Привёл">{money(p.brought)}</td>
-                <td className="num" data-label="Заработал">{money(p.earned)}</td>
-                <td className="num" data-label="Их доход в месяц">{money(p.mrr)}</td>
+                <td data-label="Партнёр">
+                  {/* Чужое имя скрыто — вместо него зверь слева. Своя
+                      строка подписана: без пометки человек ищет себя
+                      глазами по всей таблице. */}
+                  <b>{p.name ?? '—'}</b>
+                  {p.isMe && <span className="badge st-ok" style={{ marginLeft: 8 }}>вы</span>}
+                </td>
+                <td data-label="Клиентов" className="num">{p.clients}</td>
+                <td data-label="Платят" className="num"><b>{p.paid}</b></td>
+                <td data-label="Их доход в месяц" className="num">
+                  {p.mrr == null ? '—' : money(p.mrr)}
+                </td>
               </tr>
             ))}
           </tbody>
