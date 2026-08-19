@@ -200,6 +200,19 @@ export default function Settings({ me }: { me: Me }) {
             <i className="split">Чтобы платёж нашли, когда он придёт</i>
           </label>
 
+          {/* РЕКВИЗИТЫ СЛОВАМИ. Поле уже отдавалось клиенту в его
+              кабинет — а задать его было НЕГДЕ: в базе есть, сервер
+              читает и показывает, но всегда пустым.
+
+              Нужно для банковского счёта: БИН, КБе, номер счёта — это
+              не влезает в «получателя» и «номер телефона». */}
+          <label className="wide">Реквизиты для перевода со счёта
+            <textarea rows={3} value={pay.payDetails ?? ''}
+              placeholder={'ТОО «Табыс»\nБИН 123456789012\nСчёт KZ12 3456 7890 1234 5678\nКБе 17'}
+              onChange={(e) => setPay({ ...pay, payDetails: e.target.value })} />
+            <i className="split">Для тех, кто платит с банковского счёта, а не переводом</i>
+          </label>
+
           <div className="form-actions pay-save">
             <button className="btn primary" disabled={!dirtyPay}
               onClick={() => save('pay')}>

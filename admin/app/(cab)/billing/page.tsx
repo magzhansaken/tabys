@@ -111,6 +111,19 @@ export default function BillingPage() {
             </div>
           )}
 
+          {/* Реквизиты словами — для тех, кто платит С БАНКОВСКОГО
+              СЧЁТА, а не переводом с телефона. БИН, КБе и номер счёта
+              не влезают в «получателя» и «номер». */}
+          {sub.pay.details && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 13, color: C.dim, marginBottom: 4 }}>
+                Со счёта организации:
+              </div>
+              <pre style={{ margin: 0, fontSize: 13, lineHeight: 1.6,
+                fontFamily: 'inherit', whiteSpace: 'pre-wrap' }}>{sub.pay.details}</pre>
+            </div>
+          )}
+
           {sub.periods?.length > 0 && (
             <div style={{ marginTop: 12, fontSize: 13, color: C.dim }}>
               Выгоднее вперёд:{' '}
