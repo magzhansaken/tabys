@@ -226,7 +226,7 @@ export class PlatformService {
         [ctx.role, ctx.userId, opts.q?.trim() || null, filter, partner, sort]),
       this.q(`SELECT * FROM platform_clients_counts($1,$2)`, [ctx.role, ctx.userId]),
       ctx.role === 'super'
-        ? this.q(`SELECT id, full_name FROM platform_user
+        ? this.q(`SELECT id, full_name, commission_bp FROM platform_user
                    WHERE role='partner' AND deleted_at IS NULL ORDER BY full_name`)
         : Promise.resolve({ rows: [] } as any),
     ]);
@@ -275,7 +275,13 @@ export class PlatformService {
         // передавал — карточка рисовала пустоту.
         mrr: money(Number(c.mrr ?? 0)),
       },
-      partners: partners.rows.map((p: any) => ({ id: p.id, name: p.full_name })),
+      // Доля НУЖНА В СПИСКЕ: лист «Передать партнёру» показывает
+      // «Доля с будущих оплат» и берёт её отсюда. Без неё выходило
+      // «undefined%» — человек не видел, во что обойдётся передача.
+      partners: partners.rows.map((p: any) => ({
+        id: p.id, name: p.full_name,
+        commissionPercent: Number(p.commission_bp ?? 0) / 100,
+      })),
       filter, sort, partnerId: partner,
     };
   }

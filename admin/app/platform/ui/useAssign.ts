@@ -27,7 +27,12 @@ export function useAssign(onDone: () => void) {
       { value: PLATFORM, label: 'Платформе · клиент станет ничьим' },
       ...partners.map((p) => ({
         value: p.id,
-        label: `${p.name} · доля ${p.commissionPercent}%`,
+        // Доля приходит из списка клиентов. Если её вдруг нет —
+        // не показываем вовсе: «undefined%» человек принимает за
+        // настоящее значение и передаёт клиента вслепую.
+        label: p.commissionPercent == null
+          ? p.name
+          : `${p.name} · доля ${p.commissionPercent}%`,
       })),
     ];
 
@@ -41,7 +46,10 @@ export function useAssign(onDone: () => void) {
           ['Магазин', client.name],
           ['Сейчас ведёт', client.partner ?? 'платформа · клиент ничей'],
           ['Перейдёт к', to ? to.name : 'платформе · станет ничьим'],
-          ['Доля с будущих оплат', to ? `${to.commissionPercent}%` : 'нет · всё платформе'],
+          ['Доля с будущих оплат',
+            !to ? 'нет · всё платформе'
+              : to.commissionPercent == null ? 'уточните в разделе «Партнёры»'
+                : `${to.commissionPercent}%`],
           ['Уже подтверждённые оплаты', 'не пересчитываются'],
         ];
       },

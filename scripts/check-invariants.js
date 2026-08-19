@@ -849,6 +849,9 @@ const RULES = [
   { file: 'admin/app/platform/ui/RowMenu.tsx', must: "const width = 210;",
     why: 'Ширина меню согласована с самым длинным пунктом: разойдётся с CSS — меню встанет не туда' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'Доля НУЖНА В СПИСКЕ',
+    why: 'Лист «Передать партнёру» показывал «undefined%»: список отдавал только имя и ключ' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
