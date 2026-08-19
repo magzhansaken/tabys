@@ -246,5 +246,8 @@
 \echo '--- 090 рейтинг: при равенстве решают деньги ---'
 \i db/migrations/090_ranking_tie.sql
 
+\echo '--- 091 помощники для данных проверки ---'
+\i db/migrations/091_seed_helpers.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

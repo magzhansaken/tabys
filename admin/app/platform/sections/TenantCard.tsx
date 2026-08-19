@@ -70,6 +70,16 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
   // стёрли данные — ключ клиента остаётся в адресе после решётки.
   //
   // Человеку нужен не повтор, а выход к списку.
+  // Мёртвый ключ убираем из адреса САМИ, не дожидаясь нажатия. Иначе
+  // он висит: обновил страницу — снова эта надпись, нажал вкладку —
+  // снова она. Человек застревает без выхода.
+  useEffect(() => {
+    if (err && !data && /не найден/i.test(err)) {
+      const t = window.setTimeout(() => { window.location.hash = ''; }, 4000);
+      return () => window.clearTimeout(t);
+    }
+  }, [err, data]);
+
   if (err && !data && /не найден/i.test(err)) return (
     <>
       <button className="btn small ghost back" onClick={onBack}>← Все клиенты</button>

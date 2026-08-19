@@ -55,6 +55,20 @@ const THEME_KEY = 'tabys.platform.theme';
 export default function PlatformPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [tab, setTab] = useState<TabKey>('today');
+
+  /**
+   * Переход на вкладку ЗАКРЫВАЕТ карточку клиента.
+   *
+   * Карточка стоит поверх любого раздела — так и надо: пришёл из
+   * ленты, вернулся в ленту. Но вкладки адрес не чистили, и пока в нём
+   * висел ключ, ЛЮБОЙ раздел показывал карточку. Стоило ключу
+   * протухнуть — и человек видел «Этого клиента больше нет» везде,
+   * куда бы ни нажал, без выхода.
+   */
+  const goTab = (t: any) => {
+    if (window.location.hash) window.location.hash = '';
+    setTab(t);
+  };
   const [ready, setReady] = useState(false);
   const [counts, setCounts] = useState<Record<string, number | undefined>>({});
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -142,20 +156,20 @@ export default function PlatformPage() {
         <nav className="side-nav">
           {tabs.slice(0, 5).map((t) => (
             <NavButton key={t.key} label={label(t)} count={counts[t.key]}
-              on={tab === t.key} onClick={() => setTab(t.key)} />
+              on={tab === t.key} onClick={() => goTab(t.key)} />
           ))}
           {isSuper && (
             <>
               <div className="side-sep" />
               {tabs.slice(5).map((t) => (
                 <NavButton key={t.key} label={label(t)} count={counts[t.key]}
-                  on={tab === t.key} onClick={() => setTab(t.key)} />
+                  on={tab === t.key} onClick={() => goTab(t.key)} />
               ))}
             </>
           )}
           {!isSuper && tabs.slice(5).map((t) => (
             <NavButton key={t.key} label={label(t)} count={counts[t.key]}
-              on={tab === t.key} onClick={() => setTab(t.key)} />
+              on={tab === t.key} onClick={() => goTab(t.key)} />
           ))}
         </nav>
 
@@ -223,7 +237,7 @@ export default function PlatformPage() {
       <nav className="tabbar">
         {tabs.slice(0, 5).map((t) => (
           <button key={t.key} className={tab === t.key ? 'on' : ''}
-            onClick={() => setTab(t.key)}>
+            onClick={() => goTab(t.key)}>
             <span>{label(t)}</span>
             {counts[t.key] ? <span className="count">{counts[t.key]}</span> : null}
           </button>

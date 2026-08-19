@@ -124,9 +124,10 @@ const SHOPS = [
   }
 
   // ── Строки счёта ───────────────────────────────────────────────
-  const line = (shop, kind, title, price) => c.query(
-    "INSERT INTO plan_line (account_id, kind, title, qty, unit_price)" +
-    " VALUES ($1,$2,$3,1,$4)", [shop.id, kind, title, price]);
+  // Через функцию: прямая вставка не видит чужие строки.
+  const line = (shop, kind, title, price, endedDays) => c.query(
+    "SELECT platform_add_line($1,$2,$3,$4,$5)",
+    [shop.id, kind, title, price, endedDays ?? null]);
   await line(made[0], "pos", "Касса №2", 300000);
   await line(made[3], "store", "Точка на Абая", 500000);
   await line(made[5], "discount", "Скидка за год", -100000);
@@ -194,6 +195,32 @@ const SHOPS = [
 
   // Один отключён — чтобы было видно, как это выглядит.
   await c.query("SELECT platform_set_status($1, " + Q + "suspended" + Q + ")", [made[4].id]);
+
+  // ── Редкие случаи ──────────────────────────────────────────────
+  // Без них часть действий проверить НЕ НА ЧЕМ: не увидеть, как ведёт
+  // себя учебный магазин, тариф «Стандарт», закрытая строка счёта или
+  // отключённый партнёр.
+
+  // Учебный магазин: его нельзя удалить и он не считается клиентом.
+  const demo = (await c.query(
+    "SELECT out_account FROM platform_create_tenant($1,$2,$3,$4,$5,$6)",
+    ["Учебный магазин — Магжан", "+77011111111", "Магжан", hash, 3650, null]
+  )).rows[0].out_account;
+  await c.query("SELECT platform_set_demo($1)", [demo]);
+
+  // Тариф «Стандарт» — чтобы было видно, что тарифов два.
+  await c.query("SELECT platform_set_tariff($1,$2)", [made[3].id, "standard"]);
+
+  // Закрытая строка счёта: убранная касса остаётся в истории, но в
+  // счёт не входит. Видно только у того, кто откроет состав.
+  await line(made[0], "pos", "Касса №3 (убрана)", 300000, 5);
+
+  // Отключённый партнёр: вход закрыт, клиенты работают.
+  await c.query(
+    "UPDATE platform_user SET is_active = false WHERE id = $1", [pids[3]]);
+
+  // Заявка на смену тарифа — четвёртый вид, остальные три уже есть.
+  await req(made[8], "tariff", { tier: "pro" }, "просят опт и маркировку", "pending");
 
   const cnt = async (t) => (await c.query("SELECT count(*) n FROM " + t)).rows[0].n;
   console.log("· партнёров:   " + pids.length);
