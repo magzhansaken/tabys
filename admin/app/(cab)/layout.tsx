@@ -279,7 +279,7 @@ export default function CabLayout({ children }: { children: React.ReactNode }) {
 
   if (narrow) {
     return (
-      <div style={{ minHeight: '100vh' }}>
+      <div style={{ minHeight: '100dvh' }}>
         <header data-no-print="" style={{ position: 'sticky', top: 0, zIndex: 30, background: C.card,
           borderBottom: `1px solid ${C.line}`, height: 56, display: 'flex', alignItems: 'center',
           gap: 4, padding: '0 6px' }}>
@@ -448,9 +448,9 @@ export default function CabLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', minHeight: '100dvh' }}>
       <aside data-no-print="" style={{ flex: '0 0 auto', width: wide ? 240 : 68, position: 'sticky', top: 0,
-        height: '100vh', background: C.card, borderRight: `1px solid ${C.line}`,
+        height: '100dvh', background: C.card, borderRight: `1px solid ${C.line}`,
         display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 12px 12px',
           borderBottom: `1px solid ${C.lineIn}`, minWidth: 0 }}>

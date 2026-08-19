@@ -43,7 +43,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'start center', background: C.bg }}>
+    <main style={{ minHeight: '100dvh', display: 'grid', placeItems: 'start center', background: C.bg }}>
       <div style={{ width: '100%', maxWidth: 390, padding: '34px 24px 40px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 30 }}>
           <div style={{ width: 30, height: 30, borderRadius: 8, background: C.accent, color: '#fff', fontSize: 16,

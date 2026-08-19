@@ -744,6 +744,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/RowMenu.tsx', must: 'та же, что в CSS',
     why: 'Высота пункта в расчёте и в стилях должна совпадать: разойдутся — разворот вверх упрётся в край экрана' },
 
+  { file: 'admin/app/platform/style/admin.css', must: 'min-height: 100dvh',
+    why: 'На телефоне 100vh — экран БЕЗ адресной строки: карточка входа уезжала вниз, кнопку «Войти» не видно' },
+  { file: 'admin/app/platform/style/admin.css', must: 'max-height: 92dvh',
+    why: 'Лист подтверждения при поднятой клавиатуре уходил низом под неё: 92vh считались от полного экрана' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

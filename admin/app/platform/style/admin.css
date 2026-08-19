@@ -75,7 +75,11 @@ body { font: 15px/1.45 var(--font); }
 }
 
 /* ── Вход ──────────────────────────────────────────────────────────── */
-.gate { min-height: 100vh; display: grid; place-items: center; background: var(--nav-bg); padding: 20px; }
+/* Высота в dvh, а не vh: на телефоне 100vh — это экран БЕЗ адресной
+   строки браузера, и карточка входа уезжала вниз — кнопку «Войти» было
+   не видно без прокрутки. dvh учитывает то, что видно сейчас.
+   Строка с vh оставлена запасной: старые браузеры dvh не знают. */
+.gate { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: var(--nav-bg); padding: 20px; }
 .gate-card {
   background: var(--surface); padding: var(--space-8); border-radius: var(--radius-lg); width: min(360px, 92vw);
   display: flex; flex-direction: column; gap: var(--space-3); box-shadow: var(--shadow-3);
@@ -88,13 +92,13 @@ body { font: 15px/1.45 var(--font); }
 .gate-card input:focus { border-color: var(--accent); }
 
 /* ═══ 1 · ОБОЛОЧКА ════════════════════════════════════════════════════ */
-.shell { min-height: 100vh; display: flex; background: var(--bg); }
+.shell { min-height: 100vh; min-height: 100dvh; display: flex; background: var(--bg); }
 
 .side {
   width: var(--side-w); flex: 0 0 var(--side-w);
   background: var(--nav-bg); color: var(--nav-ink);
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 0; height: 100vh; height: 100dvh;
 }
 .side-brand { padding: 20px 18px 14px; display: flex; flex-direction: column; gap: 2px; }
 .side-brand b { font-size: 15px; font-weight: var(--weight-bold); letter-spacing: -0.01em; }
@@ -1044,7 +1048,9 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   /* Модальное окно — нижний лист с прибитыми действиями */
   .modal, .modal-back { place-items: end stretch; padding: 0; }
   .modal-card, .modal-card.wide, .modal-back > .modal, .modal-back > .modal.wide {
-    width: 100%; max-width: none; max-height: 92vh;
+    /* Лист не выше видимой части экрана: при поднятой клавиатуре
+       92vh считались от полного экрана, и низ листа уходил под неё. */
+    width: 100%; max-width: none; max-height: 92vh; max-height: 92dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: var(--space-4);
   }
   .modal-card input, .modal-card select, .modal-card textarea { min-height: 48px; }
@@ -1362,7 +1368,7 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 
 .login {
-  min-height: 100vh; background: var(--nav-bg);
+  min-height: 100vh; min-height: 100dvh; background: var(--nav-bg);
   display: grid; place-items: center; padding: var(--space-4);
 }
 .login-card {

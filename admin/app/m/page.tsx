@@ -224,7 +224,7 @@ export default function MobileDashboard() {
 
 function Shell({ children, subtitle, onRefresh }: { children: React.ReactNode; subtitle?: string; onRefresh?: () => void }) {
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: C.bg }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100dvh', background: C.bg }}>
       <div style={{ background: C.accent, color: '#fff', padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div style={{ fontSize: 12, letterSpacing: '.14em', opacity: .8 }}>ТАБЫС</div>

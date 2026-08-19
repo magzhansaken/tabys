@@ -129,7 +129,7 @@ export default function OperatorPage() {
   // ── Вход по ключу ───────────────────────────────────────────────────
   if (!entered) {
     return (
-      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: C.bg, padding: 20 }}>
+      <main style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: C.bg, padding: 20 }}>
         <div style={{ width: '100%', maxWidth: 380 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 22 }}>
             <div style={{ width: 26, height: 26, borderRadius: 7, background: C.accent, color: '#fff', fontSize: 14,
@@ -166,7 +166,7 @@ export default function OperatorPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
+    <div style={{ minHeight: '100dvh', background: C.bg, color: C.text }}>
       {/* Тёмная шапка: рабочий инструмент, а не витрина */}
       <div style={{ background: C.text, color: '#fff' }}>
         <div style={{ maxWidth: 1240, margin: '0 auto', padding: '0 24px', height: 56,
