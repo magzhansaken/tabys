@@ -210,5 +210,8 @@
 \echo '--- 080 счёт объясняет сам себя ---'
 \i db/migrations/080_base_line_shown.sql
 
+\echo '--- 081 журнал читается через полгода ---'
+\i db/migrations/081_journal_readable.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

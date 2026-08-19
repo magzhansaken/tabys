@@ -355,7 +355,12 @@ export class PlatformService {
       throw new BadRequestException(String(e.message ?? '').replace(/^.*?:\s*/, ''));
     }
 
-    await this.audit(ctx, 'payment_approved', null, {
+    // С НАЗВАНИЕМ МАГАЗИНА. Раньше писалось null, и запись читалась
+    // «Оплата подтверждена — 6 900 ₸ · 3 мес.»: деньги есть, а чьи —
+    // нет. Через полгода по ней не понять, кому продлили доступ.
+    const acc = (await this.q(
+      `SELECT account_id FROM tenant_payment WHERE id = $1`, [paymentId])).rows[0];
+    await this.audit(ctx, 'payment_approved', acc?.account_id ?? null, {
       amount: money(Number(r.amount)), months: r.months,
       paidUntil: r.paid_until, partnerShare: money(Number(r.partner_share)),
     });
