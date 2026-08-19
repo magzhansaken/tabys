@@ -117,18 +117,31 @@ export default function Money({ me }: { me: Me }) {
       {err && <div className="err">{err}</div>}
 
       <div className="cards">
-        <div className="card"><span>Записей</span><b>{t.count}</b></div>
+        <div className="card">
+          <span>Записей</span><b>{t.count}</b>
+          <i>по выбранному отбору</i>
+        </div>
         <div className="card money">
           <span>Подтверждено</span><b>{money(t.amount)}</b>
           {/* Сумма ПОКАЗАННЫХ оплат: при отборе «отклонённые» она ноль,
               и это верно — денег не пришло. */}
           <i>по показанным оплатам</i>
         </div>
-        <div className="card"><span>Партнёрам</span><b>{money(t.partnerShare)}</b></div>
+        <div className="card">
+          <span>Партнёрам</span><b>{money(t.partnerShare)}</b>
+          {/* Раздел показывает ВСЕ оплаты, без отбора по сроку. Без
+              подписи партнёр не знает, за месяц это или за всё время —
+              а рядом в «Партнёрах» стоит «Заработал 30 дн.», и цифры
+              разные. */}
+          <i>за всё время</i>
+        </div>
         {/* Доля платформы — только владельцу: партнёру чужой доход
             знать незачем, он видит свой. */}
         {isSuper && (
-          <div className="card ok"><span>Платформе</span><b>{money(t.platformShare)}</b></div>
+          <div className="card ok">
+            <span>Платформе</span><b>{money(t.platformShare)}</b>
+            <i>за всё время</i>
+          </div>
         )}
       </div>
 

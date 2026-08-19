@@ -819,6 +819,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/Partners.tsx', must: 'всего {money(p.earnedTotal)}',
     why: 'Показывался заработок только за 30 дней: партнёр с годом работы выглядел новичком с плохим месяцем' },
 
+  { file: 'admin/app/platform/sections/Partners.tsx', must: 'всего {money(p.earnedTotal)}',
+    why: 'Показывался только заработок за 30 дней: партнёр работает год, а в списке цифра за месяц' },
+  { file: 'admin/app/platform/sections/Money.tsx', must: 'за всё время',
+    why: 'Раздел показывает все оплаты без отбора по сроку, а подпись об этом молчала' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
