@@ -28,6 +28,11 @@ export default function Settings({ me }: { me: Me }) {
   const [basePay, setBasePay] = useState<any>(null);
 
   const [clients, setClients] = useState<any[]>([]);
+  /* «Только что сохранил» — держится пару секунд после нажатия.
+     ВСЯ ПАМЯТЬ ОБЪЯВЛЯЕТСЯ ЗДЕСЬ, до выходов ниже: если завести её
+     после «if (!prices) return», при загрузке отрисовка выйдет раньше
+     и до памяти не дойдёт, а потом дойдёт — и страница упадёт. */
+  const [justSaved, setJustSaved] = useState(false);
 
   const load = async () => {
     try {
@@ -49,7 +54,6 @@ export default function Settings({ me }: { me: Me }) {
 
   // Что изменено с последней загрузки: кнопка не должна предлагать
   // сохранить, когда сохранять нечего. Их приём.
-  const [justSaved, setJustSaved] = useState(false);
   const dirtyPay = JSON.stringify(pay) !== JSON.stringify(basePay);
 
   const nothing = !pay.payUrl?.trim() && !pay.payQrUrl?.trim()

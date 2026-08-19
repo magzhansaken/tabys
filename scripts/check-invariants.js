@@ -878,6 +878,11 @@ const RULES = [
   { file: 'admin/app/platform/sections/TenantCard.tsx', must: 'Этого клиента больше нет',
     why: '«Попробовать снова» не поможет, если клиента удалили: нужен выход к списку, а не повтор' },
 
+  { file: 'deploy/12_deploy_git.sh', must: 'node scripts/check-hooks.js',
+    why: 'Память после выхода роняет страницу, а сборка этого не видит: «Настройки» упали с React #310' },
+  { file: 'admin/app/platform/sections/Settings.tsx', must: 'ВСЯ ПАМЯТЬ ОБЪЯВЛЯЕТСЯ ЗДЕСЬ',
+    why: 'Состояние ниже «if (!prices) return» роняло раздел при загрузке' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

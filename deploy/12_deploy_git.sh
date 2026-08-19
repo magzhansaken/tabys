@@ -89,6 +89,16 @@ else
   exit 1
 fi
 
+# Память составляющих: объявлена ли она до выходов. Ошибку не видно
+# при сборке — страница падает только у человека на экране. Так упали
+# «Настройки» с React #310.
+if node scripts/check-hooks.js; then
+  :
+else
+  echo "ОСТАНОВЛЕНО: память объявлена после выхода — страница упадёт."
+  exit 1
+fi
+
 echo
 echo "── Копирую в $DST (настройки с паролями сохраняются)"
 for d in server admin db docs shared scripts pos pos-desktop; do
