@@ -962,6 +962,34 @@ const shop = async (name, owner) => {
        `★ Видно, кто решил заявку: ${decided?.decidedBy ?? 'НЕ ВИДНО'}`);
   }
 
+  // ── ПАРТНЁР ВИДИТ ПОЛНОЕ РЕШЕНИЕ ПО ЗАЯВКЕ ─────────────────────
+  //
+  // Дописано в описи полей. У заявки одиннадцать полей, и все важные
+  // должны доходить до того, кто её подал: иначе он получает «отказ»
+  // без объяснений и идёт звонить.
+  {
+    const v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo && x.partner);
+    if (cl) {
+      const r = await j('POST', '/platform/requests',
+        { accountId: cl.id, kind: 'other', payload: {},
+          comment: 'выгрузка продаж за год' }, PARTNER);
+      if (r.d?.id) {
+        await j('POST', `/platform/requests/${r.d.id}/decide`,
+          { approve: false, note: 'такой выгрузки пока нет, сделаем в сентябре' }, SUPER);
+
+        const mine = await j('GET', '/platform/requests', null, PARTNER);
+        const done = (mine.d ?? []).find((x) => x.id === r.d.id);
+        ok(done?.decision_note === 'такой выгрузки пока нет, сделаем в сентябре',
+           '★ Партнёр видит причину отказа дословно');
+        ok(!!done?.decidedBy,
+           `★ Партнёр видит, КТО решил: ${done?.decidedBy}`);
+        ok(!!done?.decided_at,
+           '★ Партнёр видит, КОГДА решили');
+      }
+    }
+  }
+
   // ── ПРОЦЕНТ ДОЛИ ВИДЕН РЯДОМ С СУММОЙ ──────────────────────────
   //
   // Дописано после описи полей. У оплаты хранится доля партнёра на
