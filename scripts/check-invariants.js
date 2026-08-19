@@ -816,6 +816,9 @@ const RULES = [
   { file: 'admin/app/platform/sections/TenantCard.tsx', must: 'О клиенте: {data.note}',
     why: 'Заметка о клиенте писалась в базу и нигде не показывалась — человек записывал важное и терял' },
 
+  { file: 'admin/app/platform/sections/Partners.tsx', must: 'всего {money(p.earnedTotal)}',
+    why: 'Показывался заработок только за 30 дней: партнёр с годом работы выглядел новичком с плохим месяцем' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

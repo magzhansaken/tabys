@@ -11,7 +11,7 @@
  * платформе больше.
  */
 import { useEffect, useState } from 'react';
-import { api, cached, putCache, dropCache, money, dateTime, type Me } from '../lib';
+import { api, cached, putCache, dropCache, money, dateTime, type Me , fullDate} from '../lib';
 import { RowMenu } from '../ui/RowMenu';
 import { InlineText } from '../ui/InlineText';
 import { useAsk } from '../ui/Ask';
@@ -276,6 +276,14 @@ export default function Partners({ me }: { me: Me }) {
                 </td>
                 <td className="num" data-label="Заработал 30 дн.">
                   {money(p.earned)}
+                  {/* Общий заработок ПОДПИСЬЮ, а не столбцом: столбцов
+                      уже семь. Без него «35 000 за месяц» вводит в
+                      заблуждение — партнёр работает год и заработал
+                      400 тысяч, и по месячной цифре о нём судить
+                      нельзя. */}
+                  {p.earnedTotal > p.earned && (
+                    <div className="sub">всего {money(p.earnedTotal)}</div>
+                  )}
                   <div className="sub">клиенты дают {money(p.mrr)}/мес</div>
                 </td>
                 <td data-label="Был в системе">
@@ -284,6 +292,10 @@ export default function Partners({ me }: { me: Me }) {
                     : p.inactive
                       ? <span className="badge st-pending"><i className="dot" />{p.daysSilent} дн. назад</span>
                       : dateTime(p.lastLoginAt)}
+                  {/* Когда завели — подписью. «Ни разу не входил»
+                      значит разное для того, кого завели вчера, и для
+                      того, кто числится полгода. */}
+                  <div className="sub">с {fullDate(p.createdAt)}</div>
                 </td>
                 <td className="actions">
                   {/* Два действия в меню, как у них: доля и пароль
