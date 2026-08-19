@@ -56,7 +56,9 @@ export function RowMenu({ actions, label = 'Ещё' }: { actions: RowAction[]; l
     if (!btn) return;
     const r = btn.getBoundingClientRect();
     const width = 240;
-    const height = Math.min(actions.length * 40 + 12, 320);
+    // 44 — высота пункта под палец, та же, что в CSS. Разойдутся —
+    // разворот вверх посчитается неверно, и меню упрётся в край.
+    const height = Math.min(actions.length * 44 + 12, 320);
     const below = window.innerHeight - r.bottom;
     // Снизу мало места — разворачиваем вверх.
     const top = below < height + 12 ? r.top - height - 6 : r.bottom + 6;

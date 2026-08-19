@@ -739,6 +739,11 @@ const RULES = [
   { file: 'admin/app/platform/style/admin.css', must: '.chart-grid { grid-template-columns: 1fr; }',
     why: 'График в 420 точек не помещался в экран телефона: правая часть уходила за край' },
 
+  { file: 'admin/app/platform/style/admin.css', must: 'Промах пальцем здесь дороже',
+    why: 'В меню строки рядом «Код для кассы» и «Удалить магазин»: пункты берут полный размер под палец' },
+  { file: 'admin/app/platform/ui/RowMenu.tsx', must: 'та же, что в CSS',
+    why: 'Высота пункта в расчёте и в стилях должна совпадать: разойдутся — разворот вверх упрётся в край экрана' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
