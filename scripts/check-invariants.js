@@ -875,6 +875,9 @@ const RULES = [
   { file: 'db/migrations/090_ranking_tie.sql', must: 'r.mrr DESC, r.full_name',
     why: 'При равном числе клиентов порядок был случаен: приносящий больше денег оказывался ниже' },
 
+  { file: 'admin/app/platform/sections/TenantCard.tsx', must: 'Этого клиента больше нет',
+    why: '«Попробовать снова» не поможет, если клиента удалили: нужен выход к списку, а не повтор' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

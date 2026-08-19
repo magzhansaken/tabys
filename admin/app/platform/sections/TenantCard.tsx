@@ -65,6 +65,22 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
     } catch (e: any) { toast({ text: humanError(e), kind: 'err' }); }
   };
 
+  // КЛИЕНТА НЕТ — «попробовать снова» не поможет: сколько ни жми, он
+  // не появится. Так бывает, когда карточку удалили в другом окне или
+  // стёрли данные — ключ клиента остаётся в адресе после решётки.
+  //
+  // Человеку нужен не повтор, а выход к списку.
+  if (err && !data && /не найден/i.test(err)) return (
+    <>
+      <button className="btn small ghost back" onClick={onBack}>← Все клиенты</button>
+      <Empty
+        title="Этого клиента больше нет"
+        text="Его удалили или данные обновились. Ссылка осталась в адресе — вернитесь к списку и выберите клиента заново."
+        actionLabel="К списку клиентов"
+        onAction={onBack} />
+    </>
+  );
+
   if (err && !data) return <Failed text={err} onRetry={load} />;
   if (!data) return <><SkeletonMetrics count={4} /><SkeletonCards count={2} height={180} /></>;
 
