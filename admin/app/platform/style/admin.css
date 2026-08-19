@@ -685,7 +685,7 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
      прокрутить на 500 точек — и меню появляется на 500 выше пальца,
      за верхним краем. Начинка «уходит куда-то вверх». */
   position: fixed; z-index: var(--z-sheet);
-  min-width: 220px; padding: 6px; text-align: left;
+  min-width: 190px; padding: 6px; text-align: left;
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius-md); box-shadow: var(--shadow-3);
   display: flex; flex-direction: column; gap: 2px;

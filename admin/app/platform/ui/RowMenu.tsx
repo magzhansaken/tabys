@@ -60,7 +60,7 @@ export function RowMenu({ actions, label = 'Ещё', showLabel }: {
     const btn = box.current?.querySelector('button');
     if (!btn) return;
     const r = btn.getBoundingClientRect();
-    const width = 240;
+    const width = 210;   // хватает самому длинному: «Назначить партнёра…»
     // 44 — высота пункта под палец, та же, что в CSS.
     //
     // Предел был 320, и это ВРАЛО: восемь пунктов дают 364, разворот

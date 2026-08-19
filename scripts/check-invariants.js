@@ -846,6 +846,9 @@ const RULES = [
   { file: 'admin/app/platform/style/admin.css', must: 'fixed, а НЕ absolute',
     why: 'Место меню считается по видимой части экрана: с absolute при прокрутке оно уезжало за верхний край' },
 
+  { file: 'admin/app/platform/ui/RowMenu.tsx', must: "const width = 210;",
+    why: 'Ширина меню согласована с самым длинным пунктом: разойдётся с CSS — меню встанет не туда' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

@@ -490,7 +490,7 @@ export default function Clients({ me }: { me: Me }) {
                       }] : []),
 
                       ...(isSuper ? [{
-                        label: r.state === 'suspended' ? 'Включить магазин' : 'Отключить магазин',
+                        label: r.state === 'suspended' ? 'Включить' : 'Отключить',
                         hint: r.state === 'suspended'
                           ? 'продажи снова откроются'
                           : 'продажи закроются, кабинет останется',
@@ -518,7 +518,7 @@ export default function Clients({ me }: { me: Me }) {
                       }] : []),
 
                       ...(isSuper ? [{
-                        label: 'Удалить магазин…',
+                        label: 'Удалить…',
                         hint: 'две ступени, набор названия',
                         danger: true,
                         onClick: () => del(r),
