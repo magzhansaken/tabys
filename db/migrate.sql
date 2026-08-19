@@ -195,5 +195,8 @@
 \echo '--- 075 листание журнала по номеру ---'
 \i db/migrations/075_journal_cursor.sql
 
+\echo '--- 076 клиент не за призраком ---'
+\i db/migrations/076_ghost_partner.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

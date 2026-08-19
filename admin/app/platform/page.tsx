@@ -205,7 +205,7 @@ export default function PlatformPage() {
           {tab === 'requests' && <Requests me={me} />}
           {tab === 'funnel'   && <Funnel me={me} />}
           {tab === 'partners' && <Partners me={me} />}
-          {tab === 'summary'  && <Summary me={me} />}
+          {tab === 'summary'  && <Summary me={me} goTo={setTab} />}
           {tab === 'journal'  && <Journal me={me} />}
           {tab === 'settings' && <Settings me={me} />}
           </>

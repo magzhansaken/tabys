@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { api, cached, putCache, money, type Me } from '../lib';
 import { Chart } from '../ui/Chart';
 import { humanError } from '../ui/errors';
-import { Failed, SkeletonCards, SkeletonMetrics , PageHead } from '../ui/States';
+import { Empty, Failed, SkeletonCards, SkeletonMetrics, PageHead } from '../ui/States';
 
 /** Знаки партнёров: у них у каждого свой, чтобы различать в списке
  *  быстрее, чем читая имя. */
@@ -22,7 +22,7 @@ const SIGNS = ['◆', '●', '▲', '■', '★', '✦', '◈', '▼'];
 const short = (iso: string) =>
   new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 
-export default function Summary({ me }: { me: Me }) {
+export default function Summary({ me, goTo }: { me: Me; goTo?: (t: any) => void }) {
   const [data, setData] = useState<any>(null);
   const [partners, setPartners] = useState<any[]>([]);
   const [days, setDays] = useState(30);
@@ -47,6 +47,20 @@ export default function Summary({ me }: { me: Me }) {
 
   const t = data.now;
   const ch = data.change;
+  // ПЕРВЫЙ ДЕНЬ: клиентов нет, и графики из нулей дают прямую линию по
+  // низу. Человек видит пустоту и не понимает — система сломалась или
+  // данных ещё нет. Говорим прямо.
+  if (t.tenants === 0) return (
+    <>
+      <PageHead title="Сводка платформы" sub="За 30 дней" />
+      <Empty
+        title="Клиентов пока нет"
+        text="Здесь появится картина платформы: сколько магазинов платят, сколько денег приходит и как это меняется. Заведите первого клиента — и через сутки будет что показать."
+        actionLabel="Завести клиента"
+        onAction={goTo ? () => goTo('clients') : undefined} />
+    </>
+  );
+
   const maxAmount = Math.max(1, ...data.series.map((d: any) => d.amount));
   const maxMrr = Math.max(1, ...data.series.map((d: any) => d.mrr));
 

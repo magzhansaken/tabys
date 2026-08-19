@@ -578,15 +578,30 @@ export class PlatformService {
     return { ok: true, note: active ? 'Вход открыт' : 'Вход закрыт. Клиенты продолжают работать' };
   }
 
-  /** Назначить клиенту партнёра. */
+  /**
+   * Назначить клиенту партнёра.
+   *
+   * Проверка «партнёр существует и не удалён» живёт В БАЗЕ, а не
+   * здесь: клиент, привязанный к удалённому, повисает — он есть, он
+   * платит, но в отборе по партнёру его не выбрать ничем, потому что
+   * такого партнёра в списке нет.
+   */
   async assignPartner(ctx: PlatformCtx, accountId: string, partnerId: string | null) {
     if (ctx.role !== 'super') throw new ForbiddenException('Только владелец платформы');
-    await this.q(
-      `INSERT INTO tenant_card (account_id, partner_id) VALUES ($1,$2)
-       ON CONFLICT (account_id) DO UPDATE SET partner_id = $2, updated_at = now()`,
-      [accountId, partnerId]);
+    let r: any;
+    try {
+      r = (await this.q(
+        `SELECT * FROM platform_assign_partner($1,$2)`, [accountId, partnerId])).rows[0];
+    } catch (e: any) {
+      // База говорит по-русски — доносим это до экрана, иначе там
+      // будет «Internal server error», и человек не поймёт, что не так.
+      throw new BadRequestException(
+        /удал/i.test(String(e?.message))
+          ? 'Этот партнёр удалён — выберите другого или оставьте клиента ничьим'
+          : String(e?.message ?? 'Не удалось назначить партнёра'));
+    }
     await this.audit(ctx, 'partner_assigned', accountId, { partnerId });
-    return { ok: true };
+    return { ok: true, note: r?.note };
   }
 
   // ── СТРОКИ СЧЁТА ────────────────────────────────────────────────────
