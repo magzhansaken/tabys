@@ -161,7 +161,11 @@ export default function Money({ me }: { me: Me }) {
                     {p.client}
                   </button>
                   <div className="sub">
-                    {p.method} · отметил {p.partner ?? 'клиент'} · {dateTime(p.createdAt)}
+                    {p.method} · отметил {
+                      p.declaredBy === 'client' ? 'клиент'
+                        : p.declaredBy === 'super' ? 'владелец платформы'
+                          : (p.partner ?? 'клиент')
+                    } · {dateTime(p.createdAt)}
                   </div>
                 </div>
                 <div className="pay-amount">

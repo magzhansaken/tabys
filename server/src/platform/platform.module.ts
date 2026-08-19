@@ -299,11 +299,17 @@ export class PlatformService {
     }
 
     const row = (await this.q(
-      `INSERT INTO tenant_payment (account_id, amount, months, method, comment, created_by, partner_id)
+      `INSERT INTO tenant_payment (account_id, amount, months, method, comment,
+                                   created_by, partner_id, declared_by)
        VALUES ($1,$2,$3,$4,$5,$6,
-               (SELECT partner_id FROM tenant_card WHERE account_id = $1))
+               -- Доля идёт партнёру клиента: он привёл, доля его.
+               (SELECT partner_id FROM tenant_card WHERE account_id = $1),
+               -- А ОТМЕТИЛ тот, кто сейчас в кабинете. Разбираться по
+               -- спорной оплате пойдут именно к нему.
+               $7)
        RETURNING id, amount, months, status`,
-      [d.accountId, amount, months, d.method ?? 'kaspi', d.comment ?? null, ctx.userId])).rows[0];
+      [d.accountId, amount, months, d.method ?? 'kaspi', d.comment ?? null, ctx.userId,
+       ctx.role === 'super' ? 'super' : 'partner'])).rows[0];
 
     await this.audit(ctx, 'payment_recorded', d.accountId, { amount: money(amount), months });
     return { ...row, amount: money(row.amount),
@@ -447,6 +453,10 @@ export class PlatformService {
       rows: rows.map((r: any) => ({
         id: r.id, accountId: r.account_id, client: r.client,
         partner: r.partner, partnerId: r.partner_id,
+        // КТО ОТМЕТИЛ — отдельно от того, кому идёт доля. Клиент
+        // нажимает «Я оплатил» сам, и в ленте должно стоять «клиент»,
+        // а не имя партнёра, который её не проводил.
+        declaredBy: r.declared_by ?? (r.partner_id ? 'partner' : 'super'),
         amount: money(Number(r.amount)), months: r.months,
         method: r.method, comment: r.comment,
         status: r.status, rejectReason: r.reject_reason,

@@ -285,8 +285,14 @@ export class BillingService {
       'Предыдущая оплата ещё ждёт подтверждения — отправлять вторую не нужно');
 
     const row = (await this.db.raw(
-      `INSERT INTO tenant_payment (account_id, amount, months, method, comment, partner_id)
-       VALUES ($1,$2,$3,$4,$5,(SELECT partner_id FROM tenant_card WHERE account_id=$1))
+      `INSERT INTO tenant_payment (account_id, amount, months, method, comment,
+                                   partner_id, declared_by)
+       VALUES ($1,$2,$3,$4,$5,
+               -- Доля идёт партнёру клиента: он привёл, доля его.
+               (SELECT partner_id FROM tenant_card WHERE account_id=$1),
+               -- А отметил оплату САМ КЛИЕНТ — иначе в ленте будет
+               -- «отметил Ерлан», и разбираться пойдут не к тому.
+               'client')
        RETURNING id, amount, months`,
       [accountId, period.amount * 100, months, d.method ?? 'kaspi', d.comment ?? null])).rows[0];
 

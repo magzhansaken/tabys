@@ -204,5 +204,8 @@
 \echo '--- 078 разрывы в графике ---'
 \i db/migrations/078_series_gaps.sql
 
+\echo '--- 079 кто отметил оплату ---'
+\i db/migrations/079_who_declared.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

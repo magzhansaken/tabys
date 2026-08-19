@@ -948,6 +948,35 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── КТО ОТМЕТИЛ ОПЛАТУ — ОТДЕЛЬНО ОТ ТОГО, КОМУ ДОЛЯ ────────────
+  //
+  // Дописано после сверки пути клиента. Владелец магазина сам нажал
+  // «Я оплатил», а в ленте платформы стояло «отметил Ерлан».
+  //
+  // Причина: одно поле отвечало на два вопроса. Кому начислить долю —
+  // партнёр клиента, и это верно всегда. Кто отметил — а тут клиент.
+  // Через полгода по спорной оплате пошли бы разбираться к партнёру,
+  // который её не проводил.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo);
+    if (cl) {
+      await j('POST', '/platform/payments',
+        { accountId: cl.id, amount: 6900, months: 1, method: 'cash' }, SUPER);
+      v = await j('GET', '/platform/payments', null, SUPER);
+      const mine = (v.d?.rows ?? [])[0];
+      ok(mine?.declaredBy === 'super',
+         `★ Оплата владельца помечена им: «${mine?.declaredBy}»`);
+
+      await j('POST', '/platform/payments',
+        { accountId: cl.id, amount: 6900, months: 1, method: 'kaspi' }, PARTNER);
+      v = await j('GET', '/platform/payments', null, SUPER);
+      const byPartner = (v.d?.rows ?? [])[0];
+      ok(byPartner?.declaredBy === 'partner',
+         `★ Оплата партнёра помечена им: «${byPartner?.declaredBy}»`);
+    }
+  }
+
   // ── РЕКВИЗИТЫ: ЭТО ВИДИТ КАЖДЫЙ КЛИЕНТ ──────────────────────────
   //
   // Дописано после сверки: не проверялось НИЧЕГО, а ошибка здесь стоит
