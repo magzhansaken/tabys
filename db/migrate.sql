@@ -240,5 +240,8 @@
 \echo '--- 088 стереть магазины для проверки ---'
 \i db/migrations/088_wipe_accounts.sql
 
+\echo '--- 089 стирание по ссылкам ---'
+\i db/migrations/089_wipe_all.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

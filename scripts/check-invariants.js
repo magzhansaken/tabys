@@ -867,6 +867,11 @@ const RULES = [
   { file: 'db/migrations/088_wipe_accounts.sql', must: 'UPDATE без строк —',
     why: 'Прямая правка чужих строк молча ничего не меняет: защита строк не пускает, а ноль строк — не ошибка' },
 
+  { file: 'db/migrations/089_wipe_all.sql', must: 'TRUNCATE TABLE account CASCADE',
+    why: 'На магазин ссылается 131 таблица: список руками устареет молча, база знает связи вернее' },
+  { file: 'db/migrations/089_wipe_all.sql', must: 'ОБЩИЕ СТРОКИ сохраняем',
+    why: 'Роли и единицы лежат в тех же таблицах без привязки к магазину: снесёт их — заведение падает' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
