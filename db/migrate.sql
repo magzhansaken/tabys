@@ -225,5 +225,8 @@
 \echo '--- 084 процент доли на момент оплаты ---'
 \i db/migrations/084_payment_percent.sql
 
+\echo '--- 085 кто решил заявку ---'
+\i db/migrations/085_request_decider.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

@@ -190,6 +190,11 @@ export default function Requests({ me }: { me: Me }) {
                   <span className="badge st-expired"><i className="dot" />отказано</span>
                 )}
                 {r.decision_note && <span className="pay-note">{r.decision_note}</span>}
+                    {/* Кто решил: когда владельцев несколько, вопрос
+                        «к кому идти переспрашивать» встаёт первым. */}
+                    {r.decidedBy && (
+                      <span className="sub"> · решил {r.decidedBy}</span>
+                    )}
 
                 {r.status === 'pending' && isSuper && (
                   <div className="pay-actions">

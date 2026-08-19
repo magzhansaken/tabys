@@ -854,6 +854,9 @@ export class PlatformService {
       pendingAmount: money(Number(r.pending_amount ?? 0)),
       expired: r.days_left != null && r.days_left < 0,
       expiringSoon: r.days_left != null && r.days_left >= 0 && r.days_left <= 7,
+      // КТО РЕШИЛ. У оплаты это видно, у заявки не было: партнёр
+      // получил отказ и не знает, к кому идти переспрашивать.
+      decidedBy: r.decided_by_name,
     }));
   }
 
