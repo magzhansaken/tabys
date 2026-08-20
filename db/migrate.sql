@@ -267,5 +267,8 @@
 \echo '--- 097 журнал называет итог заявки ---'
 \i db/migrations/097_journal_request.sql
 
+\echo '--- 098 три пути к устройству ---'
+\i db/migrations/098_device_request.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

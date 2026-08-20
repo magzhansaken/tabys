@@ -878,6 +878,33 @@ export class PlatformService {
         // Говорим ЕГО словами: в кабинете он видит «Касса» и «Точка»,
         // а «pos» и «store» ему ничего не скажут.
         throw new BadRequestException('Выберите, что нужно: касса или точка');
+
+      // У ЗАЯВКИ НА УСТРОЙСТВО ЕСТЬ ЦЕНА, и правило зависит от роли:
+      //   владелец магазина берёт прайс и менять его не может, он
+      //     покупатель, а не продавец;
+      //   партнёр вправе СНИЗИТЬ: это его доля, он уступает из своего.
+      //     Поднять нельзя, иначе клиент увидит цену выше платформенной
+      //     и решит, что его обманывают;
+      //   владелец платформы ставит любую, включая ноль (подарок за год).
+      let made: any;
+      try {
+        made = (await this.q(
+          `SELECT * FROM platform_device_request($1,$2,$3,$4,$5,$6)`,
+          [d.accountId, String(p.device), ctx.role, ctx.userId,
+           p.price == null ? null : Math.round(Number(p.price) * 100),
+           d.comment ?? null])).rows[0];
+      } catch (e: any) {
+        // Отказ базы человек видел как «Internal server error». Он ввёл
+        // цену выше прайса — это его ошибка, и сказать надо словами.
+        throw new BadRequestException(
+          String(e.message ?? '').replace(/^.*?:\s*/, '') || 'Не удалось подать заявку');
+      }
+
+      await this.audit(ctx, 'request_created', d.accountId, {
+        kind: 'device', device: String(p.device), price: money(Number(made.price)),
+      });
+      return { id: made.request_id, kind: 'device', status: 'pending',
+        price: money(Number(made.price)), note: made.note };
     }
 
     if (d.kind === 'tariff') {

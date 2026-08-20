@@ -1944,6 +1944,46 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ТРИ ПУТИ К НОВОМУ УСТРОЙСТВУ ──────────────────────────────
+  //
+  // Замысел владельца платформы:
+  //   ВЛАДЕЛЕЦ МАГАЗИНА просит по цене платформы, менять её не может —
+  //     он покупатель, а не продавец;
+  //   ПАРТНЁР вправе СНИЗИТЬ: это его доля, он уступает из своего.
+  //     Поднять нельзя — клиент увидел бы цену выше платформенной;
+  //   ВЛАДЕЛЕЦ ПЛАТФОРМЫ ставит любую, включая ноль (подарок за год).
+  //
+  // Общее правило: устройство работает только ПОСЛЕ подтверждения.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const cl = (v.d?.rows ?? []).find((x) => !x.isDemo && x.partner);
+    const book = (await j('GET', '/platform/price-book', null, SUPER)).d;
+    if (cl) {
+      // Партнёр снижает — можно.
+      let r = await j('POST', '/platform/requests', {
+        accountId: cl.id, kind: 'device',
+        payload: { device: 'pos', price: Math.round(book.extraPos * 0.8) },
+      }, PARTNER);
+      ok(r.d?.price === Math.round(book.extraPos * 0.8),
+         `★ Партнёр вправе снизить цену: ${r.d?.price} из ${book.extraPos} ₸`);
+
+      // Партнёр поднимает — нельзя, и отказ говорит словами.
+      r = await j('POST', '/platform/requests', {
+        accountId: cl.id, kind: 'device',
+        payload: { device: 'pos', price: book.extraPos * 2 },
+      }, PARTNER);
+      ok(r.status >= 400 && /снизить/i.test(r.d?.message ?? ''),
+         `★ Поднять цену нельзя: «${r.d?.message}»`);
+
+      // Владелец платформы дарит — можно.
+      r = await j('POST', '/platform/requests', {
+        accountId: cl.id, kind: 'device', payload: { device: 'pos', price: 0 },
+      }, SUPER);
+      ok(r.d?.price === 0,
+         '★ Владелец платформы вправе дать устройство бесплатно');
+    }
+  }
+
   // ── УСТРОЙСТВО ЗАВОДИТСЯ ЦЕЛИКОМ, А НЕ ПОЛДЕЛА ────────────────
   //
   // Разобрано у донора: за одно действие они делают четыре вещи одной
