@@ -47,4 +47,10 @@ contextBridge.exposeInMainWorld('K', {
   passSave: (print, pass) => call('pass:save', { print, pass }),
   passRead: (print) => call('pass:read', print),
   passCount: () => call('pass:count'),
+
+  /* Печать. Лента собирается на стороне кассы, сюда приходит готовой:
+     оболочка не должна знать, как выглядит чек. */
+  print: (lines, opts) => call('print:lines', { lines, ...(opts || {}) }),
+  printers: () => call('print:printers'),
+  openDrawer: () => call('print:drawer'),
 });

@@ -178,6 +178,43 @@ ipcMain.handle('pass:save', safe(async (_e, d) => store.passSave(d.print, d.pass
 ipcMain.handle('pass:read', safe(async (_e, p) => store.passRead(p)));
 ipcMain.handle('pass:count', safe(async () => Object.keys(store.passesAll()).length));
 
+/* ── ПЕЧАТЬ ───────────────────────────────────────────────────────
+   Каждая печать пишется в журнал: владелец звонит «чеки не
+   печатаются» из другого города, и без журнала это гадание. */
+const printer = require('./printer.cjs');
+
+ipcMain.handle('print:lines', safe(async (_e, d) => {
+  const s = store.getSettings();
+  const who = s.printer || 'принтер по умолчанию';
+  const что = d && d.title ? d.title : 'чек';
+  try {
+    await printer.printLines(d.lines, { printer: s.printer, copies: d.copies || s.printCopies });
+    log(`печать: ${что} · ${who} · вышел`);
+    trimLog();
+    return true;
+  } catch (e) {
+    // Причину пишем дословно: «нет бумаги» и «принтер не найден» —
+    // разные беды, и чинят их по-разному.
+    log(`печать: ${что} · ${who} · ОШИБКА: ${e && e.message}`);
+    trimLog();
+    throw e;
+  }
+}));
+
+ipcMain.handle('print:printers', safe(async () => printer.listPrinters()));
+
+ipcMain.handle('print:drawer', safe(async () => {
+  const s = store.getSettings();
+  try {
+    await printer.openDrawer({ printer: s.printer });
+    log('ящик: открыт');
+    return true;
+  } catch (e) {
+    log(`ящик: ОШИБКА: ${e && e.message}`);
+    throw e;
+  }
+}));
+
 /* Открыть журнал. Владелец звонит — говорим «меню → Журнал печати», и
    он присылает файл вместо того, чтобы описывать беду словами. */
 ipcMain.handle('log:open', safe(async () => {
