@@ -30,7 +30,17 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1366, height: 768,           // типичный кассовый планшет
     minWidth: 1024, minHeight: 600,
-    backgroundColor: '#0f172a',
+    // ПОЛНЫЙ ЭКРАН СРАЗУ — как у донора, проверено на боевых кассах.
+    //
+    // Раньше окно открывалось обычным, с крестиком в углу. Кассир
+    // задевает его локтем посреди смены — и касса закрывается при
+    // очереди. Касса не программа, а рабочее место: у него нет
+    // «свернуть» и «закрыть».
+    //
+    // Выйти всё равно можно: F11 разворачивает обратно, Escape тоже.
+    // Это для наладчика, а не для кассира.
+    fullscreen: true,
+    backgroundColor: '#0f172a',          // при загрузке не мигает белым
     autoHideMenuBar: true,               // кассиру меню не нужно
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -46,8 +56,17 @@ function createWindow() {
 
   // Полноэкранный режим по F11, выход по Esc — кассиру удобно, но не запирает.
   win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen());
-    if (input.type === 'keyDown' && input.key === 'Escape' && win.isFullScreen()) win.setFullScreen(false);
+      // ПОЛНЫЙ ЭКРАН НЕ ВЫКЛЮЧАЕТСЯ. Раньше F11 и Escape выпускали
+      // окно, и появлялась рамка с крестиком: кассир задел клавишу —
+      // и может закрыть кассу или свернуть её посреди очереди.
+      //
+      // У донора этих клавиш нет вовсе, и это верно: касса не
+      // программа, из которой выходят. Это рабочее место, занятое
+      // сменой целиком. Закрыть можно только с предупреждением о
+      // неотправленных чеках.
+      if (input.type === 'keyDown' && (input.key === 'F11' || input.key === 'Escape')) {
+        e.preventDefault();
+      }
     if (input.type === 'keyDown' && input.key === 'F12' && isDev) win.webContents.openDevTools();
   });
 

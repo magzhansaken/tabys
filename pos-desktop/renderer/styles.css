@@ -515,3 +515,25 @@ body.pad-on .modal-card { padding-left: 306px; }
 .lock-bar span { font-size: 15px; opacity: .9; }
 .lock-bar.warn { background: var(--gold-fill); color: var(--gold-soft); }
 .lock-bar.bad { background: var(--red-fill); color: var(--red-soft); }
+
+/* ═══ ЭКРАННАЯ КЛАВИАТУРА ══════════════════════════════════════════
+   На кассовом терминале физической клавиатуры часто нет, а системная
+   на Windows не всплывает. Клавиши крупные: по ним бьют пальцем, а не
+   целятся мышью. */
+#kbd {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 400;
+  background: #1a1a1a; border-top: 2px solid #333;
+  padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+#kbd.hidden { display: none; }
+.kb-row { display: flex; gap: 6px; justify-content: center; }
+.kb-k {
+  flex: 1 1 0; min-width: 0; min-height: 56px;   /* под палец, не под мышь */
+  font-size: 20px; border: 1px solid #3a3a3a; border-radius: 8px;
+  background: #262626; color: #f0f0f0; cursor: pointer;
+}
+.kb-k:active { background: #3a3a3a; }
+.kb-kk { background: #2b2620; }        /* казахские — оттенком отдельно */
+.kb-space { flex: 4 1 0; font-size: 15px; }
+.kb-wide { flex: 2 1 0; font-size: 15px; }
+.kb-done { background: #2d4a2d; }

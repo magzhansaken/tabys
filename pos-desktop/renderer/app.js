@@ -298,6 +298,17 @@ function openSale() {
     }
   }
 
+  // Вызов экранной клавиатуры для поиска товара.
+  const kb = $('kbdBtn');
+  if (kb && !kb.dataset.wired) {
+    kb.dataset.wired = '1';
+    kb.onclick = () => {
+      const box = $('kbd');
+      if (box && !box.classList.contains('hidden')) kbClose();
+      else kbOpen($('search'));
+    };
+  }
+
   const lock = $('lockBtn');
   if (lock && !lock.dataset.wired) {
     lock.dataset.wired = '1';

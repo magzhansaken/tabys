@@ -110,6 +110,9 @@
       <div id="catalogPane" class="pane">
         <div class="searchrow">
           <input id="search" placeholder="Поиск или штрихкод" autofocus>
+          <!-- Вызов клавиатуры: кассир ищет товар по названию, а
+               набрать его без клавиатуры нечем. -->
+          <button class="ghost" id="kbdBtn" title="Клавиатура">⌨</button>
         </div>
         <!--
           Категории плитками, слитые с каталогом: один список вместо двух.
@@ -203,6 +206,12 @@
 <div id="toast" class="toast hidden"></div>
 
 <script src="i18n.js"></script>
+  <script src="keyboard.js"></script>
   <script src="app.js"></script>
+  <!-- ЭКРАННАЯ КЛАВИАТУРА. На кассовом терминале физической часто нет
+       совсем, а системная на Windows не всплывает при касании поля.
+       Без неё поиск товара по названию не работал вовсе. -->
+  <div id="kbd" class="hidden"></div>
+
 </body>
 </html>
