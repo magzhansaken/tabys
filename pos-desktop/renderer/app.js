@@ -1571,9 +1571,23 @@ function drawPad() {
   // кассир не смог закрыть смену.
   if (paying) {
     const t = payTarget();
-    $('pad').querySelectorAll('button').forEach((b) => { b.disabled = !t; });
+
+    // ГАШЕНАЯ КНОПКА ОБЯЗАНА ОБЪЯСНЯТЬ СЕБЯ — правило донора из части
+    // 8: у них у каждой недоступной кнопки стоит подпись, почему.
+    //
+    // Кассир жмёт цифру при оплате, ничего не происходит, а почему —
+    // неясно. Он жмёт сильнее, потом зовёт старшего, потом звонит в
+    // поддержку. И всё из-за одной ненаписанной строки.
+    $('pad').querySelectorAll('button').forEach((b) => {
+      b.disabled = !t;
+      b.title = t ? '' : 'Сначала выберите, куда вносить: наличные или карта';
+    });
+
     const exact = $('padModes').querySelector('[data-p="exact"]');
-    if (exact) exact.disabled = !$('pCash');
+    if (exact) {
+      exact.disabled = !$('pCash');
+      exact.title = $('pCash') ? '' : 'Работает только с наличной частью';
+    }
   }
   drawPadButton();
   // Сдачу считаем после того, как поле оплаты отрисовано: иначе она
@@ -2251,6 +2265,14 @@ async function trySync() {
     const done = (r.results || []).filter((x) => x.result !== 'error').map((x) => x.id);
     if (done.length) await K.outboxAck(done);
     setDot(true);
+
+    // ВРЕМЯ ПОСЛЕДНЕЙ ОТПРАВКИ — их находка. Кассир видит «не
+    // отправлено: 3» и не знает, копится это минуту или третий час.
+    // Связь могла вернуться и снова пропасть, а он думает, что всё
+    // стоит с утра. Одна метка снимает вопрос.
+    try { localStorage.setItem('tabys.lastSync', new Date().toISOString()); }
+    catch { /* хранилище тесно — метка не главное */ }
+
     // СВЯЗЬ ВЕРНУЛАСЬ — сказать один раз. Кассир видел, что чеки
     // копятся, и должен узнать, что они ушли: иначе он будет ждать и
     // звонить, хотя всё уже хорошо.
@@ -2301,7 +2323,19 @@ async function updatePending() {
     el.classList.toggle('hidden', !showIt);
     el.classList.toggle('bad', left <= 12);
     el.textContent = showIt
-      ? (left > 0 ? `без связи ${hoursWaiting} ч · осталось ${left} ч` : 'автономные трое суток истекли')
+      ? (() => {
+        // Время последней удачной отправки: без него «не отправлено:
+        // 3» не говорит, копится это минуту или третий час.
+        let last = '';
+        try {
+          const at = localStorage.getItem('tabys.lastSync');
+          if (at) last = ' · ушло в ' + new Date(at)
+            .toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        } catch { /* нет хранилища */ }
+        return left > 0
+          ? `без связи ${hoursWaiting} ч · осталось ${left} ч${last}`
+          : `автономные трое суток истекли${last}`;
+      })()
       : '';
   }
 
