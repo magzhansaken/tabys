@@ -1730,6 +1730,47 @@ $('btnShift').onclick = () => {
  * Возвращает: null — нельзя вовсе; { approvedBy } — можно (пусто, если
  * разрешено всем).
  */
+/* Спросить СВОЙ код. Сверяем с пропуском — тем же следом, что и при
+   входе без сети: он лежит на этой кассе и работает без интернета.
+   Звать старшего для подтверждения себя незачем. */
+async function askOwnPin(title) {
+  return new Promise((resolve) => {
+    openModal(`
+      <h2>Подтвердите себя</h2>
+      <p class="muted">«${escapeHtml(title)}» — введите свой код.<br>
+      Это останется в журнале за вашим именем.</p>
+      <div class="dots" id="spDots"></div>
+      <div class="err" id="spErr"></div>
+      <div class="keypad" id="spPad"></div>
+      <div class="modal-actions"><button id="spCancel">Отмена</button></div>`);
+
+    let pin = '';
+    const draw = () => { $('spDots').innerHTML = [0,1,2,3].map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); };
+    draw();
+    const pad = $('spPad'); pad.innerHTML = '';
+    for (const d of ['1','2','3','4','5','6','7','8','9','C','0','←']) {
+      const b = document.createElement('button');
+      b.textContent = d;
+      b.onclick = async () => {
+        if (d === 'C') pin = '';
+        else if (d === '←') pin = pin.slice(0, -1);
+        else if (pin.length < 4) pin += d;
+        draw();
+        if (pin.length === 4) {
+          const mark = await pinPrint(pin, S.deviceToken || S.device?.id || '');
+          const pass = passRead(mark);
+          // Сверяем, что код принадлежит ТОМУ, кто сейчас за кассой:
+          // чужой код здесь не подойдёт — для чужого есть «старший».
+          if (pass && pass.employee?.id === S.employee?.id) { closeModal(); resolve(true); }
+          else { $('spErr').textContent = 'Не ваш код'; pin = ''; draw(); }
+        }
+      };
+      pad.appendChild(b);
+    }
+    $('spCancel').onclick = () => { closeModal(); resolve(false); };
+  });
+}
+
 async function allowAction(code, title) {
   const level = (SET.actions || {})[code] || 'everyone';
   if (level === 'everyone') return { approvedBy: null };
@@ -1744,6 +1785,18 @@ async function allowAction(code, title) {
   //
   // Теперь знает: сервер отдаёт при входе isShiftAdmin и isOwner, и
   // они лежат в пропуске. Кто вправе разрешать — разрешает молча.
+  // СВОЙ КОД — четвёртый уровень, взят у донора (self_pin).
+  //
+  // Говорит: это сделал Я, а не кто-то за спиной. Кассир снимает товар
+  // из чека при покупателе, отойти он не может — но подтвердить, что
+  // руку приложил именно он, стоит: за отмены спрашивают.
+  //
+  // Старшего звать не надо: человек подтверждает СЕБЯ, и это быстро.
+  if (level === 'self_pin') {
+    const ok = await askOwnPin(title);
+    return ok ? { approvedBy: (S.employee?.name || 'кассир') + ' (свой код)' } : null;
+  }
+
   const me = S.employee || {};
   if (me.isOwner || me.isShiftAdmin) {
     // Записываем, КТО разрешил: в журнале должно остаться имя, даже
@@ -1751,7 +1804,22 @@ async function allowAction(code, title) {
     return { approvedBy: me.name || 'старший смены' };
   }
 
-  // admin_only — спрашиваем PIN
+  // БЕЗ СВЯЗИ КОД СТАРШЕГО НЕ СВЕРИТЬ — правило донора, и оно верное:
+  // проверка идёт на сервер, интернета нет — ответа нет.
+  //
+  // Говорим об этом прямо, а не даём вводить код впустую: кассир при
+  // покупателе трижды наберёт и решит, что сломалась касса.
+  //
+  // Выход есть и без сети: если старший стоит рядом, он входит своим
+  // кодом — пропуск на этой кассе работает без интернета, и дальше он
+  // разрешает молча как старший.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    toast(`${title}: подтверждает старший, а для проверки кода нужна связь. `
+      + 'Либо пусть старший войдёт своим кодом', true);
+    return null;
+  }
+
+  // admin_only — спрашиваем код старшего
   return new Promise((resolve) => {
     openModal(`
       <h2>Нужно разрешение</h2>
