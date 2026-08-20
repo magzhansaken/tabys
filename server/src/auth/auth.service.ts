@@ -482,7 +482,10 @@ export class AuthService {
    * Наше расширение: бейдж ИЛИ PIN, обе подписи в журнале, работает офлайн.
    */
   async approveAction(accountId: string, dto: {
-    id?: string; deviceId: string; requestedBy: string; action: string;
+    /* Кто просит — необязателен: касса может не знать ключа, если
+       кассир ещё не вошёл. Тогда в журнале останется только «кто
+       разрешил» — это хуже, чем полная запись, но лучше падения. */
+    id?: string; deviceId: string; requestedBy?: string; action: string;
     badge?: string; pin?: string; entity?: string; entityId?: string; offline?: boolean;
   }) {
     return this.db.withTenant(accountId, async (c) => {
@@ -501,7 +504,7 @@ export class AuthService {
         `INSERT INTO action_approval (id, account_id, device_id, requested_by, approved_by, action, entity, entity_id, method, approved_at, offline, synced_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), $10, now())
          ON CONFLICT (id) DO NOTHING RETURNING id`,
-        [dto.id ?? randomUUID(), accountId, dto.deviceId, dto.requestedBy, approver.id,
+        [dto.id ?? randomUUID(), accountId, dto.deviceId, dto.requestedBy ?? null, approver.id,
          dto.action, dto.entity ?? null, dto.entityId ?? null, dto.badge ? 'badge' : 'pin', dto.offline ?? false]);
 
       await c.query(

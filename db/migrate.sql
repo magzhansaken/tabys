@@ -303,5 +303,8 @@
 \echo '--- 108 названия при привязке ---'
 \i db/migrations/108_pair_names.sql
 
+\echo '--- 109 кто просил может быть пустым ---'
+\i db/migrations/109_approval_requester.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

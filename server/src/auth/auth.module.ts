@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Patch, Param, Body, Req, UseGuards, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
-import { IsString, IsOptional, IsIn, Length, Matches, ValidateIf } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, Length, Matches, ValidateIf } from 'class-validator';
 import { AuthService } from './auth.service';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard, PermissionsGuard, DeviceGuard, Public, RequirePermission, Ctx, Dev } from './guards';
@@ -39,7 +39,10 @@ class PinDto { @Matches(/^\d{4}$/, { message: 'PIN — 4 цифры' }) pin: str
 class SetPinDto extends PinDto { @IsString() employeeId: string; }
 class ApproveDto {
   @IsOptional() @IsString() id?: string;
-  @IsString() requestedBy: string;
+  /* КЛЮЧ вошедшего кассира, а не имя. Раньше сюда проходило любое
+     слово, база отбивала его при записи, и сервер падал с «внутренней
+     ошибкой» — кассир видел стену вместо объяснения. */
+  @IsOptional() @IsUUID() requestedBy?: string;
   @IsString() action: string;
   @IsOptional() @IsString() badge?: string;
   @IsOptional() @Matches(/^\d{4}$/) pin?: string;
