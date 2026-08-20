@@ -656,6 +656,21 @@ function drawMarkBar() {
     : `<b>Марки собраны</b><small>Коды уйдут в чеке и выведут товар из оборота</small>`;
 }
 
+/* СНЯТЬ ЛИШНИЕ МАРКИ. Свёртка одна на все пути уменьшения: кнопка
+ * «−», ввод цифрами, удаление позиции.
+ *
+ * В части 5 я починил кнопку и НЕ ЗАМЕТИЛ, что цифры идут другим
+ * путём. Урок: чинишь правило про деньги — ищи ВСЕ места, где оно
+ * должно работать, а не то, откуда пришла жалоба. */
+function trimMarks(l) {
+  if (!l || !l.marked || !Array.isArray(l.codes)) return;
+  const need = Math.max(0, Math.ceil(l.qty));
+  if (l.codes.length <= need) return;
+  const off = l.codes.length - need;
+  l.codes.length = need;
+  toast(`Снято марок: ${off} — отсканируйте заново, если понадобятся`);
+}
+
 function weighedBarcode(code) {
   if (!/^22\d{10,11}$/.test(code)) return null;
   const plu = String(Number(code.slice(2, 7)));
@@ -821,16 +836,11 @@ function drawCart() {
         if (!ok) return;
         l.qty -= 1;
 
-        // ЛИШНЯЯ МАРКА ОСТАВАЛАСЬ В ЧЕКЕ. Было 3 бутылки и 3 считанные
-        // марки; убрали одну — осталось 2 бутылки и ТРИ марки. Лишняя
-        // ушла бы в налоговую как проданная, а товар стоит на полке.
-        //
-        // Снимаем последнюю считанную: она считана позже всех, значит
-        // её проще пересканировать, если кассир передумает.
-        if (l.marked && (l.codes || []).length > Math.max(0, Math.ceil(l.qty))) {
-          const back = l.codes.pop();
-          toast(`Марка снята с чека — отсканируйте заново, если нужна (${back.slice(-6)})`);
-        }
+        // Марки снимаем ОДНОЙ свёрткой на все пути: кнопка «−», ввод
+        // цифрами, удаление позиции. Было два одинаковых куска —
+        // правишь один, забываешь другой. Ровно так я и пропустил
+        // цифры, починив кнопку в части 5.
+        trimMarks(l);
 
         if (l.qty <= 0) cart.splice(b.dataset.m, 1);
         voids++;
@@ -1761,8 +1771,19 @@ async function applyPadQty() {
     const ok = await allowAction('act_reduce_qty', 'Уменьшение количества');
     if (!ok) { drawPadValue(); return; }
     l.qty = n;
+    trimMarks(l);
     logAction('act_reduce_qty', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
   } else {
+    // ПРЕДЕЛ КОЛИЧЕСТВА — их правило (qty > 0 && qty <= 1000).
+    //
+    // Опечатка в одну лишнюю цифру давала чек на миллион: кассир
+    // набрал 99 вместо 9, промахнулся мимо кнопки — и покупатель видит
+    // сумму с шестью нулями. Отменять её потом через старшего.
+    if (n > 1000) {
+      toast(`${qtyStr(n)} — похоже на опечатку. Больше 1000 за раз не бывает`, true);
+      drawPadValue();
+      return;
+    }
     l.qty = n;
   }
   drawCart();
