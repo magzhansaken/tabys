@@ -1,234 +1,173 @@
 /*
  * СМЕНА.
  *
- * Смена — это отрезок, за который сводят деньги. Открыли с разменом,
- * поторговали, закрыли с пересчётом: сколько должно быть в ящике и
- * сколько насчитали.
+ * Открыл — торгуешь. Закрыл — пересчитал деньги и сдал.
  *
- * ЧЕТЫРЕ ПРАВИЛА, каждое выстрадано.
+ * Три беды, каждая уже случалась:
  *
- * 1. СПРОСИТЬ ПРО ОТКРЫТУЮ СМЕНУ ДО ТОГО, как предложить новую. Их
- *    урок: «иначе человек введёт размен, нажмёт Открыть, а сервер
- *    подхватит чужую смену — и деньги уйдут не туда».
+ *   1. ЗАБЫТАЯ СМЕНА. Кассир ушёл домой, не закрыв. Утром сменщик
+ *      садится — и его чеки идут во ВЧЕРАШНЮЮ смену. Выручка за два
+ *      дня в одной куче, сверка не сойдётся ни за один.
  *
- * 2. ЧУЖАЯ СМЕНА ПРИНИМАЕТСЯ, А НЕ ПРОДОЛЖАЕТСЯ. Слово другое
- *    нарочно: кассир должен понимать, что берёт на себя чужой ящик.
+ *   2. ЧУЖАЯ СМЕНА. Их урок: «спрашиваем открытую смену ДО того, как
+ *      предложить открыть новую: иначе человек введёт размен, нажмёт
+ *      "Открыть", а сервер подхватит чужую смену — и деньги уйдут не
+ *      туда».
  *
- * 3. ЗАБЫТАЯ СМЕНА ловится по границе суток, а не по числу часов. У
- *    донора «смена идёт 14 часов» — но она может законно идти
- *    шестнадцать. У меня: открыта до шести утра, а сейчас позже —
- *    значит вчерашняя.
- *
- * 4. ПУСТОЕ ПОЛЕ ПРИ ЗАКРЫТИИ НЕ ЗНАЧИТ НОЛЬ. В прошлой кассе это
- *    давало недостачу на всю кассу: кассир закрывал не глядя, и
- *    назавтра его спрашивали о деньгах, которых он не брал.
+ *   3. ПУСТОЕ ПОЛЕ ПРИ ЗАКРЫТИИ давало ноль — недостачу на всю кассу.
+ *      Кассир закрывал не глядя, и назавтра его спрашивали о деньгах,
+ *      которых он не брал.
  */
 
-/** Обычные размены. Кассир жмёт один раз вместо набора цифр. */
-const FLOATS = [10000, 20000, 40000];
+/** Обычные размены. Их числа, они же ходят и в магазинах. */
+const FLOATS = [20000, 40000, 60000];
 
 /**
  * ЗАБЫТА ЛИ СМЕНА.
  *
- * Граница — шесть утра: до неё ещё «вчерашний вечер», после — новый
- * день. Магазины работают до полуночи и до двух ночи, и смена,
- * открытая в двадцать три часа, — это нормально.
+ * У донора мерка «идёт больше 14 часов». Она неверна для магазина:
+ * смена может законно идти шестнадцать — заведение работает с десяти
+ * до двух ночи.
  *
- * А вот смена, открытая вчера до шести утра, когда сейчас уже день —
- * забыта. Утренний кассир сядет, и его чеки уйдут во вчерашнюю смену:
- * выручка за два дня в одной куче, и сверка не сойдётся ни за один.
+ * Моя мерка вернее: смена открыта ДО утренней границы, а сейчас уже
+ * после. Значит её забыли вчера — ловим именно забытую, а не долгую.
  */
+const MORNING_HOUR = 6;
+
 function shiftForgotten(shift, now = new Date()) {
   if (!shift || !shift.openedAt) return null;
   const opened = new Date(shift.openedAt);
-  const border = new Date(now); border.setHours(6, 0, 0, 0);
+  if (Number.isNaN(opened.getTime())) return null;
+
+  const border = new Date(now);
+  border.setHours(MORNING_HOUR, 0, 0, 0);
 
   // Открыта после границы, или сейчас ещё ночь — обычная смена.
   if (opened >= border || now < border) return null;
 
-  const hours = Math.floor((now - opened) / 3600000);
+  const hours = Math.floor((now.getTime() - opened.getTime()) / 3600000);
   return {
     hours,
-    said: `Смена открыта ${hours} ч назад и не закрыта. `
-      + 'Ваши чеки уйдут во вчерашний отчёт — закройте её и откройте новую',
+    said: `Смена открыта ${hours} ч назад и не закрыта со вчера. `
+      + 'Закройте её и откройте новую, иначе выручка за два дня смешается',
   };
 }
 
 /**
- * ЧЬЯ СМЕНА.
+ * ОТКРЫТЬ СМЕНУ.
  *
- * Своя — «Продолжить». Чужая — «Принять смену»: слово другое нарочно,
- * кассир берёт на себя чужой ящик и отвечает за его пересчёт.
+ * Сперва спрашиваем, нет ли уже открытой — их урок. Без связи не
+ * мешаем работать: смена откроется, а сервер разберётся при первой
+ * отправке.
  */
-function shiftOwnership(shift, employee) {
-  if (!shift) return null;
-  const mine = shift.openedById && employee && shift.openedById === employee.id;
-  return {
-    mine: !!mine,
-    label: mine ? 'Продолжить смену' : 'Принять смену',
-    note: mine ? null
-      : `Смену открыл ${shift.openedByName || 'другой кассир'}. `
-        + 'Приняв её, вы отвечаете за деньги в ящике — пересчитайте их сейчас',
-  };
-}
-
-/** Открыть смену. Размен идёт в ящик как начальные наличные. */
-async function openShift({ ask, store, settings, deviceToken, openingCash, newId }) {
+async function openShift({ ask, store, settings, deviceToken, employee, openingCash, newId }) {
   const shift = {
     id: newId(),
     openedAt: new Date().toISOString(),
-    openingCash: Number(openingCash) || 0,
+    openedBy: employee && employee.id || null,
+    openedByName: employee && employee.name || '',
+    openingCash: Number(openingCash || 0),
   };
 
-  /* Сперва в очередь, потом на сервер: если упасть между, смена цела.
-     Наоборот — она бы открылась на сервере, а касса о ней не знала. */
+  // Кладём в очередь СНАЧАЛА: если упасть между записью и отправкой,
+  // смена цела. Наоборот — смена открылась только на сервере, а касса
+  // о ней не знает.
   await store.outboxAdd({
-    id: shift.id, entity: 'shift', entityId: shift.id, op: 'insert',
-    payload: shift, clientTs: shift.openedAt,
+    id: shift.id, entity: 'shift', entityId: shift.id, op: 'insert', payload: shift,
   });
 
-  await store.saveState({
-    shift: { ...shift, openedById: null, openedByName: null },
-    cashInDrawer: shift.openingCash,
-    lastNumber: 0,        // нумерация чеков начинается со смены
-  });
-
+  await store.saveState({ shift, cashInDrawer: shift.openingCash });
   return shift;
 }
 
+/** Спросить сервер, нет ли уже открытой смены на этой кассе. */
+async function currentShift({ ask, settings, deviceToken }) {
+  try {
+    const d = await ask('/pos/shift/current', { settings, deviceToken });
+    return d && d.open ? d : null;
+  } catch {
+    /* Без связи не мешаем работать: их правило. Смена откроется, а
+       сервер разберётся с двойной при первой отправке. */
+    return null;
+  }
+}
+
 /**
- * СКОЛЬКО ДОЛЖНО БЫТЬ В ЯЩИКЕ.
+ * СВОДКА СМЕНЫ — считаем НА КАССЕ.
  *
- * Считаем НА КАССЕ, а не спрашиваем сервер: закрытие обязано работать
- * без связи. У донора сводка приходит с сервера, и без сети её нет.
+ * У донора сводка приходит с сервера, и без связи её нет. У меня
+ * считается на месте: закрытие работает без интернета всегда, а
+ * интернета в магазине может не быть весь день.
  */
-function expectedCash(state) {
-  return Number(state.cashInDrawer) || 0;
+function shiftSummary({ shift, receipts, cashInDrawer }) {
+  const мои = (receipts || []).filter((r) => !shift || r.shiftId === shift.id);
+  const продажи = мои.filter((r) => !r.isRefund);
+  const возвраты = мои.filter((r) => r.isRefund);
+
+  const сумма = (rows) => rows.reduce((a, r) => a + Number(r.total || 0), 0);
+
+  return {
+    count: продажи.length,
+    refundCount: возвраты.length,
+    revenue: сумма(продажи) - сумма(возвраты),
+    cash: мои.reduce((a, r) => a + Number(r.cashPart || 0), 0),
+    card: мои.reduce((a, r) => a + Number(r.cardPart || 0), 0),
+    openingCash: shift ? Number(shift.openingCash || 0) : 0,
+    expectedCash: Number(cashInDrawer || 0),
+  };
 }
 
 /**
  * ЗАКРЫТЬ СМЕНУ.
  *
- * @param factCash сколько насчитали. null значит «не вписал» — тогда
- *                 решение принимает экран, спросив кассира.
+ * Пустое поле НЕ ЗНАЧИТ НОЛЬ. Это была беда про деньги: кассир
+ * закрывал не глядя, в отчёт уходила недостача на всю кассу, и
+ * назавтра его спрашивали о деньгах, которых он не брал.
+ *
+ * @param factCash  сколько насчитали; null значит «не вписали»
  */
-async function closeShift({ store, state, factCash, newId }) {
-  const must = expectedCash(state);
-  const fact = Number(factCash) || 0;
+async function closeShift({ store, shift, factCash, expectedCash, newId }) {
+  if (factCash == null || factCash === '') {
+    // Решает не касса, а кассир: спрашивает экран, а мы отказываем.
+    const e = new Error('Не вписано, сколько денег в ящике');
+    e.needCount = true;
+    e.expected = Number(expectedCash || 0);
+    throw e;
+  }
+
+  const fact = Number(factCash);
+  const must = Number(expectedCash || 0);
 
   const close = {
     id: newId(),
-    shiftId: state.shift && state.shift.id,
+    shiftId: shift.id,
     closedAt: new Date().toISOString(),
-    expectedCash: must,
     factCash: fact,
+    expectedCash: must,
     diff: fact - must,
   };
 
   await store.outboxAdd({
-    id: close.id, entity: 'shift_close', entityId: close.shiftId,
-    op: 'update', payload: close, clientTs: close.closedAt,
+    id: close.id, entity: 'shift_close', entityId: shift.id, op: 'update', payload: close,
   });
 
+  // Смену снимаем и ящик обнуляем: деньги сданы.
   await store.saveState({ shift: null, cashInDrawer: 0 });
   return close;
 }
 
-/** Как назвать расхождение. Считаем при вводе, а не после закрытия. */
+/** Расхождение словами: показываем ДО подтверждения, а не после. */
 function diffText(fact, must) {
   const d = Number(fact) - Number(must);
   if (!Number.isFinite(d)) return null;
   if (d === 0) return { kind: 'ok', said: 'Сходится' };
-  if (d > 0) return { kind: 'warn', said: 'Излишек', amount: d };
-  return { kind: 'bad', said: 'Не хватает', amount: -d };
-}
-
-/**
- * ЧТО СКАЗАТЬ ПРО НЕОТПРАВЛЕННОЕ.
- *
- * Деньги за эти чеки УЖЕ В ЯЩИКЕ — это не излишек. Без объяснения
- * кассир решит, что насчитал лишнего, и начнёт искать ошибку.
- */
-/* СЧЁТ ПО-РУССКИ: 1 чек, 2 чека, 5 чеков.
- *
- * Было «3 чеков» — коряво. Кассир читает это при каждом закрытии
- * смены, и небрежность в словах подрывает доверие к цифрам: если тут
- * не считают как надо, то и в деньгах?
- *
- * Правило языка: 11-14 всегда «чеков», дальше по последней цифре. */
-function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  if (a >= 11 && a <= 14) return many;
-  const b = a % 10;
-  if (b === 1) return one;
-  if (b >= 2 && b <= 4) return few;
-  return many;
-}
-
-function pendingNote(pending, rejected) {
-  const out = [];
-  if (pending > 0) {
-    out.push(`В очереди ${pending} ${plural(pending, 'чек', 'чека', 'чеков')} — `
-      + 'они уйдут вместе с закрытием. Деньги за них уже в ящике, это не излишек');
-  }
-  if (rejected > 0) {
-    out.push(`Сервер не принял ${rejected} ${plural(rejected, 'чек', 'чека', 'чеков')} — `
-      + 'деньги за них в ящике, а в отчёте их нет. Покажите владельцу');
-  }
-  return out;
+  if (d > 0) return { kind: 'warn', said: `Излишек ${d}` , diff: d };
+  return { kind: 'bad', said: `Не хватает ${-d}`, diff: d };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { FLOATS, plural, shiftForgotten, shiftOwnership, openShift,
-    expectedCash, closeShift, diffText, pendingNote };
+  module.exports = {
+    FLOATS, MORNING_HOUR, shiftForgotten, openShift, currentShift,
+    shiftSummary, closeShift, diffText,
+  };
 }
-
-/*
- * ЯВКА КАССИРА — отдельно от смены, и это важно.
- *
- * Смена про ДЕНЬГИ: открыли ящик, закрыли, свели. Явка про ЧЕЛОВЕКА:
- * пришёл на работу, ушёл домой.
- *
- * Их довод: «вход по PIN открывает явку на сервере; „Я ухожу" — тот же
- * PIN, но явка закрывается и касса прощается, назвав отработанное
- * время».
- *
- * Смена может пережить кассира: утренний ушёл, вечерний принял тот же
- * ящик. И наоборот — кассир может отметить уход, не закрывая смену,
- * если сменщик уже сел.
- *
- * Кассир ушёл домой, а явка висит — владелец думает, что человек на
- * работе, и считает ему часы.
- */
-async function clockOut({ ask, store, settings, deviceToken, pin }) {
-  try {
-    const d = await ask('/pos/clock-out', {
-      settings, deviceToken, method: 'POST', body: { pin },
-    });
-    return {
-      ok: true,
-      name: d.fullName || d.name || 'Кассир',
-      workedMin: Number(d.workedMin || d.worked_min || 0),
-    };
-  } catch (e) {
-    if (e && e.serverAnswered) {
-      /* Явки нет — это не ошибка кода. Человек мог отметить уход
-         раньше, а теперь жмёт повторно. */
-      if (/NO_OPEN_ATTENDANCE|нет открытой/i.test(e.code || e.message || '')) {
-        return { ok: false, said: 'Открытой явки нет — уход уже отмечен' };
-      }
-      return { ok: false, said: e.message || 'Код не подошёл' };
-    }
-
-    /* БЕЗ СВЯЗИ ЯВКУ НЕ ЗАКРЫТЬ, и это верно: часы считает сервер, а
-       касса не знает, когда человек пришёл.
-       Но говорим прямо, что делать, а не «ошибка». */
-    return {
-      ok: false,
-      said: 'Нет связи — уход отметится, когда появится интернет. '
-        + 'Можно уходить, скажите владельцу',
-    };
-  }
-}
-
-if (typeof module !== 'undefined') module.exports.clockOut = clockOut;
