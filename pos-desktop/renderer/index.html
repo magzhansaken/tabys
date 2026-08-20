@@ -84,6 +84,11 @@
     <b id="shiftLabel">Смена не открыта</b>
     <span id="cashLabel"></span>
     <span class="muted" id="cashierLabel"></span>
+    <!-- ЯЗЫК КАССЫ. Кассир в Казахстане часто говорит по-казахски, и
+         читать «Введите код» ему труднее, чем «Кодты енгізіңіз». За
+         смену он читает эти слова сотни раз.
+         Чек остаётся на русском: его читает покупатель. -->
+    <button class="ghost" id="langBtn" title="Тіл / Язык">ҚАЗ</button>
     <!-- ВЫЙТИ, НЕ ЗАКРЫВАЯ СМЕНУ. Кассир отходит на обед или сдаёт
          место сменщику посреди смены. Раньше выйти можно было только
          закрыв смену — и касса оставалась открытой под его именем,
@@ -94,7 +99,7 @@
     <span id="voidLabel" class="hidden" title="Отмены и скидки за смену"></span>
     <span class="muted" id="pendingLabel" title="Чеки, которые ещё не ушли на сервер"></span>
     <span id="offlineLabel" class="hidden" title="Автономно касса работает до трёх суток"></span>
-    <button id="btnPrice" title="Узнать цену, не начиная чек">Цена</button>
+    <button id="btnPrice" title="Узнать цену, не начиная чек" data-tt="price">Цена</button>
     <button id="btnMenu">Меню</button>
   </header>
 
@@ -148,7 +153,7 @@
           как сумма к оплате, и кассир отдаёт не то.
         -->
         <div class="change-box hidden" id="changeRow">
-          <div class="lbl" id="changeLabel">СДАЧА</div>
+          <div class="lbl" id="changeLabel" data-tt="change">СДАЧА</div>
           <div class="val" id="change">0 ₸</div>
         </div>
       </div>
@@ -166,7 +171,7 @@
       </div>
       <div class="modes" id="padModes"></div>
       <div class="pad" id="pad"></div>
-      <button id="btnPay" class="primary pay" disabled>ОПЛАТА</button>
+      <button id="btnPay" class="primary pay" disabled data-tt="pay">ОПЛАТА</button>
       <div class="pad-hint hidden" id="padHint"></div>
     </div>
 
@@ -197,6 +202,7 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script src="app.js"></script>
+<script src="i18n.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

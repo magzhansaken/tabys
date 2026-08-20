@@ -221,6 +221,18 @@ function passSave(print, pass) {
 /** Найти пропуск по следу кода. */
 function passRead(print) { return passesAll()[print] || null; }
 
+/* Расставить слова выбранного языка по экрану.
+ *
+ * Ищем по признаку data-tt: так перевод не расползается по коду, а
+ * лежит в одном месте — в словаре. Забыли слово в словаре — на экране
+ * останется русское, а не пустое место. */
+function applyLang() {
+  if (typeof tt !== 'function') return;
+  document.querySelectorAll('[data-tt]').forEach((el) => {
+    el.textContent = tt(el.dataset.tt);
+  });
+}
+
 async function tryPin() {
   const err = $('pinErr'); err.textContent = '';
   try {
@@ -271,6 +283,21 @@ function openSale() {
   // ЗАПЕРЕТЬ КАССУ — не закрывая смену. Смену закрывают отдельно, с
   // пересчётом денег: это разные дела. Заперли — вернулись к вводу
   // кода, и кто сядет следующим, тот и назовётся в чеках.
+  // ЯЗЫК КАССЫ. Кнопка показывает, на КАКОЙ язык переключит, а не
+  // какой стоит сейчас: так понятно, что будет по нажатию.
+  const lang = $('langBtn');
+  if (lang) {
+    lang.textContent = typeof posLang === 'function' && posLang() === 'kk' ? 'РУС' : 'ҚАЗ';
+    if (!lang.dataset.wired) {
+      lang.dataset.wired = '1';
+      lang.onclick = () => {
+        setPosLang(posLang() === 'kk' ? 'ru' : 'kk');
+        applyLang();
+        drawTop();
+      };
+    }
+  }
+
   const lock = $('lockBtn');
   if (lock && !lock.dataset.wired) {
     lock.dataset.wired = '1';
