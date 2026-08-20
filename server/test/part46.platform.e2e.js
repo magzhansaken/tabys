@@ -1943,6 +1943,45 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── УСТРОЙСТВО ЗАВОДИТСЯ ЦЕЛИКОМ, А НЕ ПОЛДЕЛА ────────────────
+  //
+  // Разобрано у донора: за одно действие они делают четыре вещи одной
+  // сделкой — поднимают предел, добавляют строку счёта (только если
+  // цена больше нуля), заводят САМО УСТРОЙСТВО с кодом привязки и
+  // пишут в журнал.
+  //
+  // У меня добавлялась одна строка счёта: я брал деньги за кассу, а
+  // кассы не появлялось — клиенту нечего привязывать.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Устройства целиком', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+      const before = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+
+      const add = await j('POST', '/platform/device/add',
+        { accountId: id, kind: 'pos' }, SUPER);
+      ok(!!add.d?.code,
+         `★ Касса заведена с кодом привязки: ${add.d?.code}`);
+      ok(!!add.d?.name, `★ И с именем: ${add.d?.name}`);
+
+      const after = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      ok(after?.registers === (before?.registers ?? 0) + 1,
+         `★ Касс стало больше: ${before?.registers} → ${after?.registers}`);
+      ok(after?.breakdown?.devices > 0,
+         `★ И устройства попали в счёт: ${after?.breakdown?.devices} ₸`);
+
+      // Журнал называет, ЧТО подключили: иначе через полгода не
+      // понять, за что клиенту начали брать три тысячи.
+      const log = (await j('GET', '/platform/audit?limit=5', null, SUPER)).d?.rows ?? [];
+      const rec = log.find((x) => x.action === 'device_added');
+      ok(!!rec?.detail,
+         `★ Журнал называет устройство и цену: «${rec?.detail}»`);
+    }
+  }
+
   // ── ИЗ ЧЕГО СКЛАДЫВАЕТСЯ МЕСЯЦ ────────────────────────────────
   //
   // Взято у донора: итог отвечает на вопрос «сколько», но не на вопрос

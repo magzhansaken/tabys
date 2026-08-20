@@ -255,5 +255,11 @@
 \echo '--- 093 оплата сильнее ручного этапа ---'
 \i db/migrations/093_paid_beats_manual.sql
 
+\echo '--- 094 добавить устройство целиком ---'
+\i db/migrations/094_device_add.sql
+
+\echo '--- 095 журнал называет устройство ---'
+\i db/migrations/095_journal_device.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

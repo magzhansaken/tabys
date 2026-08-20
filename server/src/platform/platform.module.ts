@@ -1310,19 +1310,23 @@ export class PlatformService {
     const set = (await this.q(`SELECT * FROM platform_settings WHERE id`)).rows[0] ?? {};
     const unit = Number(kind === 'pos' ? set.price_extra_pos : set.price_extra_store);
 
-    // Строка счёта — чтобы со следующего месяца цена выросла на
-    // понятную величину, а не стала другой цифрой без объяснения.
-    const n = Number((await this.q(
-      `SELECT count(*) AS n FROM plan_line
-        WHERE account_id=$1 AND kind=$2 AND ends_at IS NULL`, [accountId, kind])).rows[0].n) + 2;
+    // ЗАВОДИМ САМО УСТРОЙСТВО, а не только строку счёта. Раньше
+    // добавлялась одна строка: я брал деньги за кассу, а кассы не
+    // появлялось — клиенту нечего привязывать, кода нет. Он платит за
+    // то, чего у него не возникло.
+    //
+    // Одной сделкой, как у донора: устройство, строка счёта и код
+    // привязки. Бесплатное тоже возможно — цена ноль, строки нет.
+    const made = (await this.q(
+      `SELECT * FROM platform_device_add($1,$2,$3,$4)`,
+      [accountId, kind, unit, null])).rows[0];
 
-    await this.q(
-      `INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
-       VALUES ($1,$2,$3,1,$4)`,
-      [accountId, kind, kind === 'pos' ? `Касса №${n}` : `Точка №${n}`, unit]);
-
-    await this.audit(ctx, 'device_added', accountId, { kind, proRata: pv.proRata });
+    await this.audit(ctx, 'device_added', accountId, {
+      kind, name: made?.device_name, proRata: pv.proRata,
+      price: unit > 0 ? money(unit) : 'без платы',
+    });
     return { ...pv, ok: true,
+      name: made?.device_name, code: made?.code,
       note: pv.proRata > 0
         ? `Добавлено. Доплата ${pv.proRata} ₸ за остаток периода войдёт в счёт`
         : 'Добавлено. Доплаты нет — устройство войдёт в следующий счёт' };
