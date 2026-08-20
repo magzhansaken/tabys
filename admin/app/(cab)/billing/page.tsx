@@ -92,6 +92,31 @@ export default function BillingPage() {
         </Card>
       )}
 
+      {/* РАЗОВЫЕ ДОПЛАТЫ — рядом с месячной платой и до блока «куда
+          платить». Клиент должен видеть ОБЩУЮ сумму: иначе переведёт
+          только месячную, а доплата повиснет, и разговор об этом
+          случится через месяц, когда он уже забудет про кассу. */}
+      {sub?.charges?.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Разово, к следующей оплате</div>
+          {sub.charges.map((c: any) => (
+            <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between',
+              fontSize: 13, padding: '4px 0' }}>
+              <span style={{ color: C.dim }}>{c.title}</span>
+              <b>{money(c.amount)}</b>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between',
+            borderTop: `1px solid ${C.line}`, marginTop: 6, paddingTop: 6 }}>
+            <b>Всего к оплате</b>
+            <b>{money(sub.monthly + sub.charges.reduce((a: number, c: any) => a + c.amount, 0))}</b>
+          </div>
+          <div style={{ fontSize: 12, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>
+            Переведите одной суммой — доплаты закроются вместе с месяцем.
+          </div>
+        </Card>
+      )}
+
       {sub?.pay && (sub.pay.url || sub.pay.qr || sub.pay.phone) && (
         <Card>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Куда платить</div>

@@ -1944,6 +1944,49 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ДОПЛАТЫ КОПЯТСЯ И ПЛАТЯТСЯ РАЗОМ ──────────────────────────
+  //
+  // Мы показывали «Доплата 1 400 ₸ войдёт в счёт» — и НИКУДА ЕЁ НЕ
+  // ЗАПИСЫВАЛИ. Клиент добавлял кассу в середине месяца, доплату не
+  // брали, следующий счёт выходил обычный: платформа дарила две
+  // недели работы кассы и не замечала.
+  //
+  // Замысел владельца платформы: клиент платит ОДИН раз — за месяц и
+  // за остаток сразу, а не двумя переводами за каждое устройство.
+  {
+    const phone = `+7701${String(Date.now()).slice(-7)}`;
+    const made = await j('POST', '/platform/tenants', {
+      name: 'Доплаты разом', ownerName: 'Проверка', ownerPhone: phone,
+    }, SUPER);
+    if (made.d?.id && made.d?.password) {
+      const id = made.d.id;
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+
+      const login = await j('POST', '/auth/login', { phone, password: made.d.password });
+      const tok = login.d?.access;
+      if (tok) {
+        let sub = (await j('GET', '/billing/subscription', null, tok)).d;
+        const waiting = sub?.charges ?? [];
+        ok(waiting.length === 2,
+           `★ Доплаты записаны, а не потеряны: ${waiting.length} шт.`);
+
+        const total = sub.monthly + waiting.reduce((a, c) => a + c.amount, 0);
+        ok(total > sub.monthly,
+           `★ Клиент видит ОБЩУЮ сумму: ${sub.monthly} + доплаты = ${total} ₸`);
+
+        // Платит ОДИН раз — и доплаты гаснут вместе с месяцем.
+        const pay = await j('POST', '/platform/payments',
+          { accountId: id, amount: total, months: 1, method: 'kaspi' }, SUPER);
+        if (pay.d?.id) await j('POST', `/platform/payments/${pay.d.id}/approve`, {}, SUPER);
+
+        sub = (await j('GET', '/billing/subscription', null, tok)).d;
+        ok((sub?.charges ?? []).length === 0,
+           '★ Оплата погасила доплаты — второй раз не возьмём');
+      }
+    }
+  }
+
   // ── УСТРОЙСТВА С КОДАМИ, И КОД ДЛЯ НУЖНОЙ КАССЫ ───────────────
   //
   // В карточке стояли одни счётчики: «Кассы 2 из 2». Владелец

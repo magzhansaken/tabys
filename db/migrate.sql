@@ -279,5 +279,8 @@
 \echo '--- 101 код для нужной кассы ---'
 \i db/migrations/101_code_for_register.sql
 
+\echo '--- 102 доплаты копятся и платятся разом ---'
+\i db/migrations/102_charges.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

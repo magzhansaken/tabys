@@ -270,6 +270,15 @@ export class BillingService {
         : null,
       // 3. Подробности — последними.
       monthly,
+      // РАЗОВЫЕ ДОПЛАТЫ. Клиент видит их рядом с месячной платой и
+      // платит ОДНОЙ суммой, а не двумя переводами: «9 900 в месяц +
+      // 1 400 разово за остаток = 11 300».
+      charges: (await this.db.raw(
+        `SELECT * FROM platform_charges($1)`, [accountId])).rows
+        .map((r: any) => ({
+          id: r.id, title: r.title,
+          amount: Math.round(Number(r.amount) / 100),
+        })),
       lines,
       periods,
     };

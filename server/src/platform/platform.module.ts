@@ -382,6 +382,14 @@ export class PlatformService {
     // нет. Через полгода по ней не понять, кому продлили доступ.
     const acc = (await this.q(
       `SELECT account_id FROM tenant_payment WHERE id = $1`, [paymentId])).rows[0];
+
+    // ДОПЛАТЫ ГАСЯТСЯ ОПЛАТОЙ. Клиент платит один раз — за месяц и за
+    // остаток периода сразу. Держать их дальше значило бы взять
+    // дважды.
+    if (acc?.account_id) {
+      await this.q(`SELECT platform_charges_settle($1,$2)`,
+        [acc.account_id, paymentId]).catch(() => {});
+    }
     await this.audit(ctx, 'payment_approved', acc?.account_id ?? null, {
       amount: money(Number(r.amount)), months: r.months,
       paidUntil: r.paid_until, partnerShare: money(Number(r.partner_share)),
@@ -1347,6 +1355,18 @@ export class PlatformService {
     const made = (await this.q(
       `SELECT * FROM platform_device_add($1,$2,$3,$4)`,
       [accountId, kind, unit, null])).rows[0];
+
+    // ДОПЛАТА ЗАПИСЫВАЕТСЯ, А НЕ ПРОПАДАЕТ. Раньше мы обещали «войдёт
+    // в счёт» и никуда её не клали: клиент добавлял кассу в середине
+    // месяца, доплату не брали, и платформа дарила две недели работы.
+    //
+    // Кладём в ожидание, чтобы клиент заплатил ОДИН раз — за месяц и
+    // за остаток сразу, а не двумя переводами.
+    if (pv.proRata > 0) {
+      await this.q(`SELECT platform_charge_add($1,$2,$3,$4)`,
+        [accountId, `${made?.device_name ?? 'Устройство'} · остаток периода`,
+         Math.round(pv.proRata * 100), ctx.userId]);
+    }
 
     await this.audit(ctx, 'device_added', accountId, {
       kind, name: made?.device_name, proRata: pv.proRata,
