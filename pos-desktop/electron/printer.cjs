@@ -146,6 +146,32 @@ function buildReceipt(d, width) {
   b.push(ESC, 0x74, 17);        // кодовая страница 866 (кириллица)
 
   bold(true); center(d.store || 'Магазин'); bold(false);
+
+  /* ОТЧЁТ ЗАКРЫТИЯ — не чек: у него нет товаров, способов оплаты и
+   * фискального номера. Строим отдельно, а не подгоняем чек.
+   *
+   * Он нужен на бумаге, потому что кассир сдаёт по нему деньги
+   * старшему: без бумаги сдают на словах, и спор — слово против
+   * слова. */
+  if (d.isReport) {
+    line('-'.repeat(width));
+    bold(true); center(d.title || 'ОТЧЁТ'); bold(false);
+    line('-'.repeat(width));
+    line(d.date || '');
+    if (d.cashier) line('Кассир: ' + d.cashier);
+    line('-'.repeat(width));
+    for (const [name, value] of (d.lines || [])) line(pad(name, value, width));
+    line('-'.repeat(width));
+    // Место для подписи: отчёт кладут в папку и подписывают.
+    line('');
+    line('Сдал: ______________');
+    line('');
+    line('Принял: ____________');
+    line('');
+    b.push(0x1d, 0x56, 0x42, 0x00);   // отрез
+    return Buffer.from(b);
+  }
+
   if (d.address) center(d.address);
   if (d.bin) center('БИН/ИИН: ' + d.bin);
   line('-'.repeat(width));

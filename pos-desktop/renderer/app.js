@@ -1989,7 +1989,7 @@ function openPrintSheet() {
 }
 
 // ── Смена ────────────────────────────────────────────────────────────
-$('btnShift').onclick = () => {
+$('btnShift').onclick = async () => {
   if (!S.shift) {
     openModal(`<h2>Открыть смену</h2>
       <label>Размен в кассе</label><input id="float" inputmode="numeric" value="0">
@@ -2007,8 +2007,23 @@ $('btnShift').onclick = () => {
     };
     setTimeout(() => $('float')?.focus(), 50);
   } else {
+    // ЧТО ЕЩЁ НЕ УШЛО — предупреждение их из части 12: «В очереди 3
+    // неотправленных чека — они уйдут вместе с закрытием».
+    //
+    // Без него кассир пересчитает деньги, увидит излишек на сумму
+    // этих чеков и решит, что ошибся или что его обвинят. Начнёт
+    // искать несуществующую ошибку.
+    const notSent = (await K.outboxPending()).data?.length || 0;
+    const rejected = rejectedRead().length;
+
     openModal(`<h2>Закрыть смену</h2>
       <p class="muted">Пересчитайте наличные в ящике и впишите, сколько насчитали.</p>
+      ${notSent ? `<p class="hint">В очереди ${notSent} неотправленных ${
+        notSent === 1 ? 'чек' : 'чеков'} — они уйдут вместе с закрытием.
+        Деньги за них уже в ящике, это не излишек.</p>` : ''}
+      ${rejected ? `<p class="hint bad">Сервер не принял ${rejected} ${
+        rejected === 1 ? 'чек' : 'чеков'} — деньги за них в ящике, а в отчёте их нет.
+        Покажите владельцу: меню → «Сервер не принял».</p>` : ''}
       <div class="expected">По расчёту должно быть: <b>${money(S.cashInDrawer || 0)}</b></div>
       <label>Фактически насчитал</label><input id="fact" inputmode="numeric" value="">
       <div id="diff" class="diff"></div>
@@ -2027,13 +2042,50 @@ $('btnShift').onclick = () => {
         : `<span class="bad">Не хватает ${money(-d)}</span>`;
     };
     $('ok').onclick = async () => {
-      const close = { id: uuid(), shiftId: S.shift.id, closedAt: new Date().toISOString(), factCash: Number($('fact').value || 0) };
+      const fact = Number($('fact').value || 0);
+      const must = S.cashInDrawer || 0;
+      const close = { id: uuid(), shiftId: S.shift.id, closedAt: new Date().toISOString(), factCash: fact };
       await K.outboxAdd({ id: close.id, entity: 'shift_close', entityId: S.shift.id, op: 'update', payload: close });
+
+      // ОТЧЁТ ЗАКРЫТИЯ НА БУМАГЕ — часть 12 разбора их кассы.
+      //
+      // Смена закрывалась молча: ни бумаги, ни следа. А отчёт закрытия
+      // это ДОКУМЕНТ: кассир сдаёт деньги старшему, и тот сверяет по
+      // нему. Без бумаги сдают «на словах», и любой спор — слово
+      // против слова.
+      //
+      // Печатаем ДО очистки состояния: после неё числа уже потеряны.
+      const d = fact - must;
+      const report = {
+        id: close.id,
+        title: 'ЗАКРЫТИЕ СМЕНЫ',
+        number: null,
+        date: new Date().toLocaleString('ru-RU'),
+        store: S.store?.name || 'Магазин',
+        cashier: S.employee?.name || '',
+        cashierId: S.employee?.id || null,
+        lines: [
+          ['Отмен за смену', String(voids)],
+          ['Скидок за смену', String(discounts)],
+          ['Должно быть в ящике', money(must)],
+          ['Насчитано', money(fact)],
+          [d === 0 ? 'Сходится' : d > 0 ? 'Излишек' : 'Не хватает',
+            d === 0 ? '—' : money(Math.abs(d))],
+        ],
+        total: fact,
+        isReport: true,
+      };
+      // Не вышло напечатать — смену всё равно закрываем: бумага важна,
+      // но держать кассира у открытой смены из-за ленты нельзя.
+      const pr = await K.print(report).catch(() => ({ ok: false }));
+
       S = (await K.saveState({ shift: null, cashInDrawer: 0 })).data;
       voids = 0; discounts = 0;         // счётчики — на каждую смену свои
       drawTop(); drawVoids();
       closeModal(); updatePending(); trySync();
-      toast('Смена закрыта');
+      toast(pr && pr.ok
+        ? 'Смена закрыта · отчёт напечатан'
+        : 'Смена закрыта · отчёт не напечатался, повторите из меню', !(pr && pr.ok));
     };
     setTimeout(() => $('fact')?.focus(), 50);
   }
