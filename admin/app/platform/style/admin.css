@@ -966,18 +966,30 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 .price-note { color: var(--ink-on-warm); }
 
 /* Доступы: значение моно и кнопка копирования рядом */
+/* Доступы: подпись слева, значение по центру, кнопка справа.
+   Ширина подписи задана — иначе значения начинались бы с разных мест
+   и сверять их глазом при диктовке было бы неудобно. */
 .copy-value {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  display: grid; grid-template-columns: 132px 1fr auto;
+  align-items: center; gap: var(--space-3);
   background: var(--surface-sunk); border: 1px solid var(--line);
   border-radius: var(--radius-md); padding: 8px 10px;
 }
-.copy-value span { display: block; color: var(--ink-dim); font-size: var(--text-12); }
+.copy-value span { color: var(--ink-dim); font-size: var(--text-12); line-height: 1.3; }
 .copy-value b {
   font-family: var(--font-mono); font-size: var(--text-14);
   letter-spacing: 0.04em; overflow-wrap: anywhere;
 }
 .copy-value .btn { margin-left: 0; white-space: nowrap; }
-.copy-value.big { padding: var(--space-3) var(--space-4); border-color: var(--accent); background: var(--accent-quiet); }
+/* КРУПНЫЙ ВИД — новый пароль при сбросе. Показывается ОДИН РАЗ, и его
+   диктуют по телефону: 24-й кегль, чтобы не ошибиться в знаке.
+   Подпись сверху, а не слева: значение широкое, рядом ещё кнопка. */
+.copy-value.big {
+  grid-template-columns: 1fr auto;
+  padding: var(--space-3) var(--space-4);
+  border-color: var(--accent); background: var(--accent-quiet);
+}
+.copy-value.big span { grid-column: 1 / -1; }
 .copy-value.big b { font-size: var(--text-24); font-weight: var(--weight-bold); letter-spacing: 0.06em; }
 
 /* ═══ 7 · СМАРТФОН ════════════════════════════════════════════════════
@@ -1097,8 +1109,14 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   .inline-input, .client-head h1 .inline-input { min-width: 0; width: 100%; }
   .price-row { flex-direction: column; align-items: flex-start; gap: 6px; }
   .price-modes .chip { flex: 1 0 auto; min-height: var(--tap-compact); }
-  .copy-value { flex-direction: column; align-items: stretch; gap: var(--space-2); }
-  .copy-value .btn { min-height: var(--tap-compact); }
+  /* На телефоне подпись СВЕРХУ: в ряд не влезает. Подпись 132 точки,
+     кнопка 110, значению остаётся 54 — а «+7 707 110 1111» это 105.
+     Кнопку кладём во всю ширину: её жмут пальцем. */
+  .copy-value {
+    grid-template-columns: 1fr;
+    align-items: stretch; gap: 4px;
+  }
+  .copy-value .btn { min-height: var(--tap-compact); margin-top: 4px; }
   .chart-box { padding: var(--space-4) var(--space-3) 6px; }
   /* Ручку перетаскивания на телефоне ПРЯЧЕМ.
      Виден один столбец и краешек следующего: перетащить дальше

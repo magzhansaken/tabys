@@ -51,10 +51,8 @@ export function CopyValue({ label, value, big }: {
 
   return (
     <div className={`copy-value ${big ? 'big' : ''}`}>
-      <div>
-        <span>{label}</span>
-        <b>{value}</b>
-      </div>
+      <span>{label}</span>
+      <b>{value}</b>
       <button className="btn small"
         onClick={async () => {
           // Копирование работает ТОЛЬКО по защищённому соединению.
