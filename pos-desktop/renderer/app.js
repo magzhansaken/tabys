@@ -1799,6 +1799,12 @@ $('btnMenu').onclick = () => {
     ['Возврат', 'по чеку из истории', () => $('btnRefund').onclick()],
     ['Отложенные', parkedCount ? parkedCount + ' на диске' : 'вернуть чек с диска', () => $('btnParked').onclick()],
     ['Моя смена', 'что касса знает о смене', () => openMyShift()],
+    // ОТКЛОНЁННЫЕ — с числом прямо в подписи, если они есть: это
+    // деньги, не дошедшие до отчёта, и разбираться надо сегодня.
+    ['Сервер не принял', (() => {
+      const n = rejectedRead().length;
+      return n ? `${n} чеков не попали в отчёт — покажите владельцу` : 'всё принято';
+    })(), () => openRejected(), rejectedRead().length ? 'bad' : ''],
     ['Журнал действий', 'что делали до вас', () => openActionLog()],
     ['Дисплей покупателя', 'вторым окном на второй монитор', () => openDisplay()],
     ['Маркировка', 'как продавать табак и пиво', () => openMarkHelp()],
@@ -1840,6 +1846,49 @@ let lastPrinted = null;
  *
  * Берём последний напечатанный, а нет его — последний из хранилища:
  * кассир мог перезапустить кассу, пока менял ленту. */
+/* ЯЩИК ОТКЛОНЁННЫХ ЧЕКОВ. Их правило: «деньги не должны пропадать
+ * молча». Сервер не принял — чек уходит сюда, а не крутится в очереди
+ * вечно. Владелец увидит, что разбирать. */
+const REJ_KEY = 'tabys.rejected';
+function rejectedRead() {
+  try { return JSON.parse(localStorage.getItem(REJ_KEY) || '[]'); }
+  catch { return []; }
+}
+function rejectedWrite(list) {
+  // Держим последние полсотни: больше не поместится на экран, а
+  // старое разбирать уже поздно.
+  try { localStorage.setItem(REJ_KEY, JSON.stringify(list.slice(-50))); }
+  catch { /* хранилище тесно */ }
+}
+
+/* Показать отклонённые. Кассир не починит их сам — но должен видеть,
+ * что показать владельцу, и назвать номер чека по телефону. */
+function openRejected() {
+  const list = rejectedRead().slice().reverse();
+  openModal(`
+    <h2>Сервер не принял</h2>
+    <p class="muted">Эти чеки пробиты и лежат на кассе, но в отчёт не
+      попали. Покажите владельцу — разбираться нужно ему.</p>
+    ${list.length ? `<div class="rej-list">${list.map((x) => `
+      <div class="rej-row">
+        <b>${x.number != null ? 'Чек №' + x.number : 'Чек'}</b>
+        ${x.total != null ? `<span>${money(x.total)}</span>` : ''}
+        <i>${escapeHtml(String(x.reason)).slice(0, 80)}</i>
+        <small>${new Date(x.at).toLocaleString('ru-RU')}</small>
+      </div>`).join('')}</div>`
+      : '<p class="muted">Пусто — сервер принял всё.</p>'}
+    <div class="modal-actions">
+      <button id="rejClear">Очистить список</button>
+      <button class="primary" id="rejOk">Закрыть</button>
+    </div>`);
+  $('rejOk').onclick = closeModal;
+  $('rejClear').onclick = () => {
+    // Чистит только СПИСОК на кассе: сами чеки лежат в хранилище и
+    // никуда не деваются.
+    rejectedWrite([]); closeModal(); toast('Список очищен — чеки на кассе остались');
+  };
+}
+
 async function reprintLast() {
   closeModal();
   let ref = lastPrinted;
@@ -2379,8 +2428,38 @@ async function trySync() {
       employeeId: S.employee?.id,
     }));
     const r = await api('/sync/push', { method: 'POST', body: { events } });
-    const done = (r.results || []).filter((x) => x.result !== 'error').map((x) => x.id);
+    const results = r.results || [];
+    const done = results.filter((x) => x.result !== 'error').map((x) => x.id);
     if (done.length) await K.outboxAck(done);
+
+    // ОТКЛОНЁННЫЕ ЧЕКИ — ОТДЕЛЬНО. Их правило: «деньги не должны
+    // пропадать молча».
+    //
+    // Раньше отклонённый оставался в очереди и уходил снова каждые
+    // тридцать секунд. Сервер отклонял снова. Очередь не пустела
+    // НИКОГДА: кассир видел «не отправлено: 3» вечно и переставал
+    // этому верить — а чек с деньгами так и не доходил.
+    //
+    // Их решение: «откладываем в отдельный ящик — очередь не
+    // забивается, но деньги остаются на виду».
+    const bad = results.filter((x) => x.result === 'error');
+    if (bad.length) {
+      const box = rejectedRead();
+      for (const b of bad) {
+        const src = pending.find((e) => e.id === b.id);
+        box.push({
+          id: b.id,
+          number: src?.payload?.number ?? null,
+          total: src?.payload?.total ?? null,
+          reason: b.message || b.error || 'сервер не принял',
+          at: new Date().toISOString(),
+        });
+      }
+      rejectedWrite(box);
+      // Из очереди убираем: иначе она не опустеет никогда.
+      await K.outboxAck(bad.map((x) => x.id));
+      toast(`Сервер не принял чеков: ${bad.length} — смотрите «Отклонённые» в меню`, true);
+    }
     setDot(true);
 
     // ВРЕМЯ ПОСЛЕДНЕЙ ОТПРАВКИ — их находка. Кассир видит «не

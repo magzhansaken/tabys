@@ -568,3 +568,14 @@ body.pad-on .modal-card { padding-left: 306px; }
    кнопку вместо набора числа. Первая — «без сдачи», самый частый
    случай, поэтому выделена. */
 #padModes .exact { background: #2d4a2d; }
+
+/* Отклонённые сервером чеки. Деньги пробиты, но в отчёт не попали:
+   кассир не починит сам, но должен показать владельцу и назвать номер
+   по телефону. */
+.rej-list { max-height: 46vh; overflow-y: auto; margin: 10px 0; }
+.rej-row {
+  display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px;
+  align-items: baseline; padding: 8px 10px; border-bottom: 1px solid #2a2a2a;
+}
+.rej-row i { font-style: normal; color: #d08770; font-size: 13px; }
+.rej-row small { color: #777; font-size: 12px; white-space: nowrap; }
