@@ -1943,6 +1943,42 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ИЗ ЧЕГО СКЛАДЫВАЕТСЯ МЕСЯЦ ────────────────────────────────
+  //
+  // Взято у донора: итог отвечает на вопрос «сколько», но не на вопрос
+  // «за что». Владельцу платформы нужно видеть отдельно тариф и
+  // отдельно устройства — это разные решения и разные разговоры.
+  //
+  // Заодно ловится двойной переворот знака у скидки: правило «у
+  // скидки цена минусом» применялось к уже отрицательному числу, и
+  // человек, вписавший «−1000», получал НАДБАВКУ.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Разбивка счёта', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+      await j('POST', `/platform/clients/${id}/lines`,
+        { kind: 'pos', title: 'Касса №2', price: 3000 }, SUPER);
+      await j('POST', `/platform/clients/${id}/lines`,
+        { kind: 'module', title: 'Обучение', price: 2000 }, SUPER);
+      // Вписываем МИНУСОМ — как сделал бы знающий человек.
+      await j('POST', `/platform/clients/${id}/lines`,
+        { kind: 'discount', title: 'Скидка', price: -1000 }, SUPER);
+
+      const card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      const b = card?.breakdown ?? {};
+      ok(b.devices === 3000, `★ Устройства отдельной строкой: ${b.devices} ₸`);
+      ok(b.modules === 2000, `★ Доплаты отдельной строкой: ${b.modules} ₸`);
+      ok(b.discounts === -1000,
+         `★ Скидка минусом даже если вписали минус: ${b.discounts} ₸`);
+      const sum = b.base + b.devices + b.modules + b.discounts;
+      ok(sum === card?.monthly,
+         `★ Части складываются в итог: ${sum} = ${card?.monthly}`);
+    }
+  }
+
   // ── СМЕНА ТАРИФА МЕНЯЕТ И ПОДПИСКУ ────────────────────────────
   //
   // Найдено вами: сменили на «Стандарт» — счёт стал 14 900, а подпись

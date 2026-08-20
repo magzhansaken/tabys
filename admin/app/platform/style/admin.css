@@ -1248,6 +1248,27 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 .bill-part > header b { font-size: var(--text-15); }
 .bill-part > header .hint { margin: 3px 0 0; max-width: 520px; }
+/* Разбивка счёта: тариф, устройства, доплаты, скидки, итог.
+   Взята у донора — их довод: итог отвечает на вопрос «сколько», но не
+   на вопрос «за что». */
+.bill-parts {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+.bill-parts > div {
+  flex: 1 1 120px; min-width: 0;
+  background: var(--surface-sunk); border: 1px solid var(--line);
+  border-radius: var(--radius-md); padding: 8px 10px;
+}
+.bill-parts span { display: block; font-size: var(--text-12); color: var(--ink-dim); }
+.bill-parts b {
+  font-family: var(--font-mono); font-size: var(--text-15);
+  font-variant-numeric: tabular-nums;
+}
+.bill-parts .minus b { color: var(--danger-strong); }
+.bill-parts .total { background: var(--accent-quiet); border-color: var(--accent); }
+.bill-parts .total b { font-size: var(--text-17); font-weight: var(--weight-bold); }
+
 .bill-sum {
   font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-size: var(--text-18); font-weight: var(--weight-bold); white-space: nowrap;

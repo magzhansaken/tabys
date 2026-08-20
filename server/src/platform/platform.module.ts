@@ -782,7 +782,12 @@ export class PlatformService {
     // Скидка — строка с отрицательной ценой. Так она попадает в тот же
     // расчёт и видна в том же списке, а не живёт отдельным полем, о
     // котором забывают.
-    const price = Math.round(Number(d.price) * 100) * (d.kind === 'discount' ? -1 : 1);
+    // Знак ставим ОДИН РАЗ, по величине. Раньше умножали на минус
+    // единицу, и введённое «−1000» переворачивалось второй раз — в
+    // надбавку. Человек знал правило, вписывал минус и получал
+    // обратное тому, что хотел.
+    const price = Math.round(Math.abs(Number(d.price)) * 100)
+      * (d.kind === 'discount' ? -1 : 1);
 
     const r = (await this.q(
       `INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
@@ -1460,6 +1465,11 @@ export class PlatformService {
     const c = client.rows[0];
     if (!c) throw new BadRequestException('Клиент не найден');
 
+    // Счёт СТРОКАМИ ЦЕЛИКОМ — с тарифом, даже если своей основы нет.
+    // Без этого разбивка показывала тариф нулём: у нового клиента он
+    // живёт в подписке, а не строкой счёта.
+    const bill = await this.q(`SELECT * FROM platform_bill_lines($1)`, [accountId]);
+
     const days = c.paid_until
       ? Math.ceil((new Date(c.paid_until).getTime() - Date.now()) / 86400000) : null;
 
@@ -1485,6 +1495,23 @@ export class PlatformService {
         id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
         price: money(Number(r.unit_price)), active: !r.ends_at,
       })),
+
+      // ИЗ ЧЕГО СКЛАДЫВАЕТСЯ МЕСЯЦ — четырьмя числами. Взято у донора
+      // вместе с их доводом: итог отвечает на вопрос «сколько», но не
+      // на вопрос «за что». Владелец платформы хочет видеть отдельно
+      // плату за тариф и отдельно за устройства — это разные решения и
+      // разные разговоры с клиентом.
+      breakdown: (() => {
+        const sum = (kinds: string[]) => money(bill.rows
+          .filter((r: any) => kinds.includes(r.kind))
+          .reduce((a: number, r: any) => a + Number(r.qty) * Number(r.unit_price), 0));
+        return {
+          base: sum(['base']),
+          devices: sum(['pos', 'store']),
+          modules: sum(['module']),
+          discounts: sum(['discount']),
+        };
+      })(),
       // Счёт берём у БАЗЫ, а не считаем заново: раньше карточка
       // складывала только строки и у клиента без своих строк
       // показывала НОЛЬ, хотя в списке рядом стояло 6 900. Седьмое

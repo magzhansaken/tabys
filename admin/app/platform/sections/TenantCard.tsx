@@ -285,6 +285,27 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
             добавляются сверху, скидка вписывается минусом. Итог — сумма
             действующих строк.
           </p>
+
+          {/* ИЗ ЧЕГО СКЛАДЫВАЕТСЯ МЕСЯЦ — четырьмя числами, как у
+              донора. Их довод: итог отвечает на вопрос «сколько», но
+              не на вопрос «за что». Владельцу нужно видеть отдельно
+              тариф и отдельно устройства: это разные решения и разные
+              разговоры с клиентом. */}
+          {data.breakdown && (
+            <div className="bill-parts">
+              <div><span>Тариф</span><b>{money(data.breakdown.base)}</b></div>
+              <div><span>Устройства</span><b>{money(data.breakdown.devices)}</b></div>
+              {data.breakdown.modules > 0 && (
+                <div><span>Доплаты</span><b>{money(data.breakdown.modules)}</b></div>
+              )}
+              {data.breakdown.discounts !== 0 && (
+                <div className="minus">
+                  <span>Скидки</span><b>{money(data.breakdown.discounts)}</b>
+                </div>
+              )}
+              <div className="total"><span>Итого в месяц</span><b>{money(data.monthly)}</b></div>
+            </div>
+          )}
           <PlanLines accountId={accountId} lines={data.lines}
             monthly={data.monthly}
             tier={/стандарт|pro/i.test(data.tariff ?? '') ? 'pro' : 'base'}
