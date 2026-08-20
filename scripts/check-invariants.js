@@ -962,6 +962,11 @@ const RULES = [
   { file: 'pos-desktop/renderer/keyboard.js', must: 'mousedown',
     why: 'Через click палец уходит с поля, выделение теряется, и знак вписывается не туда' },
 
+  { file: 'pos-desktop/renderer/app.js', must: 'ПРАВО ЧЕЛОВЕКА СИЛЬНЕЕ',
+    why: 'Старший кассир стоял у кассы и вводил свой же код: касса не знала, кто перед ней' },
+  { file: 'pos-desktop/renderer/app.js', must: 'netWasDown',
+    why: 'Пропажа связи не говорилась вовсе: кассир бил чеки час и узнавал при закрытии смены' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

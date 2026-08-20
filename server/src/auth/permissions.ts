@@ -43,6 +43,8 @@ export type PermissionMatrix = {
 
 export interface EmployeeContext {
   employeeId: string;
+  /** Имя кассира: попадает в чек и в журнал «кто разрешил». */
+  name?: string;
   accountId: string;
   /** pending — заявка ждёт активации оператором, рабочие операции закрыты */
   accountStatus?: string;

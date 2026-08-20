@@ -559,7 +559,7 @@ export class AuthService {
   async loadContext(accountId: string, employeeId: string, client?: any): Promise<EmployeeContext> {
     const run = async (c: any) => {
       const e = (await c.query(
-        `SELECT e.id, e.is_owner, e.is_shift_admin, r.code AS role_code, r.permissions,
+        `SELECT e.id, e.first_name, e.last_name, e.is_owner, e.is_shift_admin, r.code AS role_code, r.permissions,
                 r.can_see_purchase_price, r.can_see_revenue
            FROM employee e LEFT JOIN role r ON r.id=e.role_id WHERE e.id=$1`, [employeeId])).rows[0];
       if (!e) throw new UnauthorizedException('Сотрудник не найден');
@@ -569,6 +569,10 @@ export class AuthService {
       const acc = (await c.query(`SELECT status FROM account WHERE id=$1`, [accountId])).rows[0];
       return {
         employeeId: e.id,
+        // ИМЯ КАССИРА. Его не было в ответе входа, а касса пишет имя в
+        // ЧЕК и в журнал действий: без него в чеке стояло пусто, а в
+        // записи «кто разрешил отмену» — тоже пусто.
+        name: [e.first_name, e.last_name].filter(Boolean).join(' ') || 'Кассир',
         accountId,
         accountStatus: acc?.status ?? 'trial',
         roleCode: e.role_code,
