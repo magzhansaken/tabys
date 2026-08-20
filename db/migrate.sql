@@ -294,5 +294,8 @@
 \echo '--- 106 предел скидки кассира ---'
 \i db/migrations/106_discount_limit.sql
 
+\echo '--- 107 пометка «без проверки» в журнале ---'
+\i db/migrations/107_offline_note.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

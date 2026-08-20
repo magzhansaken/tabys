@@ -126,7 +126,7 @@ export class PosSettingsService {
       (await c.query(
         `SELECT l.action, l.product_name, l.amount, l.comment, l.at,
                 e.first_name AS employee,
-                a.first_name AS approved_by
+                a.first_name AS approved_by, l.offline_note, l.approved_name
            FROM pos_action_log l
            LEFT JOIN employee e ON e.id = l.employee_id
            LEFT JOIN employee a ON a.id = l.approved_by
@@ -137,20 +137,37 @@ export class PosSettingsService {
           amount: r.amount == null ? null : Number(r.amount),
           at: r.at, employee: r.employee, comment: r.comment,
           approvedBy: r.approved_by,        // кто разрешил, если действие требовало старшего
+          // ПОМЕТКА ВИДНА В ЖУРНАЛЕ. Иначе она лежит в базе и никому
+          // не показывается — то же самое, что её нет.
+          approvedName: r.approved_name,
+          offlineNote: r.offline_note,
         })));
   }
 
   async log(accountId: string, d: {
     shiftId?: string; action: string; employeeId?: string; approvedBy?: string;
+    /** Как проверено разрешение без связи. Пусто — проверял сервер. */
+    offlineNote?: string;
+    /** Имя разрешившего словами: без связи ключа может и не быть. */
+    approvedName?: string;
     productName?: string; amount?: number; comment?: string;
   }) {
     return this.db.withTenant(accountId, async (c) => {
       await c.query(
+        // ПОМЕТКА «БЕЗ ПРОВЕРКИ» ДОХОДИТ ДО ВЛАДЕЛЬЦА. Касса её
+        // ставила, а отправка отбрасывала — владелец видел обычную
+        // отмену.
+        //
+        // Это ровно то место, где касса уязвима: интернет можно
+        // выключить нарочно. Кассир дёргает провод, отменяет позиции
+        // «без проверки», и в отчёте они неотличимы от разрешённых
+        // старшим. Теперь отличимы — это не запрет, а след.
         `INSERT INTO pos_action_log (account_id, shift_id, action, employee_id, approved_by,
-                product_name, amount, comment)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                product_name, amount, comment, offline_note, approved_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [accountId, d.shiftId ?? null, d.action, d.employeeId ?? null, d.approvedBy ?? null,
-         d.productName ?? null, d.amount ?? null, d.comment ?? null]);
+         d.productName ?? null, d.amount ?? null, d.comment ?? null,
+         d.offlineNote ?? null, d.approvedName ?? null]);
       return { ok: true };
     });
   }
