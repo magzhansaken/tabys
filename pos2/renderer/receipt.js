@@ -105,9 +105,42 @@ function receiptLines(r, { width = 48 } = {}) {
 
   // ── ПОДВАЛ ───────────────────────────────────────────────────────
   out.push('');
-  out.push({ text: 'Спасибо за покупку!', type: 'center' });
-  if (r.returnNote) out.push({ text: r.returnNote, type: 'center' });
 
+  /* НА ЧЕКЕ ВОЗВРАТА НЕ БЛАГОДАРЯТ ЗА ПОКУПКУ.
+     Покупателю только что вернули деньги за брак — «спасибо за
+     покупку» звучит издёвкой. */
+  out.push({ text: r.isRefund ? 'Деньги возвращены' : 'Спасибо за покупку!',
+    type: 'center' });
+
+  /* ДЛИННАЯ ПОДПИСЬ ПЕРЕНОСИТСЯ ПО СЛОВАМ.
+     Найдено печатью глазами: строка в 58 знаков вылезала за ленту в
+     40, и принтер обрезал её посреди слова. */
+  if (r.returnNote) {
+    for (const строка of wrapText(r.returnNote, width)) {
+      out.push({ text: строка, type: 'center' });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Перенос по словам под ширину ленты.
+ *
+ * Слово не рвём: «в теч» и «ение» на разных строках читаются хуже, чем
+ * короткая строка.
+ */
+function wrapText(text, width) {
+  const слова = String(text).split(/\s+/).filter(Boolean);
+  const out = [];
+  let строка = '';
+
+  for (const w of слова) {
+    if (!строка) { строка = w; continue; }
+    if ((строка + ' ' + w).length <= width) строка += ' ' + w;
+    else { out.push(строка); строка = w; }
+  }
+  if (строка) out.push(строка);
   return out;
 }
 
@@ -125,5 +158,5 @@ function refundLines(r, opts = {}) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { receiptLines, refundLines, money, qtyText };
+  module.exports = { receiptLines, refundLines, money, qtyText, wrapText };
 }
