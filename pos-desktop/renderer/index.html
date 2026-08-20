@@ -84,6 +84,11 @@
     <b id="shiftLabel">Смена не открыта</b>
     <span id="cashLabel"></span>
     <span class="muted" id="cashierLabel"></span>
+    <!-- ВЫЙТИ, НЕ ЗАКРЫВАЯ СМЕНУ. Кассир отходит на обед или сдаёт
+         место сменщику посреди смены. Раньше выйти можно было только
+         закрыв смену — и касса оставалась открытой под его именем,
+         а чеки сменщика шли на него. -->
+    <button class="ghost" id="lockBtn" title="Запереть кассу — смена не закроется">Выйти</button>
     <span class="grow"></span>
     <span class="muted" id="receiptLabel"></span>
     <span id="voidLabel" class="hidden" title="Отмены и скидки за смену"></span>

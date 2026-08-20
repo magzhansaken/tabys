@@ -172,19 +172,49 @@ function openPin() {
 function drawPin() {
   $('pinDots').innerHTML = [0,1,2,3].map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
 }
+/* Отпечаток кода: короткая свёртка от кода и кассира.
+ *
+ * Сам код не храним — с отпечатком нельзя войти на другой кассе, а
+ * сверить свой можно. Кассир привязан нарочно: иначе один код подошёл
+ * бы всем, у кого он совпал. */
+function pinMark(pin, who) {
+  let h = 0;
+  const src = String(pin) + '|' + String(who) + '|tabys';
+  for (let i = 0; i < src.length; i += 1) {
+    h = (h * 31 + src.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+
 async function tryPin() {
   const err = $('pinErr'); err.textContent = '';
   try {
     const d = await api('/pos/login', { method: 'POST', body: { pin } });
-    S = (await K.saveState({ employee: d.employee || d, shift: S.shift || null })).data;
+    S = (await K.saveState({
+      employee: d.employee || d, shift: S.shift || null,
+      // ОТПЕЧАТОК КОДА — для входа без сети. Сам код не храним: с
+      // отпечатком нельзя войти на другой кассе, а сверить можно.
+      lastPinMark: pinMark(pin, d.employee?.id || d.id || ''),
+    })).data;
     await pullCatalog().catch(() => {});
     openSale(); syncLoop();
   } catch (e) {
     // Офлайн-вход: если сервер недоступен, пускаем кассира, который уже
     // входил на этой кассе. Иначе пропажа интернета останавливает торговлю.
     if (/fetch|network|failed/i.test(e.message) && S.lastEmployee) {
-      S = (await K.saveState({ employee: S.lastEmployee })).data;
-      openSale(); return;
+      // БЕЗ СЕТИ СВЕРЯЕМ КОД С ОТПЕЧАТКОМ. Раньше проверялось только
+      // то, что сеть пропала: ввёл любые четыре цифры — и вошёл под
+      // именем последнего кассира. Выключили роутер — торгует кто
+      // угодно, а в чеках стоит чужое имя.
+      const mark = pinMark(pin, S.lastEmployee.id || '');
+      if (S.lastPinMark && mark === S.lastPinMark) {
+        S = (await K.saveState({ employee: S.lastEmployee })).data;
+        openSale(); return;
+      }
+      err.textContent = S.lastPinMark
+        ? 'Неверный код. Без связи входит только тот, кто работал на этой кассе'
+        : 'Нет связи, а этот кассир ещё не входил здесь — нужен интернет';
+      pin = ''; drawPin(); return;
     }
     err.textContent = e.message; pin = ''; drawPin();
   }
@@ -194,6 +224,21 @@ async function tryPin() {
 function openSale() {
   show('scr-sale');
   $('cashierLabel').textContent = S.employee?.name ? ' · ' + S.employee.name : '';
+
+  // ЗАПЕРЕТЬ КАССУ — не закрывая смену. Смену закрывают отдельно, с
+  // пересчётом денег: это разные дела. Заперли — вернулись к вводу
+  // кода, и кто сядет следующим, тот и назовётся в чеках.
+  const lock = $('lockBtn');
+  if (lock && !lock.dataset.wired) {
+    lock.dataset.wired = '1';
+    lock.onclick = () => {
+      pin = '';
+      show('scr-pin');
+      drawPin();
+      const e = $('pinErr');
+      if (e) e.textContent = 'Касса заперта. Смена не закрыта — введите свой код';
+    };
+  }
   drawTop();
   K.saveState({ lastEmployee: S.employee });
   drawCatalog(); drawCart(); updatePending(); updateParkedCount();
