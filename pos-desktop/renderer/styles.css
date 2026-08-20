@@ -546,3 +546,20 @@ body.pad-on .modal-card { padding-left: 306px; }
   padding: 10px 14px; font-size: 15px; text-align: left;
 }
 .stale-shift.hidden { display: none; }
+
+/* ═══ ЗАМОК ПРИ ПРОСТОЕ ════════════════════════════════════════════
+   Кассир отошёл — касса заперлась сама. Под замком она ЖИВАЯ: чек
+   набран, покупатель ждёт. Ввёл код — продолжил с той же строки. */
+#idleLock {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(10, 10, 10, 0.94);
+  display: flex; align-items: center; justify-content: center;
+}
+#idleLock.hidden { display: none; }
+.idle-card { text-align: center; max-width: 340px; }
+.idle-title { font-size: 24px; font-weight: 600; color: #f0f0f0; }
+.idle-who { margin-top: 6px; font-size: 17px; color: #c9a227; }
+/* Главные слова: кассир должен сразу понять, что работа не пропала. */
+.idle-hint { margin-top: 10px; font-size: 14px; color: #999; line-height: 1.5; }
+#idleLock .dots { margin: 18px 0 8px; }
+#idleLock .keypad { margin-top: 10px; }

@@ -271,6 +271,76 @@ function applyLang() {
   });
 }
 
+/* ЗАМОК ПРИ ПРОСТОЕ — часть 6 разбора их кассы. Их довод дословно:
+ *
+ *   «Официант отошёл — и любой может пробить чек от его имени. Но
+ *    выходить насовсем нельзя: незаконченный заказ пропадёт, а гость
+ *    сидит за столом. Поэтому касса не выходит, а ЗАПИРАЕТСЯ: поверх
+ *    экрана ложится замок, сама касса со всем набранным остаётся живой
+ *    под ним. Ввёл PIN — продолжил с той же строки.»
+ *
+ * В магазине то же самое. Кассир отошёл в подсобку, к полке, покурить —
+ * касса открыта под его именем. Кто угодно пробьёт чек, даст скидку,
+ * вернёт деньги, и всё уйдёт на него. Он узнает при сверке и доказать
+ * не сможет ничего.
+ *
+ * Кнопка «Выйти» у меня есть, но нажимать её надо ПОМНИТЬ, а отходят
+ * не думая. Замок работает сам.
+ *
+ * ТРИ МИНУТЫ — их число, и оно верное: меньше мешает разговаривать с
+ * покупателем, больше уже небезопасно.
+ */
+let idleTimer = null;
+let idleLocked = false;
+
+function idleArm() {
+  if (idleLocked) return;
+  clearTimeout(idleTimer);
+  const min = Number(SET.idleLockMin ?? 3);
+  if (min <= 0) return;               // ноль значит «не запирать»
+  idleTimer = setTimeout(idleLock, min * 60000);
+}
+
+function idleLock() {
+  if (idleLocked || !S.employee) return;
+  idleLocked = true;
+  const box = document.getElementById('idleLock');
+  if (box) {
+    box.classList.remove('hidden');
+    const who = document.getElementById('idleWho');
+    if (who) who.textContent = S.employee.name || 'Кассир';
+  }
+}
+
+/* Отпираем ПО ТОМУ ЖЕ ПРОПУСКУ, что и вход без сети.
+ *
+ * Чек под замком остаётся набранным — ради этого замок и нужен. Но
+ * отпереть должен ТОТ ЖЕ человек: иначе замок бесполезен. */
+async function idleUnlock(pin) {
+  const err = document.getElementById('idleErr');
+  if (err) err.textContent = '';
+  const print = await pinPrint(pin, S.deviceToken || S.device?.id || '');
+  const pass = passRead(print);
+  const me = S.employee || {};
+
+  // Свой код — открываем. Чужой известный — тоже: сменщик подошёл,
+  // а чек надо добить. Но кассир в чеке МЕНЯЕТСЯ, и это верно: дальше
+  // пробивает он.
+  if (pass) {
+    if (pass.employee?.id !== me.id) {
+      S = (await K.saveState({ employee: pass.employee })).data;
+      drawTop();
+      toast(`За кассой теперь ${pass.employee?.name || 'другой кассир'}`);
+    }
+    idleLocked = false;
+    const box = document.getElementById('idleLock');
+    if (box) box.classList.add('hidden');
+    idleArm();
+    return;
+  }
+  if (err) err.textContent = 'Код не подошёл';
+}
+
 async function tryPin() {
   const err = $('pinErr'); err.textContent = '';
   try {
@@ -346,6 +416,39 @@ function openSale() {
       else kbOpen($('search'));
     };
   }
+
+  // ОТСЧЁТ ПРОСТОЯ. Любое касание сбрасывает: кассир работает — замок
+  // не мешает. Отошёл на три минуты — заперлось само.
+  if (!window.__idleWired) {
+    window.__idleWired = true;
+    for (const e of ['pointerdown', 'keydown', 'touchstart']) {
+      window.addEventListener(e, () => { if (!idleLocked) idleArm(); }, { passive: true });
+    }
+    // Клавиатура замка — та же, что у входа: кассир её уже знает.
+    const pad = $('idlePad');
+    if (pad) {
+      let ipin = '';
+      const drawI = () => {
+        const d = $('idleDots');
+        if (d) d.innerHTML = [0,1,2,3].map((i) => `<i class="${i < ipin.length ? 'on' : ''}"></i>`).join('');
+      };
+      pad.innerHTML = '';
+      for (const k of ['1','2','3','4','5','6','7','8','9','C','0','←']) {
+        const b = document.createElement('button');
+        b.textContent = k;
+        b.onclick = async () => {
+          if (k === 'C') ipin = '';
+          else if (k === '←') ipin = ipin.slice(0, -1);
+          else if (ipin.length < 4) ipin += k;
+          drawI();
+          if (ipin.length === 4) { await idleUnlock(ipin); ipin = ''; drawI(); }
+        };
+        pad.appendChild(b);
+      }
+      drawI();
+    }
+  }
+  idleArm();
 
   const lock = $('lockBtn');
   if (lock && !lock.dataset.wired) {

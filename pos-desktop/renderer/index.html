@@ -217,5 +217,19 @@
        Без неё поиск товара по названию не работал вовсе. -->
   <div id="kbd" class="hidden"></div>
 
+  <!-- ЗАМОК ПРИ ПРОСТОЕ. Касса под ним ЖИВАЯ: чек набран, покупатель
+       ждёт у кассы. Ввёл код — продолжил с той же строки.
+       Выходить насовсем нельзя: набранное пропадёт. -->
+  <div id="idleLock" class="hidden">
+    <div class="idle-card">
+      <div class="idle-title">Касса заперта</div>
+      <div class="idle-who" id="idleWho"></div>
+      <div class="idle-hint">Чек не потерян — введите код и продолжайте</div>
+      <div class="dots" id="idleDots"></div>
+      <div class="err" id="idleErr"></div>
+      <div class="keypad" id="idlePad"></div>
+    </div>
+  </div>
+
 </body>
 </html>
