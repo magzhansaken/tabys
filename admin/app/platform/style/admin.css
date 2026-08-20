@@ -1228,6 +1228,25 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 
 /* ── Устройства в карточке клиента: связь с деньгами · срез 24 ── */
+/* Список устройств с кодами. Владелец платформы отвечает по нему на
+   звонок «какой код у моей второй кассы» — раньше лез в базу. */
+.dev-list { display: flex; flex-direction: column; gap: 4px; margin: var(--space-3) 0; }
+.dev-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: var(--radius-md); background: var(--surface-sunk);
+}
+/* Ждущая подключения выделена: это незаконченное дело, а не покой. */
+.dev-row.waiting { border-color: var(--warn); background: var(--warn-quiet); }
+.dev-name { flex: 1; min-width: 0; font-size: var(--text-14); }
+.dev-code {
+  font-family: var(--font-mono); font-size: var(--text-14);
+  letter-spacing: 0.08em; font-weight: var(--weight-medium);
+}
+.dev-state { font-size: var(--text-12); color: var(--ink-dim); white-space: nowrap; }
+.dev-state.ok { color: var(--ok-strong); }
+.dev-state.bad { color: var(--danger-strong); }
+
 .dev-stale {
   background: var(--danger-quiet); border: 1px solid var(--danger);
   border-radius: var(--radius-md); padding: 10px var(--space-4);

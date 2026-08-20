@@ -273,5 +273,11 @@
 \echo '--- 099 партнёр видит заявки своих клиентов ---'
 \i db/migrations/099_partner_sees_requests.sql
 
+\echo '--- 100 список устройств с кодами ---'
+\i db/migrations/100_device_list.sql
+
+\echo '--- 101 код для нужной кассы ---'
+\i db/migrations/101_code_for_register.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

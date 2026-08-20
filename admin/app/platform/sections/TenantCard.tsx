@@ -351,6 +351,41 @@ function Devices({ data, isSuper }: { data: any; isSuper: boolean }) {
         </p>
       )}
 
+      {/* СПИСОК С КОДАМИ. Раньше стояли одни счётчики: владелец
+          платформы видел «Кассы 2 из 2», а на вопрос «какой код у моей
+          второй кассы» ответить не мог — лез в базу руками. */}
+      {(data.devices ?? []).length > 0 && (
+        <div className="dev-list">
+          {data.devices.map((d: any) => (
+            <div key={d.id} className={`dev-row${d.paired ? '' : ' waiting'}`}>
+              <span className="dev-name">
+                {d.kind === 'store' ? '🏬' : '🖥'} {d.name}
+              </span>
+              {d.kind === 'store' ? (
+                <span className="dev-state">точка</span>
+              ) : d.blocked ? (
+                <span className="dev-state bad">заблокировано</span>
+              ) : d.paired ? (
+                <span className="dev-state ok">
+                  подключено{d.lastSeen ? ` · ${dateTime(d.lastSeen)}` : ''}
+                </span>
+              ) : (
+                <>
+                  {/* Код показан, только если он ЖИВОЙ. Его не держат
+                      вечно: полчаса и заново по кнопке — как ключ от
+                      двери. Слова «код не выдан» пугали, будто чего-то
+                      не хватает, а это обычное состояние. */}
+                  {d.code
+                    ? <span className="dev-code">{d.code}</span>
+                    : <span className="dev-state">код берётся кнопкой «Код для кассы»</span>}
+                  <span className="dev-state">не подключено</span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <p className="hint">
         Устройство подключается одним действием из списка клиентов:
         там же поднимется предел и появится код привязки.

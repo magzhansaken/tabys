@@ -1944,6 +1944,41 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── УСТРОЙСТВА С КОДАМИ, И КОД ДЛЯ НУЖНОЙ КАССЫ ───────────────
+  //
+  // В карточке стояли одни счётчики: «Кассы 2 из 2». Владелец
+  // платформы видел число, но на вопрос «какой код у моей второй
+  // кассы» ответить не мог — лез в базу руками.
+  //
+  // И хуже: кнопка «Код для кассы» брала ВСЕГДА ПЕРВУЮ. Со второй
+  // кассой клиент вводил код на новом планшете, тот привязывался к
+  // старой кассе, и две начинали спорить за одно рабочее место.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Две кассы', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+
+      let card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      const list = card?.devices ?? [];
+      ok(list.length >= 2, `★ Устройства перечислены, а не только сосчитаны: ${list.length}`);
+
+      const second = list.find((x) => x.kind === 'pos' && /2/.test(x.name));
+      ok(!!second, '★ Вторая касса видна в списке');
+
+      if (second) {
+        await j('GET', `/platform/clients/${id}/activation?register=${second.id}`, null, SUPER);
+        card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+        const now2 = (card?.devices ?? []).find((x) => x.id === second.id);
+        ok(!!now2?.code,
+           `★ Код выдан ИМЕННО второй кассе: ${now2?.code}`);
+      }
+    }
+  }
+
   // ── ПУТЬ 1: ВЛАДЕЛЕЦ МАГАЗИНА ПРОСИТ САМ ──────────────────────
   //
   // Раньше этого пути не было вовсе: владелец хотел вторую кассу и мог

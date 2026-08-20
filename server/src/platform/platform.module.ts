@@ -1501,6 +1501,12 @@ export class PlatformService {
     // живёт в подписке, а не строкой счёта.
     const bill = await this.q(`SELECT * FROM platform_bill_lines($1)`, [accountId]);
 
+    // СПИСОК УСТРОЙСТВ С КОДАМИ. В карточке стояли одни счётчики:
+    // «Кассы 2 из 2». Владелец платформы видел число, но не мог
+    // ответить на вопрос, с которым к нему звонят: «какой код у моей
+    // второй кассы?» — и лез в базу руками.
+    const devs = await this.q(`SELECT * FROM platform_devices($1)`, [accountId]);
+
     const days = c.paid_until
       ? Math.ceil((new Date(c.paid_until).getTime() - Date.now()) / 86400000) : null;
 
@@ -1522,6 +1528,12 @@ export class PlatformService {
       paidUntil: c.paid_until, daysLeft: days,
       revenue30d: Math.round(Number(c.revenue_30d)),
       stores: Number(c.stores), registers: Number(c.registers),
+      devices: devs.rows.map((r: any) => ({
+        id: r.id, name: r.name, kind: r.kind,
+        // Код только у непривязанной: у привязанной он уже сработал.
+        code: r.code, paired: r.paired,
+        lastSeen: r.last_seen, blocked: r.blocked,
+      })),
       lines: lines.rows.map((r: any) => ({
         id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
         price: money(Number(r.unit_price)), active: !r.ends_at,
@@ -1624,7 +1636,7 @@ export class PlatformService {
     // Код привязки кассы отдаём СРАЗУ: партнёр в этот момент стоит в
     // магазине, и заставлять его лезть за кодом отдельно — значит
     // заставить приехать второй раз.
-    const code = (await this.q(`SELECT * FROM platform_pairing_code($1)`, [acc.id]))
+    const code = (await this.q(`SELECT * FROM platform_pairing_code($1,NULL)`, [acc.id]))
       .rows[0]?.code ?? null;
 
     return { id: acc.id, phone: d.ownerPhone, password: pass,
@@ -1685,14 +1697,19 @@ export class PlatformService {
    * Код для привязки кассы. Партнёр приезжает к клиенту, берёт код
    * здесь и вводит на планшете — не заходя в кабинет магазина.
    */
-  async activationCode(ctx: PlatformCtx, accountId: string) {
+  async activationCode(ctx: PlatformCtx, accountId: string, registerId?: string) {
     if (ctx.role === 'partner') {
       const own = (await this.q(
         `SELECT 1 FROM tenant_card WHERE account_id=$1 AND partner_id=$2`,
         [accountId, ctx.userId])).rows[0];
       if (!own) throw new ForbiddenException('Это не ваш клиент');
     }
-    const r = (await this.q(`SELECT * FROM platform_pairing_code($1)`, [accountId])).rows[0];
+    // КАКОЙ КАССЕ. Раньше код всегда шёл первой: со второй кассой
+    // клиент вводил его на новом планшете, тот привязывался к СТАРОЙ
+    // кассе, и две начинали спорить за одно рабочее место.
+    const r = (await this.q(
+      `SELECT * FROM platform_pairing_code($1,$2)`,
+      [accountId, registerId ?? null])).rows[0];
     if (!r?.code) throw new BadRequestException('У магазина нет кассы — сначала добавьте её');
     await this.audit(ctx, 'activation_code_taken', accountId, {});
     return { code: r.code, expiresAt: r.expires_at, register: r.register_name,
@@ -2427,9 +2444,12 @@ export class PlatformController {
 
   // ── код активации кассы ──
   @Public() @Get('clients/:id/activation')
-  async activation(@Req() r: any, @Param('id') id: string) {
+  async activation(@Req() r: any, @Param('id') id: string,
+                   @Query('register') register?: string) {
     await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.activationCode(Pl(r), id);
+    // Какой кассе — необязательно. Не указали значит первой: у
+    // большинства клиентов касса одна, и лишний выбор им ни к чему.
+    return this.svc.activationCode(Pl(r), id, register);
   }
 
   // ── состояние и тариф ──
