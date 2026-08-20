@@ -640,6 +640,23 @@ export class BillingController {
     return this.bill.declarePayment(ctx.accountId, ctx.employeeId, d ?? {});
   }
 
+  /**
+   * ПРОСИТЬ ВТОРУЮ КАССУ ИЛИ ТОЧКУ — из кабинета магазина.
+   *
+   * Раньше этого пути не было вовсе: владелец магазина хотел вторую
+   * кассу и мог только позвонить. Звонок теряется, а заявка — нет.
+   *
+   * Цену он не выбирает: видит прайс платформы и просит по нему. Он
+   * покупатель, а не продавец.
+   *
+   * Заявка идёт ЕГО ПАРТНЁРУ, а если партнёра нет — владельцу
+   * платформы. Устройство заработает после подтверждения.
+   */
+  @Post('device-request') @RequirePermission('billing', 'edit')
+  deviceRequest(@Ctx() ctx: EmployeeContext, @Body() d: any) {
+    return this.bill.deviceRequest(ctx.accountId, d ?? {});
+  }
+
   @Post('run-auto-renew') @RequirePermission('billing', 'edit')
   runAutoRenew(@Ctx() ctx: EmployeeContext) { return this.bill.runAutoRenew(ctx.accountId); }
 

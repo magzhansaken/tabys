@@ -1944,6 +1944,40 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ПУТЬ 1: ВЛАДЕЛЕЦ МАГАЗИНА ПРОСИТ САМ ──────────────────────
+  //
+  // Раньше этого пути не было вовсе: владелец хотел вторую кассу и мог
+  // только позвонить. Звонок теряется, а заявка остаётся.
+  //
+  // Цену он не выбирает — видит прайс платформы. Заявка идёт ЕГО
+  // ПАРТНЁРУ: тот ведёт клиента, звонит ему, знает, нужна ли касса
+  // вправду. Мимо него решать нельзя.
+  {
+    const phone = `+7701${String(Date.now()).slice(-7)}`;
+    const made = await j('POST', '/platform/tenants', {
+      name: 'Просит сам', ownerName: 'Владелец', ownerPhone: phone,
+    }, PARTNER);
+    if (made.d?.password) {
+      const login = await j('POST', '/auth/login',
+        { phone, password: made.d.password });
+      const tok = login.d?.access;
+      if (tok) {
+        const r = await j('POST', '/billing/device-request',
+          { kind: 'pos', comment: 'вторая точка' }, tok);
+        ok(r.d?.ok, `★ Владелец магазина может попросить кассу сам: ${r.d?.note}`);
+
+        const book = (await j('GET', '/platform/price-book', null, SUPER)).d;
+        ok(r.d?.price === book?.extraPos,
+           `★ И просит по цене платформы, а не своей: ${r.d?.price} ₸`);
+
+        // ПАРТНЁР ВИДИТ заявку своего клиента, хоть подал её не он.
+        const mine = await j('GET', '/platform/requests', null, PARTNER);
+        ok((mine.d ?? []).some((x) => x.account_id === made.d.id),
+           '★ Партнёр видит заявку своего клиента — решать мимо него нельзя');
+      }
+    }
+  }
+
   // ── ТРИ ПУТИ К НОВОМУ УСТРОЙСТВУ ──────────────────────────────
   //
   // Замысел владельца платформы:

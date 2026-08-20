@@ -17,6 +17,23 @@ import { Card, Table, DataTable, PageHeader, Toggle, Btn, Field, Input,
 
 export default function BillingPage() {
   const [access, setAccess] = useState<any>(null);
+  /* Заявка на устройство. Память объявлена ЗДЕСЬ, до выходов ниже:
+     если завести её после «if (!sub) return», при загрузке отрисовка
+     выйдет раньше и страница упадёт. */
+  const [asking, setAsking] = useState(false);
+  const [asked, setAsked] = useState('');
+
+  const askDevice = async (kind: 'pos' | 'store') => {
+    setAsking(true);
+    try {
+      const r: any = await api('/billing/device-request', {
+        method: 'POST', body: JSON.stringify({ kind }),
+      });
+      setAsked(`${r.note}. Цена ${money(r.price)}/мес`);
+    } catch (e: any) {
+      setAsked(String(e?.message ?? 'Не удалось отправить заявку'));
+    } finally { setAsking(false); }
+  };
   const [tariffs, setTariffs] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [payAmount, setPayAmount] = useState('');
@@ -166,6 +183,28 @@ export default function BillingPage() {
             </div>
           </div>
         ) : 'Загрузка…'}
+      </Card>
+
+      {/* ПРОСИТЬ ВТОРУЮ КАССУ ИЛИ ТОЧКУ. Раньше этого пути не было
+          вовсе: владелец магазина хотел вторую кассу и мог только
+          позвонить. Звонок теряется, а заявка остаётся и видна обоим —
+          и партнёру, и платформе. */}
+      <Card title="Нужна ещё касса или точка?" style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: C.dim, lineHeight: 1.6, marginBottom: 10 }}>
+          Оставьте заявку — с вами свяжутся и подключат. Плата за
+          устройство добавится к вашему счёту со следующего месяца.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" disabled={asking} onClick={() => askDevice('pos')}>
+            Прошу ещё кассу
+          </button>
+          <button className="btn" disabled={asking} onClick={() => askDevice('store')}>
+            Прошу ещё точку
+          </button>
+        </div>
+        {asked && (
+          <div style={{ marginTop: 10, fontSize: 13, color: C.accentDark }}>{asked}</div>
+        )}
       </Card>
 
       <Card title="Пополнить онлайн" style={{ marginTop: 14 }}

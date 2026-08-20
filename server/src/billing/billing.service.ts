@@ -280,6 +280,31 @@ export class BillingService {
    * сверяет поступление и подтверждает. Но заявление уходит сразу, и
    * клиент видит, что оно принято.
    */
+  /**
+   * Просить вторую кассу или точку. Владелец магазина цену не
+   * выбирает: видит прайс платформы и просит по нему.
+   *
+   * Заявка уходит его партнёру, а если партнёра нет — владельцу
+   * платформы. Устройство заработает после подтверждения оплаты:
+   * иначе платформа раздаёт кассы в долг и узнаёт об этом последней.
+   */
+  async deviceRequest(accountId: string, d: { kind?: string; comment?: string }) {
+    const kind = d.kind === 'store' ? 'store' : 'pos';
+    try {
+      const r = (await this.db.raw(
+        `SELECT * FROM platform_device_request($1,$2,'owner',NULL,NULL,$3)`,
+        [accountId, kind, d.comment ?? null])).rows[0];
+      return {
+        ok: true,
+        price: Math.round(Number(r.price) / 100),
+        note: r.note,
+      };
+    } catch (e: any) {
+      throw new BadRequestException(
+        String(e.message ?? '').replace(/^.*?:\s*/, '') || 'Не удалось подать заявку');
+    }
+  }
+
   async declarePayment(accountId: string, employeeId: string | null, d: {
     months?: number; amount?: number; method?: string; comment?: string;
   }) {

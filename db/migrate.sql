@@ -270,5 +270,8 @@
 \echo '--- 098 три пути к устройству ---'
 \i db/migrations/098_device_request.sql
 
+\echo '--- 099 партнёр видит заявки своих клиентов ---'
+\i db/migrations/099_partner_sees_requests.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
