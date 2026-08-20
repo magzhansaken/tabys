@@ -5,7 +5,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node test/core.test.js && node test/shell.test.js && node test/store.test.js && node test/net.test.js && node test/ui.test.js && node test/setup.test.js && node test/pin.test.js && node test/passes.test.js && node test/rights.test.js",
+    "test": "node test/core.test.js && node test/shell.test.js && node test/store.test.js && node test/net.test.js && node test/ui.test.js && node test/setup.test.js && node test/pin.test.js && node test/passes.test.js && node test/rights.test.js && node test/shift.test.js",
     "build": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
