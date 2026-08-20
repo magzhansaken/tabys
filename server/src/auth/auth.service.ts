@@ -265,7 +265,24 @@ export class AuthService {
     await this.db.raw(`SELECT auth_log_attempt($1,NULL,$2,'device_pairing',$3,true,NULL,$4,NULL)`,
       [d.account_id, d.device_id, code, ip ?? null]);
 
-    return { deviceToken: token, deviceId: d.device_id, accountId: d.account_id, cashRegisterId: d.cash_register_id };
+    /* НАЗВАНИЕ МАГАЗИНА И КАССЫ. Касса пишет их В ЧЕК и показывает
+       кассиру при входе: «Мини-маркет · Касса 2».
+       Без этого в чеке пусто, а кассир не видит, к какому магазину
+       привязана касса — а магазинов у владельца бывает несколько. */
+    /* Через функцию с обходом защиты строк: привязка идёт ДО входа,
+       магазин ещё не назначен, и простой запрос отдавал ПУСТО, не
+       падая. Проверено живьём — название приходило пустым. */
+    const who = (await this.db.raw(
+      `SELECT * FROM auth_register_names($1)`, [d.cash_register_id])).rows[0] ?? {};
+
+    return {
+      deviceToken: token,
+      deviceId: d.device_id,
+      accountId: d.account_id,
+      cashRegisterId: d.cash_register_id,
+      storeName: who.store_name ?? '',
+      registerName: who.register_name ?? '',
+    };
   }
 
   /** Проверка токена устройства (заголовок X-Device-Token). */

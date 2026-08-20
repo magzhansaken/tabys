@@ -300,5 +300,8 @@
 \echo '--- 107 падение кассы в журнале ---'
 \i db/migrations/107_pos_crash.sql
 
+\echo '--- 108 названия при привязке ---'
+\i db/migrations/108_pair_names.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

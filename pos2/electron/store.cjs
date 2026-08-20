@@ -94,6 +94,7 @@ const STATE_DEFAULT = {
   accountId: null,
   cashRegisterId: null,
   storeName: '',
+  registerName: '',   // «Касса 2»: у клиента их несколько
   employee: null,         // кто за кассой
   shift: null,            // открытая смена
   lastNumber: 0,          // номер последнего чека
