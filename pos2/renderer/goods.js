@@ -1,140 +1,114 @@
 /*
  * КАТАЛОГ ТОВАРОВ: вкладки, поиск, ходовое.
  *
- * УСТРОЙСТВО ПРОЩЕ, ЧЕМ У ДОНОРА, И ЭТО НАРОЧНО.
+ * УСТРОЙСТВО ПЛОСКОЕ, а не вглубь.
  *
- * У них касса «ходит вглубь»: дом → группа → подгруппа → товары. Так
- * привык персонал заведений, где меню на сотню позиций разложено по
- * разделам.
+ * У донора касса ходит вглубь: дом → группа → подгруппа → товары. Их
+ * довод верен для ресторана, где блюд сотни и они вложены.
  *
- * В продуктовом магазине категорий десяток, а товаров тысячи. Лишний
- * уровень — лишнее нажатие при очереди, а найти товар всё равно проще
- * поиском или сканером.
+ * В продуктовом магазине категорий десяток, и лишний уровень значит
+ * лишнее нажатие при очереди. Здесь вкладки одним рядом.
  *
- * Поэтому: один ряд вкладок, первая — «Ходовое».
+ * НО ГЛАВНОЕ ИХ ПРАВИЛО БЕРЁМ ЦЕЛИКОМ:
  *
- * ГЛАВНОЕ ИХ ПРАВИЛО ВЗЯТО ЦЕЛИКОМ: «Поиск сквозной и уровней не
- * знает: официант помнит блюдо, а не путь к нему». Кассир помнит
- * «хлеб», а не то, в какой он вкладке.
+ *   «Поиск сквозной и уровней не знает: официант помнит блюдо, а не
+ *    путь к нему.»
+ *
+ * Кассир помнит «хлеб», а не «Бакалея → Хлебобулочные → Хлеб».
  */
 
-const QUICK = 'Ходовое';
-const ALL = 'Все';
+/** Вкладка «ходовое» стоит первой: там девять из десяти продаж. */
+const QUICK_TAB = 'Ходовое';
+const ALL_TAB = 'Все';
 
 /**
- * ВКЛАДКИ.
+ * ПОИСК ПО ТОВАРАМ.
  *
- * «Ходовое» первым: восемь из десяти чеков — это хлеб, молоко,
- * сигареты и пакет. Кассир должен доставать их одним касанием.
+ * Ищем по названию И по штрихкоду: кассир может набрать цифры с
+ * коробки, если сканер не берёт мятый код.
  *
- * Дальше категории по алфавиту: их порядок с сервера может меняться, а
- * кассир привыкает к месту вкладки и целится не глядя.
+ * СЛОВА ИЩЕМ ПО ОТДЕЛЬНОСТИ. «молоко 2.5» найдёт «Молоко Айналайын
+ * 2.5%», хотя подряд этих знаков в названии нет. У донора такого
+ * нет — их поиск ищет строку целиком, и «молоко 2.5» не нашло бы
+ * ничего.
  */
-function catTabs(catalog) {
+function searchGoods(items, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return items;
+
+  const слова = q.split(/\s+/).filter(Boolean);
+
+  const found = items.filter((g) => {
+    const name = String(g.name || '').toLowerCase();
+    // Штрихкод ищем целиком: часть кода — это не тот товар.
+    if ((g.barcodes || []).some((b) => String(b).includes(q))) return true;
+    // Все слова должны найтись, в любом порядке.
+    return слова.every((w) => name.includes(w));
+  });
+
+  /* СОВПАДЕНИЕ С НАЧАЛА — ВЫШЕ. Их правило: набрал «хле» — сперва
+     «Хлеб», а не «Отруби хлебные». Кассир жмёт первое и не смотрит. */
+  return found.sort((a, b) => {
+    const an = String(a.name || '').toLowerCase();
+    const bn = String(b.name || '').toLowerCase();
+    const as = an.startsWith(слова[0]) ? 0 : 1;
+    const bs = bn.startsWith(слова[0]) ? 0 : 1;
+    return as - bs || an.localeCompare(bn, 'ru');
+  });
+}
+
+/**
+ * ВКЛАДКИ. «Ходовое» первой, потом категории по алфавиту.
+ *
+ * Пустых вкладок не делаем: категория без товаров — это нажатие в
+ * никуда, и кассир решит, что касса сломалась.
+ */
+function catTabs(items) {
   const есть = new Set();
   let ходовых = 0;
 
-  for (const g of catalog) {
+  for (const g of items) {
     if (g.quick) ходовых += 1;
     if (g.category) есть.add(g.category);
   }
 
   const tabs = [];
-  if (ходовых) tabs.push(QUICK);
+  if (ходовых) tabs.push(QUICK_TAB);
   tabs.push(...[...есть].sort((a, b) => a.localeCompare(b, 'ru')));
 
-  // Без категорий вовсе — одна вкладка «Все»: пустой ряд пугает.
-  if (!tabs.length) tabs.push(ALL);
+  /* Если категорий нет вовсе — одна вкладка «Все». Иначе кассир увидит
+     пустой ряд и не поймёт, куда делись товары. */
+  if (!tabs.length) tabs.push(ALL_TAB);
   return tabs;
 }
 
 /**
- * СРАВНЕНИЕ ТОВАРА С ЗАПРОСОМ.
+ * ОТБОР ПО ВКЛАДКЕ.
  *
- * Кассир печатает быстро и промахивается по клавишам. Поэтому ищем не
- * только по началу, но и по любой части слова: «локо» найдёт «Молоко».
- *
- * Ищем и по штрихкоду: покупатель принёс товар без наклейки, а кассир
- * читает цифры с упаковки.
+ * Поиск СИЛЬНЕЕ вкладки: набрал слово — ищем по всему каталогу, мимо
+ * вкладок. Это и есть «поиск уровней не знает».
  */
-function matchGood(g, q) {
-  if (!q) return true;
-  const s = q.toLowerCase();
-  if (String(g.name).toLowerCase().includes(s)) return true;
-  return (g.barcodes || []).some((b) => String(b).includes(s));
-}
-
-/**
- * ПОИСК: СКВОЗНОЙ, УРОВНЕЙ НЕ ЗНАЕТ.
- *
- * Ищет по ВСЕМУ каталогу, мимо вкладок — их правило. Кассир помнит
- * товар, а не вкладку.
- *
- * ПОРЯДОК ВЫДАЧИ, тоже их правило: начинающиеся с запроса — первыми.
- * Набрал «мол» — сперва «Молоко», потом «Сгущённое молоко». Иначе
- * кассир листает список, чтобы найти очевидное.
- */
-function searchGoods(catalog, query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return [];
-
-  return catalog
-    .filter((g) => matchGood(g, q))
-    .sort((a, b) => {
-      const aн = String(a.name).toLowerCase().startsWith(q) ? 0 : 1;
-      const bн = String(b.name).toLowerCase().startsWith(q) ? 0 : 1;
-      if (aн !== bн) return aн - bн;
-      // Дальше ходовое вперёд: его берут чаще.
-      if (!!a.quick !== !!b.quick) return a.quick ? -1 : 1;
-      return String(a.name).localeCompare(String(b.name), 'ru');
-    });
-}
-
-/**
- * ЧТО ПОКАЗАТЬ СЕЙЧАС.
- *
- * Есть запрос — показываем найденное, мимо вкладок. Нет — товары
- * выбранной вкладки.
- */
-function visibleGoods(catalog, { tab, query }) {
+function pickGoods(items, { tab, query }) {
   const q = String(query || '').trim();
-  if (q) return searchGoods(catalog, q);
+  if (q) return searchGoods(items, q);          // сквозной
 
-  if (tab === QUICK) return catalog.filter((g) => g.quick);
-  if (!tab || tab === ALL) return catalog;
-  return catalog.filter((g) => g.category === tab);
+  if (tab === QUICK_TAB) return items.filter((g) => g.quick);
+  if (tab && tab !== ALL_TAB) return items.filter((g) => g.category === tab);
+  return items;
 }
 
 /**
- * ЧТО СКАЗАТЬ, ЕСЛИ ПУСТО.
+ * НАЙТИ ПО ШТРИХКОДУ — для сканера.
  *
- * Пустое место без объяснения — это звонок в поддержку. Кассир не
- * знает, сломалась касса или товара вправду нет.
+ * Отдельно от поиска: сканер даёт код целиком, и совпадение должно
+ * быть ТОЧНЫМ. Частичное совпадение продало бы не тот товар.
  */
-function emptyText({ catalog, tab, query }) {
-  if (!catalog.length) {
-    return 'Товаров нет вовсе — каталог не пришёл с сервера. Позовите владельца';
-  }
-  const q = String(query || '').trim();
-  if (q) {
-    return `По запросу «${q}» ничего не нашлось. Проверьте написание `
-      + 'или отсканируйте штрихкод';
-  }
-  if (tab === QUICK) {
-    return 'Ходовые товары не отмечены. Владелец отмечает их в кабинете — '
-      + 'тогда они будут под рукой';
-  }
-  return `Во вкладке «${tab}» пока нет товаров`;
-}
-
-/** Найти товар по штрихкоду — для сканера. Точное совпадение. */
-function findByBarcode(catalog, code) {
+function findByBarcode(items, code) {
   const c = String(code || '').trim();
   if (!c) return null;
-  return catalog.find((g) => (g.barcodes || []).some((b) => String(b) === c)) || null;
+  return items.find((g) => (g.barcodes || []).some((b) => String(b) === c)) || null;
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { QUICK, ALL, catTabs, matchGood, searchGoods,
-    visibleGoods, emptyText, findByBarcode };
+  module.exports = { QUICK_TAB, ALL_TAB, searchGoods, catTabs, pickGoods, findByBarcode };
 }
