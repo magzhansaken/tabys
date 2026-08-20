@@ -278,6 +278,13 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
       {isSuper && (
         <>
           <h2 className="section-title">Счёт</h2>
+          {/* Пояснение — у донора оно есть, и не зря: без него человек
+              не понимает, откуда берётся итог и что значат строки. */}
+          <p className="hint">
+            Каждая строка — деньги в месяц. Тариф задаёт основу, доплаты
+            добавляются сверху, скидка вписывается минусом. Итог — сумма
+            действующих строк.
+          </p>
           <PlanLines accountId={accountId} lines={data.lines}
             monthly={data.monthly}
             tier={/стандарт|pro/i.test(data.tariff ?? '') ? 'pro' : 'base'}

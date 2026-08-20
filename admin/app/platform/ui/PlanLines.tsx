@@ -32,15 +32,22 @@ import { useToast } from './Toast';
 import { humanError } from './errors';
 
 /** Что можно завести руками. Устройств здесь нет — см. выше. */
+/* Что можно дописать в счёт РУКАМИ.
+ *
+ * «Основы» тут нет нарочно: она появляется сама при смене тарифа, и
+ * если завести её руками — их станет две, а счёт вырастет вдвое.
+ *
+ * Слова взяты человеческие. У донора это «основа» и «модуль» — но у
+ * них уровень и цена раздельны, а у нас тариф задаёт цену. И «модуль»
+ * в магазине не говорят: говорят «доплата». */
 const ADDABLE = [
-  { kind: 'base',     title: 'Основа',  hint: 'месячная плата за магазин' },
-  { kind: 'module',   title: 'Модуль',  hint: 'отдельная возможность сверх тарифа' },
-  { kind: 'discount', title: 'Скидка',  hint: 'минусом: постоянная уступка клиенту' },
+  { kind: 'module',   title: 'Доплата', hint: 'за что-то сверх тарифа: обучение, настройка, вторая витрина' },
+  { kind: 'discount', title: 'Скидка',  hint: 'постоянная уступка: впишется минусом' },
 ];
 
 const TITLE: Record<string, string> = {
-  base: 'Основа', pos: 'Касса', store: 'Точка',
-  module: 'Модуль', discount: 'Скидка',
+  base: 'Тариф', pos: 'Касса', store: 'Точка',
+  module: 'Доплата', discount: 'Скидка',
 };
 
 export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
@@ -194,7 +201,7 @@ export function PlanLines({ accountId, lines, monthly, tier, onChanged }: {
         </p>
       ) : (
         <>
-          <Part rows={parts.base} title="Основа" cls="base" />
+          <Part rows={parts.base} title="Тариф" cls="base" />
           <Part rows={parts.extra} title="Доплаты" cls="extra" />
           <Part rows={parts.discount} title="Скидки" cls="discount" />
 

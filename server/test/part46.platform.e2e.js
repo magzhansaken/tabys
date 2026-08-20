@@ -1943,6 +1943,44 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── СМЕНА ТАРИФА МЕНЯЕТ И ПОДПИСКУ ────────────────────────────
+  //
+  // Найдено вами: сменили на «Стандарт» — счёт стал 14 900, а подпись
+  // осталась «Старт». Кнопка не переключалась обратно (она смотрит на
+  // подпись), а форма оплаты подставляла старую цену.
+  //
+  // Причина одна на три беды: смена тарифа правила только СТРОКИ
+  // СЧЁТА, а подписку не трогала.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Проверка тарифа', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+
+      // Цены берём ИЗ ПРАЙСА: соседние проверки их меняют, и жёсткое
+      // число ломалось бы не по делу.
+      const book = (await j('GET', '/platform/price-book', null, SUPER)).d;
+
+      await j('POST', `/platform/clients/${id}/tier`, { tier: 'pro' }, SUPER);
+      let card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      ok(/стандарт/i.test(card?.tariff ?? ''),
+         `★ Подпись тарифа сменилась на «Стандарт»: «${card?.tariff}»`);
+      ok(card?.monthly === book?.pro,
+         `★ Счёт по «Стандарту»: ${card?.monthly} = ${book?.pro} ₸`);
+
+      // Обратно — тем же путём. Раньше кнопка не давала: она смотрела
+      // на подпись, а та не менялась.
+      await j('POST', `/platform/clients/${id}/tier`, { tier: 'base' }, SUPER);
+      card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      ok(/старт/i.test(card?.tariff ?? ''),
+         `★ Вернулись на «Старт»: «${card?.tariff}»`);
+      ok(card?.monthly === book?.base,
+         `★ И счёт вернулся: ${card?.monthly} = ${book?.base} ₸`);
+    }
+  }
+
   // ── ОПЛАТА СИЛЬНЕЕ РУЧНОГО ЭТАПА ──────────────────────────────
   //
   // Найдено вами: подтвердили оплату, а карточка осталась в

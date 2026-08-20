@@ -1664,6 +1664,14 @@ export class PlatformService {
     const price = Number(tier === 'pro' ? set.price_pro : set.price_base);
     const title = tier === 'pro' ? 'Тариф «Стандарт»' : 'Тариф «Старт»';
 
+    // МЕНЯЕМ И ПОДПИСКУ, а не только строку счёта. Раньше правились
+    // одни строки, и подписка оставалась на «Старте»: подпись тарифа
+    // не менялась, кнопка не переключалась обратно (она смотрит на
+    // подпись), а оплата считала по подписке и брала старую цену.
+    await this.q(
+      `SELECT platform_set_tariff($1, $2)`,
+      [accountId, tier === 'pro' ? 'standard' : 'start']);
+
     await this.q(`UPDATE plan_line SET ends_at = now()
                    WHERE account_id=$1 AND kind='base' AND ends_at IS NULL`, [accountId]);
     await this.q(`INSERT INTO plan_line (account_id, kind, title, qty, unit_price)
