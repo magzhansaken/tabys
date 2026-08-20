@@ -11,7 +11,7 @@
  *   preload.cjs  — узкий мост: страница получает ровно нужные команды
  *   renderer/    — экраны кассы, к железу доступа не имеют
  */
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { printReceipt, listPrinters, openCashDrawer, printDiagnostic } = require('./printer.cjs');
@@ -20,6 +20,38 @@ const updater = require('./updater.cjs');
 
 const isDev = !app.isPackaged;
 let win = null;
+
+/*
+ * ЖУРНАЛ ОБОЛОЧКИ — взят у донора вместе с доводом:
+ *
+ *   «Без него разбор "чек не вышел" превращается в гадание: печатала ли
+ *    программа, ответил ли принтер, какой именно. Файл маленький,
+ *    пишется только по делу.»
+ *
+ * Владелец звонит «чеки не печатаются» — а магазин в другом городе.
+ * Без журнала не узнать: касса не пыталась печатать, принтер молчал
+ * или печатала не в тот принтер. Приходится ехать и смотреть глазами.
+ *
+ * Пишем ТОЛЬКО про печать, ящик и обновление: журнал, куда пишут всё,
+ * читать никто не станет.
+ */
+const LOG = path.join(app.getPath('userData'), 'kassa.log');
+const log = (msg) => {
+  const line = `${new Date().toISOString()} ${msg}\n`;
+  // Журнал не должен ронять кассу: не записалось — и ладно.
+  try { fs.appendFileSync(LOG, line, 'utf8'); } catch { /* нет места на диске */ }
+};
+
+/* Не даём журналу расти без края: полмегабайта — это тысячи строк,
+   больше при разборе всё равно не читают. Старое отрезаем. */
+function trimLog() {
+  try {
+    if (!fs.existsSync(LOG)) return;
+    if (fs.statSync(LOG).size < 512 * 1024) return;
+    const rows = fs.readFileSync(LOG, 'utf8').split('\n');
+    fs.writeFileSync(LOG, rows.slice(-2000).join('\n'), 'utf8');
+  } catch { /* не вышло — не беда */ }
+}
 
 // Настройки лежат рядом с данными пользователя, а не в папке программы:
 // в Program Files запись запрещена без прав администратора.
@@ -134,8 +166,34 @@ ipcMain.handle('outbox:ack', safe(async (_e, ids) => store.ackOutbox(ids)));
 ipcMain.handle('receipts:add', safe(async (_e, r) => store.addReceipt(r)));
 ipcMain.handle('receipts:recent', safe(async (_e, n) => store.recentReceipts(n)));
 
-ipcMain.handle('print:receipt', safe(async (_e, data) => printReceipt(data)));
+/* ПЕЧАТЬ ЧЕКА — с записью в журнал. Пишем ровно то, что спросят при
+   разборе: пыталась ли касса печатать, каким принтером, чем кончилось.
+   Три вопроса — три поля, больше не нужно. */
+ipcMain.handle('print:receipt', safe(async (_e, data) => {
+  const who = (store.getSettings().printer) || 'принтер по умолчанию';
+  const num = data && data.number != null ? `чек №${data.number}` : 'чек';
+  try {
+    const r = await printReceipt(data);
+    log(`печать: ${num} · ${who} · вышел`);
+    trimLog();
+    return r;
+  } catch (e) {
+    // Пишем причину дословно: «нет бумаги» и «принтер не найден» —
+    // разные беды, и чинят их по-разному.
+    log(`печать: ${num} · ${who} · ОШИБКА: ${e && e.message}`);
+    trimLog();
+    throw e;
+  }
+}));
 ipcMain.handle('print:printers', safe(async () => listPrinters()));
+
+/* Открыть журнал. Владелец звонит — говорим «меню → Журнал печати», и
+   он присылает файл, вместо того чтобы описывать беду словами. */
+ipcMain.handle('log:open', safe(async () => {
+  if (!fs.existsSync(LOG)) fs.writeFileSync(LOG, '', 'utf8');
+  await shell.openPath(LOG);
+  return true;
+}));
 ipcMain.handle('print:drawer', safe(async () => openCashDrawer()));
 ipcMain.handle('print:diagnostic', safe(async () => printDiagnostic()));
 

@@ -36,7 +36,10 @@ contextBridge.exposeInMainWorld('kassa', {
      это не было выведено: кассир не мог перепечатать даже последний.
      Кончилась лента, отошёл провод — покупатель уходит без бумаги. */
   receiptsRecent: (n) => call('receipts:recent', n),
-  receiptsRecent: (n) => call('receipts:recent', n),
+  /* Открыть журнал печати. Владелец звонит «чеки не печатаются» — мы
+     говорим «меню → Журнал печати», и он присылает файл вместо того,
+     чтобы описывать беду словами. */
+  openLog: () => call('log:open'),
 
   // печать
   print: (data) => call('print:receipt', data),
