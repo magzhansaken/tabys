@@ -182,7 +182,14 @@ $('btnPair').onclick = async () => {
     printWidth: Number($('printWidth').value),
     printCopies: Number($('printCopies').value),
   })).data;
-  const code = $('pairCode').value.trim();
+  // КОД ПРИВОДИМ К ВЕРХНЕМУ РЕГИСТРУ: сервер хранит его так, а кассир
+  // диктует по телефону и пишет как слышит — «tbs-4fe2-3137». Без
+  // этого сервер не найдёт код и скажет «не подошёл», хотя он верный.
+  //
+  // Формат НЕ проверяем — их урок: «форма не знает формат кода, его
+  // выдаёт сервер, и в разных местах по-разному. Проверка формата на
+  // клиенте дважды подводила».
+  const code = $('pairCode').value.trim().toUpperCase();
   if (!code) { err.textContent = 'Введите код привязки из кабинета'; return; }
   try {
     const d = await api('/pos/pair', {
@@ -1109,7 +1116,11 @@ $('btnParked').onclick = async () => {
   document.querySelectorAll('.reclist button').forEach((b) => b.onclick = async () => {
     const p = parked.find((x) => x.id === b.dataset.id);
     if (!p) return;
-    if (cart.length && !confirm('Текущий чек будет заменён. Продолжить?')) return;
+    if (cart.length && !await askSure({
+      title: 'Заменить текущий чек?',
+      text: 'В чеке уже есть товары. Они пропадут — отложите чек, если он нужен.',
+      yes: 'Заменить', danger: true,
+    })) return;
     cart = p.items;
     S = (await K.saveState({ parked: parked.filter((x) => x.id !== p.id) })).data;
     closeModal(); drawCart(); updateParkedCount();
@@ -1580,6 +1591,31 @@ async function finishSale(way, total) {
 }
 
 function openModal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
+
+/* СВОЙ ВОПРОС ВМЕСТО СИСТЕМНОГО — часть 19 разбора их кассы.
+ *
+ * Их довод: «Windows показывает системное окно крошечным полем. Кассир
+ * в час пик в него не попадает».
+ *
+ * confirm() — то же самое: мелкие кнопки, чужой вид, поверх всего. На
+ * кассовом планшете кассир бьёт пальцем и промахивается, а промах
+ * здесь — «Отмена» вместо «Да» или наоборот.
+ *
+ * Опасное действие подписывается КРАСНЫМ и стоит справа: случайный
+ * тычок попадает в безопасное. */
+function askSure({ title, text, yes = 'Да', no = 'Отмена', danger = false }) {
+  return new Promise((resolve) => {
+    openModal(`
+      <h2>${escapeHtml(title)}</h2>
+      ${text ? `<p class="muted">${escapeHtml(text).replace(/\n/g, '<br>')}</p>` : ''}
+      <div class="modal-actions">
+        <button id="askNo">${escapeHtml(no)}</button>
+        <button id="askYes" class="${danger ? 'bad' : 'primary'}">${escapeHtml(yes)}</button>
+      </div>`);
+    $('askNo').onclick = () => { closeModal(); resolve(false); };
+    $('askYes').onclick = () => { closeModal(); resolve(true); };
+  });
+}
 function closeModal() { $('modal').classList.add('hidden'); focusScanner(); }
 
 // ── Правая колонка: цифры ────────────────────────────────────────────
@@ -2157,11 +2193,13 @@ $('btnShift').onclick = async () => {
       // тогда пересчёт можно и не делать вовсе, а ради него всё и
       // затевается. Спрашиваем прямо.
       if ($('fact').value.trim() === '') {
-        const sure = confirm(
-          `Вы не вписали, сколько насчитали.\n\n`
-          + `По расчёту в ящике ${money(must)}.\n\n`
-          + `«Да» — пересчитал, всё сходится: в отчёт уйдёт ${money(must)}.\n`
-          + `«Отмена» — вернуться и вписать: потом доказать будет нечем.`);
+        const sure = await askSure({
+          title: 'Вы не вписали, сколько насчитали',
+          text: `По расчёту в ящике ${money(must)}.\n\n`
+            + `«Пересчитал» — всё сходится, в отчёт уйдёт ${money(must)}.\n`
+            + '«Вернуться» — вписать своё число: потом доказать будет нечем.',
+          yes: 'Пересчитал, сходится', no: 'Вернуться',
+        });
         if (!sure) return;
         $('fact').value = String(must);
       }
@@ -2614,7 +2652,11 @@ $('btnRefund').onclick = async () => {
     if (!r) return;
     const ok = await allowAction('act_refund', 'Возврат по чеку');
     if (!ok) return;
-    if (!confirm(`Вернуть чек №${r.number} на ${money(r.total)}?`)) return;
+    if (!await askSure({
+      title: `Вернуть чек №${r.number}?`,
+      text: `Из кассы уйдёт ${money(r.total)}. Отменить возврат потом нельзя.`,
+      yes: 'Вернуть деньги', danger: true,
+    })) return;
     const ref = { ...r, id: uuid(), isRefund: true, refundOf: r.id, date: new Date().toLocaleString('ru-RU') };
     await K.receiptAdd(ref);
     await K.outboxAdd({ id: ref.id, entity: 'sale', entityId: ref.id, op: 'insert', payload: ref });

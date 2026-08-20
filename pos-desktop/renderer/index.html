@@ -39,7 +39,14 @@
     <label>Адрес сервера</label>
     <input id="apiUrl" value="https://tabys.duckdns.org/api">
     <label>Код привязки <span class="muted">(кабинет → Точки и кассы)</span></label>
-    <input id="pairCode" placeholder="напр. 4821" inputmode="numeric">
+    <!-- ПОЛЕ НЕ ЗНАЕТ ФОРМАТ КОДА — урок донора: «его выдаёт сервер, и
+           в разных местах по-разному, проверка формата на клиенте дважды
+           подводила».
+           Здесь это уже случилось: в части 10 код стал TBS-4FE2-3137, а
+           поле осталось от старого — «напр. 4821» и только цифры. Кассир
+           не смог бы ввести буквы вовсе. -->
+      <input id="pairCode" placeholder="напр. TBS-4FE2-3137"
+             autocapitalize="characters" spellcheck="false">
     <button id="btnPair" class="primary big">Привязать кассу</button>
     <div id="setupErr" class="err"></div>
     <details>
