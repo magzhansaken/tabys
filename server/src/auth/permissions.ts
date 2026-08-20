@@ -45,6 +45,8 @@ export interface EmployeeContext {
   employeeId: string;
   /** Имя кассира: попадает в чек и в журнал «кто разрешил». */
   name?: string;
+  /** Потолок скидки в процентах. Пусто — без предела (владелец, админ). */
+  discountLimitPct?: number | null;
   accountId: string;
   /** pending — заявка ждёт активации оператором, рабочие операции закрыты */
   accountStatus?: string;

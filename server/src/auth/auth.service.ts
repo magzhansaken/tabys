@@ -559,7 +559,12 @@ export class AuthService {
   async loadContext(accountId: string, employeeId: string, client?: any): Promise<EmployeeContext> {
     const run = async (c: any) => {
       const e = (await c.query(
-        `SELECT e.id, e.first_name, e.last_name, e.is_owner, e.is_shift_admin, r.code AS role_code, r.permissions,
+        `SELECT e.id, e.first_name, e.last_name, e.is_owner, e.is_shift_admin,
+                -- ПРЕДЕЛ СКИДКИ: личный сильнее ролевого. Роль даёт
+                -- общий потолок, но старшему можно поднять его лично,
+                -- не заводя новую роль ради одного человека.
+                coalesce(e.discount_limit_pct, r.discount_limit_pct) AS discount_limit_pct,
+                r.code AS role_code, r.permissions,
                 r.can_see_purchase_price, r.can_see_revenue
            FROM employee e LEFT JOIN role r ON r.id=e.role_id WHERE e.id=$1`, [employeeId])).rows[0];
       if (!e) throw new UnauthorizedException('Сотрудник не найден');
@@ -573,6 +578,15 @@ export class AuthService {
         // ЧЕК и в журнал действий: без него в чеке стояло пусто, а в
         // записи «кто разрешил отмену» — тоже пусто.
         name: [e.first_name, e.last_name].filter(Boolean).join(' ') || 'Кассир',
+        // ПОТОЛОК СКИДКИ. Пусто значит без предела — так у владельца и
+        // администратора: они и есть последняя подпись.
+        //
+        // Раньше было «всё или ничего»: можно скидки — значит любую,
+        // хоть сто процентов. Кассир по сговору отдавал товар даром, и
+        // в отчёте это выглядело обычной продажей со скидкой.
+        discountLimitPct: e.is_owner || e.role_code === 'admin'
+          ? null
+          : (e.discount_limit_pct == null ? null : Number(e.discount_limit_pct)),
         accountId,
         accountStatus: acc?.status ?? 'trial',
         roleCode: e.role_code,

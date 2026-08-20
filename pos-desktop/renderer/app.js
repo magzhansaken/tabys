@@ -950,16 +950,36 @@ let cartDiscount = 0;
 $('btnDiscount').onclick = async () => {
   if (!cart.length) return;
   if (SET.discountAllowed === false) { toast('Владелец запретил скидки на кассе', true); return; }
+  const base = cart.reduce((a, l) => a + l.price * l.qty - (l.discount || 0), 0);
+
+  // ДВА ПОТОЛКА, И ОБА НУЖНЫ — часть 4 разбора их кассы.
+  //
+  // Потолок МАГАЗИНА: «больше 30% не даём никому» — правило владельца.
+  // Потолок ЧЕЛОВЕКА: «этот кассир до 10%» — правило про людей.
+  //
+  // У меня был только первый: кассир мог дать всё, что разрешено
+  // магазину. По сговору с покупателем — товар почти даром, и в отчёте
+  // это выглядит обычной продажей со скидкой.
+  //
+  // Берём МЕНЬШИЙ из двух: правило нельзя обойти, зайдя с другой
+  // стороны.
+  const shopPct = SET.discountMaxPct ?? 100;
+  const myPct = S.employee?.discountLimitPct;
+  const capPct = myPct == null ? shopPct : Math.min(shopPct, myPct);
+  const cap = Math.floor(base * capPct / 100);
+
+  // Своим пределом кассир распоряжается САМ, без старшего. Звать его
+  // ради ста тенге значит приучить жать код не глядя — и тогда охрана
+  // перестанет работать вовсе. Старший нужен сверх предела, и тогда он
+  // вникает, потому что зовут редко.
   const ok = await allowAction('act_discount', 'Скидка на чек');
   if (!ok) return;
 
-  const base = cart.reduce((a, l) => a + l.price * l.qty - (l.discount || 0), 0);
-  const capPct = SET.discountMaxPct ?? 100;
-  const cap = Math.floor(base * capPct / 100);
-
   openModal(`
     <h2>Скидка на чек</h2>
-    <div class="muted">Сумма чека ${money(base)}${capPct < 100 ? ` · больше ${capPct}% нельзя` : ''}</div>
+    <div class="muted">Сумма чека ${money(base)}${capPct < 100
+      ? ` · ваш предел ${capPct}%${myPct != null && myPct < shopPct ? ' (сверх — только со старшим)' : ''}`
+      : ''}</div>
     <div class="disc-tabs">
       <button data-m="pct" class="on">Процентом</button>
       <button data-m="sum">Суммой</button>

@@ -291,5 +291,8 @@
 \echo '--- 105 своя строка счёта у устройства ---'
 \i db/migrations/105_own_line.sql
 
+\echo '--- 106 предел скидки кассира ---'
+\i db/migrations/106_discount_limit.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
