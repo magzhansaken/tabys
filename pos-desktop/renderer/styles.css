@@ -563,3 +563,8 @@ body.pad-on .modal-card { padding-left: 306px; }
 .idle-hint { margin-top: 10px; font-size: 14px; color: #999; line-height: 1.5; }
 #idleLock .dots { margin: 18px 0 8px; }
 #idleLock .keypad { margin-top: 10px; }
+
+/* Быстрые купюры при оплате: покупатель даёт круглым, кассир жмёт одну
+   кнопку вместо набора числа. Первая — «без сдачи», самый частый
+   случай, поэтому выделена. */
+#padModes .exact { background: #2d4a2d; }

@@ -1208,15 +1208,44 @@ function payRender() {
   const total = cartTotal();
   const cashish = payWay === 'cash' || payWay === 'mixed';
   const askPaper = false;   // выбор теперь в ряду «Чек покупателю» ниже
-  const dens = DENOMS.filter((d) => d >= total).slice(0, 4);
+  // БЫСТРЫЕ СУММЫ ПО ПРАВИЛУ ДОНОРА (quickTenderOptions).
+  //
+  // Моё брало только купюры не меньше суммы — и на 24 000 не
+  // показывало НИЧЕГО: купюры кончились, кассир набирал руками при
+  // очереди, хотя покупатель дал 25 000.
+  //
+  // И не было ближних округлений: к оплате 1 340 покупатель чаще даёт
+  // 1 400 или 1 500, чем 2 000.
+  //
+  // Их правило: точная сумма первой, потом округления вверх до сотни,
+  // пятисот, тысячи, потом купюры, потом десятки тысяч. Пусто не
+  // бывает никогда.
+  const dens = (() => {
+    const out = [total];
+    for (const step of [100, 500, 1000]) {
+      const v = Math.ceil(total / step) * step;
+      if (v > total && !out.includes(v)) out.push(v);
+      if (out.length >= 4) return out;
+    }
+    for (const n of DENOMS) {
+      if (n >= total && !out.includes(n)) out.push(n);
+      if (out.length >= 4) return out;
+    }
+    let v = Math.ceil(total / 10000) * 10000;
+    while (out.length < 4) { if (!out.includes(v)) out.push(v); v += 10000; }
+    return out;
+  })();
   $('payPane').innerHTML = `
     <div class="pay-ways">${WAYS.map(([w, l]) =>
       `<button data-w="${w}" class="${w === payWay ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="err" id="payErr"></div>
     <div class="pay-extra" id="payExtra"></div>
     ${cashish ? `<div class="pay-title">Дал купюрой</div>
-    <div class="denoms">${dens.map((d) => `<button data-d="${d}">${money(d)}</button>`).join('')}</div>
-    ${dens.length ? '' : '<div class="hint">Сумма больше 20 000 — наберите цифрами справа.</div>'}` : ''}
+    <div class="denoms">${dens.map((d, i) =>
+      // Первая — ровно к оплате: самый частый случай, поэтому подписан
+      // словами и выделен. Дальше купюры по возрастанию.
+      `<button data-d="${d}"${i === 0 ? ' class="exact"' : ''}>${
+        i === 0 ? 'Без сдачи' : money(d)}</button>`).join('')}</div>` : ''}
     ${askPaper ? `<label class="print-toggle"><input type="checkbox" id="wantPrint" checked>Печатать бумажный чек</label>` : ''}
     <div class="pay-title" style="margin-top:6px">Чек покупателю</div>
     <div class="give-receipt">
@@ -1540,13 +1569,36 @@ function drawPad() {
       : money(total);
     if (cashish && keep != null) $('pCash').value = keep;
     if (cashish) $('pCash').oninput = updateChange;
-    $('padModes').innerHTML = `
-      <button data-p="exact">Без сдачи</button>
-      <button data-p="off">Отмена оплаты</button>`;
+    // УМНЫЕ КУПЮРЫ — часть 9 разбора их кассы (quickTenderOptions).
+    //
+    // Покупатель почти всегда даёт круглым: к оплате 1 340 — протянет
+    // 1 500 или 2 000. Кассир набирал это цифрами, а при очереди
+    // каждое лишнее нажатие стоит времени и ошибок в сдаче.
+    //
+    // Их правило: округляем вверх до сотни, пятисот, тысячи, потом
+    // берём ближайшие купюры. Четыре кнопки — больше не влезает.
+    const notes = [200, 500, 1000, 2000, 5000, 10000, 20000];
+    const quick = (() => {
+      const out = [total];
+      for (const step of [100, 500, 1000]) {
+        const v = Math.ceil(total / step) * step;
+        if (v > total && !out.includes(v)) out.push(v);
+        if (out.length >= 4) return out;
+      }
+      for (const n of notes) {
+        if (n >= total && !out.includes(n)) out.push(n);
+        if (out.length >= 4) return out;
+      }
+      let v = Math.ceil(total / 10000) * 10000;
+      while (out.length < 4) { if (!out.includes(v)) out.push(v); v += 10000; }
+      return out;
+    })();
+
+    // Купюры живут В ОДНОМ месте — в ряду под суммой. Два ряда с теми
+    // же числами сбивали бы: кассир не знает, какой жать.
+    $('padModes').innerHTML = '<button data-p="off">Отмена оплаты</button>';
     $('padModes').querySelectorAll('button').forEach((b) => b.onclick = () => {
-      if (b.dataset.p === 'off') { payClose(); return; }
-      const el = $('pCash');
-      if (el) { el.value = String(total); el.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (b.dataset.p === 'off') payClose();
     });
   } else {
     const sel = selLine;
@@ -1583,11 +1635,13 @@ function drawPad() {
       b.title = t ? '' : 'Сначала выберите, куда вносить: наличные или карта';
     });
 
-    const exact = $('padModes').querySelector('[data-p="exact"]');
-    if (exact) {
-      exact.disabled = !$('pCash');
-      exact.title = $('pCash') ? '' : 'Работает только с наличной частью';
-    }
+    // Купюры гаснут без наличной части: картой сдачи не бывает, и
+    // кнопка «дал 2 000» там бессмысленна. Живут они в ряду под
+    // суммой, а не в padModes — искал не там, и подпись молчала.
+    document.querySelectorAll('.denoms [data-d]').forEach((b) => {
+      b.disabled = !$('pCash');
+      b.title = $('pCash') ? '' : 'Работает только с наличной частью';
+    });
   }
   drawPadButton();
   // Сдачу считаем после того, как поле оплаты отрисовано: иначе она
