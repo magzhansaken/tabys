@@ -1,0 +1,195 @@
+/*
+ * ОЧЕРЕДЬ ЧЕКОВ: отправка на сервер.
+ *
+ * ГЛАВНОЕ ИХ ПРАВИЛО ВЗЯТО ЦЕЛИКОМ:
+ *
+ *   «Отклонённые сервером НЕ ВЫБРАСЫВАЕМ молча. Раньше они снимались с
+ *    очереди "чтобы не крутить вечно" — и чек исчезал навсегда. Кассир
+ *    видел сумму, гость заплатил, а в отчёте пусто, и никто не знал
+ *    почему.
+ *
+ *    Теперь откладываем в отдельный ящик: очередь не забивается, но
+ *    деньги остаются на виду.»
+ *
+ * У МЕНЯ В ПРОШЛОЙ КАССЕ БЫЛА ОБРАТНАЯ БЕДА: отклонённый оставался в
+ * очереди и уходил снова каждые тридцать секунд. Сервер отклонял
+ * снова. Очередь не пустела НИКОГДА — кассир видел «не отправлено: 3»
+ * вечно и переставал верить счётчику.
+ *
+ * ДВЕ БЕДЫ, И ОБЕ ПРО ОДНО: чек с деньгами не доходил до отчёта.
+ */
+
+/** Сколько чеков шлём за раз. Больше — запрос долгий, и по мобильному он оборвётся. */
+const BATCH = 50;
+
+/**
+ * ОТПРАВИТЬ НАКОПЛЕННОЕ.
+ *
+ * @returns { reached, sent, rejected, left } — связь, ушло, отклонено, осталось
+ */
+async function flush({ ask, store, settings, deviceToken, employeeId }) {
+  const pending = await store.outboxPending();
+  if (!pending.length) return { reached: null, sent: 0, rejected: 0, left: 0 };
+
+  const пачка = pending.slice(0, BATCH);
+
+  let ответ;
+  try {
+    ответ = await ask('/sync/push', {
+      settings, deviceToken, method: 'POST',
+      body: {
+        events: пачка.map((e) => ({
+          id: e.id, entity: e.entity, entityId: e.entityId, op: e.op,
+          payload: e.payload, clientSeq: e.clientSeq, clientTs: e.clientTs,
+          employeeId: e.employeeId || employeeId,
+        })),
+      },
+    });
+  } catch (e) {
+    /* СЕРВЕР МОЛЧИТ — очередь ЖДЁТ. Ничего не трогаем: чеки целы, уйдут
+       при следующей связи. Пробрасываем признак, чтобы наверху отличали
+       «нет связи» от «чек отклонён». */
+    return { reached: false, sent: 0, rejected: 0, left: pending.length, error: e };
+  }
+
+  const results = (ответ && ответ.results) || [];
+
+  /* ДУБЛЬ СЧИТАЕТСЯ ПРИНЯТЫМ — их правило.
+   *
+   * Связь оборвалась на полпути: сервер чек записал, а касса ответа не
+   * получила. При следующей попытке он отвечает «уже есть».
+   *
+   * Если не считать это успехом, чек будет висеть в очереди ВЕЧНО, а
+   * счётчик «не отправлено» никогда не обнулится. */
+  const ушли = results
+    .filter((x) => x.result !== 'error')
+    .map((x) => x.id);
+
+  const отбиты = results.filter((x) => x.result === 'error');
+
+  /* ОТКЛОНЁННЫЕ — В ОТДЕЛЬНЫЙ ЯЩИК, а не обратно в очередь и не в
+     мусор. Их правило: «очередь не забивается, но деньги остаются на
+     виду». */
+  if (отбиты.length) {
+    const записи = отбиты.map((b) => {
+      const исходный = пачка.find((e) => e.id === b.id);
+      return {
+        id: b.id,
+        number: исходный && исходный.payload && исходный.payload.number,
+        total: исходный && исходный.payload && исходный.payload.total,
+        entity: исходный && исходный.entity,
+        reason: b.message || b.error || 'сервер не принял',
+        at: new Date().toISOString(),
+      };
+    });
+    await store.rejectedAdd(записи);
+  }
+
+  // Снимаем с очереди И ушедшие, И отклонённые: последние теперь в ящике.
+  const снять = [...ушли, ...отбиты.map((x) => x.id)];
+  if (снять.length) await store.outboxAck(снять);
+
+  /* СЕРВЕР МОГ ОТВЕТИТЬ НЕ ПРО ВСЁ. Неотвеченное остаётся в очереди и
+     уйдёт следующей попыткой — а не пропадёт вместе с ответом. */
+  const осталось = (await store.outboxPending()).length;
+
+  return {
+    reached: true,
+    sent: ушли.length,
+    rejected: отбиты.length,
+    left: осталось,
+    // Ещё есть что слать: зовём себя снова, не дожидаясь таймера.
+    more: осталось > 0 && пачка.length === BATCH,
+  };
+}
+
+/**
+ * КОЛЬЦО ОТПРАВКИ.
+ *
+ * Раз в полминуты пробуем отправить. Если ушла целая пачка и осталось
+ * ещё — идём сразу дальше, не ждём.
+ *
+ * СВЯЗЬ ПРОВЕРЯЕТСЯ ОТДЕЛЬНО от очереди: пустая очередь не значит
+ * «сеть жива». В прошлой кассе она давала зелёную точку всегда, и
+ * кассир бил чеки при мёртвой сети.
+ */
+function makeSyncLoop({ ask, ping, store, getSettings, getState, watch, onChange, every = 30000 }) {
+  let timer = null;
+  let busy = false;
+
+  async function once() {
+    if (busy) return;
+    busy = true;
+    try {
+      const settings = await getSettings();
+      const state = await getState();
+      if (!state.deviceToken) return;      // касса не привязана
+
+      let r = await flush({ ask, store, settings,
+        deviceToken: state.deviceToken,
+        employeeId: state.employee && state.employee.id });
+
+      // Пачка ушла целиком — гоним дальше сразу.
+      let кругов = 0;
+      while (r.more && кругов < 20) {
+        r = await flush({ ask, store, settings, deviceToken: state.deviceToken,
+          employeeId: state.employee && state.employee.id });
+        кругов += 1;
+      }
+
+      if (r.reached === null) {
+        /* Слать нечего — но связь всё равно проверяем. Иначе кассир
+           видит зелёную точку при мёртвой сети. */
+        try { await ping({ settings, deviceToken: state.deviceToken }); watch.good(); }
+        catch { watch.bad(); }
+      } else if (r.reached) {
+        watch.good();
+      } else {
+        watch.bad();
+      }
+
+      if (onChange) onChange(r);
+    } finally {
+      busy = false;
+    }
+  }
+
+  return {
+    once,
+    start() { if (!timer) timer = setInterval(once, every); once(); },
+    stop() { if (timer) { clearInterval(timer); timer = null; } },
+  };
+}
+
+/**
+ * ЧТО ПОКАЗАТЬ КАССИРУ ПРО ОЧЕРЕДЬ.
+ *
+ * Не просто число: кассир должен понимать, беда это или нет.
+ */
+function queueNote({ left, rejected, lastSync, netDown }) {
+  const части = [];
+
+  if (left > 0) {
+    части.push(`не отправлено: ${left}`);
+  }
+
+  if (netDown && lastSync) {
+    /* КОГДА УШЛО В ПОСЛЕДНИЙ РАЗ. Без этого «не отправлено: 3» не
+       говорит, копится это минуту или третий час. Связь могла
+       вернуться и снова пропасть, а кассир думает, что всё стоит с
+       утра. */
+    const at = new Date(lastSync);
+    части.push('ушло в ' + at.toLocaleTimeString('ru-RU',
+      { hour: '2-digit', minute: '2-digit' }));
+  }
+
+  if (rejected > 0) {
+    части.push(`сервер не принял: ${rejected}`);
+  }
+
+  return части.length ? части.join(' · ') : null;
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { BATCH, flush, makeSyncLoop, queueNote };
+}
