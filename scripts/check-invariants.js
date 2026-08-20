@@ -981,6 +981,11 @@ const RULES = [
   { file: 'pos-desktop/renderer/app.js', must: 'ЗАМОК ПРИ ПРОСТОЕ',
     why: 'Кассир отошёл — касса открыта под его именем: кто угодно пробьёт чек, и всё уйдёт на него' },
 
+  { file: 'pos-desktop/electron/main.cjs', must: 'requestSingleInstanceLock',
+    why: 'Две копии кассы считают номера чеков от своего: два чека под номером 57 и задвоение в налоговой' },
+  { file: 'pos-desktop/renderer/app.js', must: 'ПОИСК И КЛАВИАТУРА УХОДЯТ',
+    why: 'В поиске висело старое слово, и следующий товар кассир искал поверх него' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

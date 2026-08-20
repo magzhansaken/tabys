@@ -704,6 +704,23 @@ function addToCart(g, qty) {
     barcodes: g.barcodes || [], marked: !!g.marked, codes: [] });
   selLine = line || cart[cart.length - 1];
   padNum = '';
+
+  // ТОВАР ВЫБРАН — ПОИСК И КЛАВИАТУРА УХОДЯТ. Правило донора:
+  //
+  //   «Блюдо выбрано — клавиатура своё отработала и уходит сама: она
+  //    нужна для поиска, поиск завершён, а снизу ей больше нечего
+  //    заслонять. Строка чистится под следующий раз.»
+  //
+  // У меня они оставались: кассир добавил хлеб, а клавиатура закрывает
+  // половину экрана, и в поиске висит «хле». Следующий товар он ищет
+  // поверх старого слова — и находит не то.
+  const sf = document.getElementById('search');
+  if (sf && sf.value) {
+    sf.value = '';
+    sf.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (typeof kbClose === 'function') kbClose();
+
   drawCart();
 }
 let voids = 0;      // отмен позиций за смену
