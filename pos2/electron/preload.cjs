@@ -20,4 +20,31 @@ contextBridge.exposeInMainWorld('K', {
   /* Закрыть кассу. Крестика нет вовсе: закрытие идёт этим путём и
      проходит через предупреждение о неотправленных чеках. */
   quit: () => call('app:quit'),
+
+  /* Хранилище на диске. Чеки и очередь живут в файлах, а не в
+     хранилище страницы: иначе при смене происхождения они бы
+     раздвоились — на этом обжёгся донор. */
+  getSettings: () => call('settings:get'),
+  saveSettings: (p) => call('settings:save', p),
+  getState: () => call('state:get'),
+  saveState: (p) => call('state:save', p),
+
+  saveCatalog: (i) => call('catalog:save', i),
+  getCatalog: () => call('catalog:get'),
+  catalogAge: () => call('catalog:age'),
+
+  outboxAdd: (r) => call('outbox:add', r),
+  outboxPending: () => call('outbox:pending'),
+  outboxAck: (ids) => call('outbox:ack', ids),
+
+  receiptAdd: (r) => call('receipts:add', r),
+  receiptsRecent: (n) => call('receipts:recent', n),
+
+  rejectedAll: () => call('rejected:all'),
+  rejectedAdd: (r) => call('rejected:add', r),
+  rejectedClear: () => call('rejected:clear'),
+
+  passSave: (print, pass) => call('pass:save', { print, pass }),
+  passRead: (print) => call('pass:read', print),
+  passCount: () => call('pass:count'),
 });

@@ -147,7 +147,36 @@ const safe = (fn) => async (...a) => {
   catch (e) { return { ok: false, error: e && e.message ? e.message : String(e) }; }
 };
 
+const store = require('./store.cjs');
+
 ipcMain.handle('app:version', safe(async () => app.getVersion()));
+
+/* ── ХРАНИЛИЩЕ ────────────────────────────────────────────────────
+   Страница ходит в него только этим путём: своего доступа к диску у
+   неё нет, и случайный скрипт до чеков не доберётся. */
+ipcMain.handle('settings:get',  safe(async () => store.getSettings()));
+ipcMain.handle('settings:save', safe(async (_e, p) => store.saveSettings(p)));
+ipcMain.handle('state:get',     safe(async () => store.getState()));
+ipcMain.handle('state:save',    safe(async (_e, p) => store.saveState(p)));
+
+ipcMain.handle('catalog:save',  safe(async (_e, i) => store.saveCatalog(i)));
+ipcMain.handle('catalog:get',   safe(async () => store.getCatalog()));
+ipcMain.handle('catalog:age',   safe(async () => store.catalogAgeDays()));
+
+ipcMain.handle('outbox:add',     safe(async (_e, r) => store.outboxAdd(r)));
+ipcMain.handle('outbox:pending', safe(async () => store.outboxPending()));
+ipcMain.handle('outbox:ack',     safe(async (_e, ids) => store.outboxAck(ids)));
+
+ipcMain.handle('receipts:add',    safe(async (_e, r) => store.receiptAdd(r)));
+ipcMain.handle('receipts:recent', safe(async (_e, n) => store.receiptsRecent(n)));
+
+ipcMain.handle('rejected:all',   safe(async () => store.rejectedAll()));
+ipcMain.handle('rejected:add',   safe(async (_e, r) => store.rejectedAdd(r)));
+ipcMain.handle('rejected:clear', safe(async () => store.rejectedClear()));
+
+ipcMain.handle('pass:save', safe(async (_e, d) => store.passSave(d.print, d.pass)));
+ipcMain.handle('pass:read', safe(async (_e, p) => store.passRead(p)));
+ipcMain.handle('pass:count', safe(async () => Object.keys(store.passesAll()).length));
 
 /* Открыть журнал. Владелец звонит — говорим «меню → Журнал печати», и
    он присылает файл вместо того, чтобы описывать беду словами. */
