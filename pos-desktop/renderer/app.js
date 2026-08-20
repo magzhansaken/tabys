@@ -172,48 +172,91 @@ function openPin() {
 function drawPin() {
   $('pinDots').innerHTML = [0,1,2,3].map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
 }
-/* Отпечаток кода: короткая свёртка от кода и кассира.
+/* ПРОПУСКА КАССЫ — по образцу донора, вместе с их доводом:
  *
- * Сам код не храним — с отпечатком нельзя войти на другой кассе, а
- * сверить свой можно. Кассир привязан нарочно: иначе один код подошёл
- * бы всем, у кого он совпал. */
-function pinMark(pin, who) {
-  let h = 0;
-  const src = String(pin) + '|' + String(who) + '|tabys';
-  for (let i = 0; i < src.length; i += 1) {
-    h = (h * 31 + src.charCodeAt(i)) | 0;
+ *   «Интернет в зале пропадает, смена — нет. При каждой УСПЕШНОЙ
+ *    онлайн-проверке касса оставляет себе пропуск — не сам код, а его
+ *    след, посоленный ключом устройства. Подобрать код по следу
+ *    нельзя, унести след на другую кассу бессмысленно: соль другая.»
+ *
+ * Моя прошлая правка помнила ОДНОГО последнего кассира — сменщик войти
+ * не мог. А кассиры работают сменами: утренний ушёл, вечерний сел, и
+ * без сети он должен войти ПОД СВОИМ именем, а не под чужим.
+ *
+ * Теперь склад: по пропуску на каждого, кто входил на этой кассе.
+ */
+const PASS_KEY = 'tabys.pinPasses';
+
+/* След кода: SHA-256 с солью устройства. Обратно не разворачивается,
+   на другой кассе бесполезен — там соль своя. */
+async function pinPrint(pin, deviceKey) {
+  const raw = new TextEncoder().encode(String(pin) + '\u00b7' + String(deviceKey || ''));
+  try {
+    const dig = await crypto.subtle.digest('SHA-256', raw);
+    return [...new Uint8Array(dig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    // Нет надёжной свёртки — берём простую. Хуже, но лучше, чем
+    // пускать по любому коду.
+    let h = 0;
+    const src = String(pin) + '|' + String(deviceKey || '');
+    for (let i = 0; i < src.length; i += 1) h = (h * 31 + src.charCodeAt(i)) | 0;
+    return 'w' + h;
   }
-  return String(h);
 }
+
+function passesAll() {
+  try { return JSON.parse(localStorage.getItem(PASS_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+/** Выписать пропуск после ЖИВОЙ проверки сервером. */
+function passSave(print, pass) {
+  try {
+    const all = passesAll();
+    all[print] = pass;
+    localStorage.setItem(PASS_KEY, JSON.stringify(all));
+  } catch { /* хранилище тесно — вход случился, просто без пропуска */ }
+}
+
+/** Найти пропуск по следу кода. */
+function passRead(print) { return passesAll()[print] || null; }
 
 async function tryPin() {
   const err = $('pinErr'); err.textContent = '';
   try {
     const d = await api('/pos/login', { method: 'POST', body: { pin } });
-    S = (await K.saveState({
-      employee: d.employee || d, shift: S.shift || null,
-      // ОТПЕЧАТОК КОДА — для входа без сети. Сам код не храним: с
-      // отпечатком нельзя войти на другой кассе, а сверить можно.
-      lastPinMark: pinMark(pin, d.employee?.id || d.id || ''),
-    })).data;
+    const who = d.employee || d;
+    S = (await K.saveState({ employee: who, shift: S.shift || null })).data;
+
+    // ВЫПИСЫВАЕМ ПРОПУСК после живой проверки. Ключ — след кода,
+    // значение — кто и с какими правами. Соль берём от устройства:
+    // след с этой кассы на другой бесполезен.
+    passSave(await pinPrint(pin, S.deviceToken || S.device?.id || ''), {
+      employee: who,
+      permissions: d.permissions || who.permissions || null,
+      savedAt: new Date().toISOString(),
+    });
     await pullCatalog().catch(() => {});
     openSale(); syncLoop();
   } catch (e) {
     // Офлайн-вход: если сервер недоступен, пускаем кассира, который уже
     // входил на этой кассе. Иначе пропажа интернета останавливает торговлю.
-    if (/fetch|network|failed/i.test(e.message) && S.lastEmployee) {
-      // БЕЗ СЕТИ СВЕРЯЕМ КОД С ОТПЕЧАТКОМ. Раньше проверялось только
-      // то, что сеть пропала: ввёл любые четыре цифры — и вошёл под
-      // именем последнего кассира. Выключили роутер — торгует кто
-      // угодно, а в чеках стоит чужое имя.
-      const mark = pinMark(pin, S.lastEmployee.id || '');
-      if (S.lastPinMark && mark === S.lastPinMark) {
-        S = (await K.saveState({ employee: S.lastEmployee })).data;
+    if (/fetch|network|failed/i.test(e.message)) {
+      // БЕЗ СЕТИ ВХОДИТ ЛЮБОЙ ИЗ РАБОТАВШИХ — под СВОИМ именем.
+      //
+      // Кассиры сменяются: утренний ушёл, вечерний сел. Пускать
+      // только последнего значит заставить вечернего торговать под
+      // именем утреннего — и все его чеки уйдут не на того.
+      const pass = passRead(await pinPrint(pin, S.deviceToken || S.device?.id || ''));
+      if (pass) {
+        S = (await K.saveState({ employee: pass.employee })).data;
         openSale(); return;
       }
-      err.textContent = S.lastPinMark
-        ? 'Неверный код. Без связи входит только тот, кто работал на этой кассе'
-        : 'Нет связи, а этот кассир ещё не входил здесь — нужен интернет';
+      // Незнакомый код — честный отказ. Пускать по любому коду хуже,
+      // чем не пустить: в чеках окажется чужое имя.
+      err.textContent = Object.keys(passesAll()).length
+        ? 'Нет связи. Без интернета входит только тот, кто уже работал на этой кассе'
+        : 'Нет связи, а на этой кассе ещё никто не входил — нужен интернет';
       pin = ''; drawPin(); return;
     }
     err.textContent = e.message; pin = ''; drawPin();
@@ -240,7 +283,8 @@ function openSale() {
     };
   }
   drawTop();
-  K.saveState({ lastEmployee: S.employee });
+  // «Последний кассир» больше не нужен: вход без сети идёт по складу
+  // пропусков, где каждый работавший лежит отдельно, со своим следом.
   drawCatalog(); drawCart(); updatePending(); updateParkedCount();
   drawPad(); focusScanner();
 }
@@ -686,6 +730,7 @@ $('btnPreReceipt').onclick = async () => {
     address: SET.receiptHeader || undefined,
     number: '—', date: new Date().toLocaleString('ru-RU'),
     cashier: S.employee?.name || '',
+    cashierId: S.employee?.id || null,
     items, discount: disc, total: sub - disc,
     payments: [], isPreReceipt: true,
     footer: 'ЭТО НЕ ЧЕК. Предварительный расчёт',
@@ -751,6 +796,7 @@ $('btnParked').onclick = async () => {
       if (!name || sum <= 0 || !note) { $('nrErr').textContent = 'Заполните всё: без причины возврат не проводим'; return; }
       const ref = { id: uuid(), number: (S.lastNumber || 0) + 1, date: new Date().toLocaleString('ru-RU'),
         store: S.store?.name || 'Магазин', cashier: S.employee?.name || '',
+        cashierId: S.employee?.id || null,
         items: [{ productId: null, name, qty: 1, price: sum, total: sum, free: true }],
         total: sum, isRefund: true, noReceipt: true, comment: note,
         payments: [{ label: 'Наличные', sum }], hasCash: true };
@@ -1090,6 +1136,12 @@ async function finishSale(way, total) {
     date: new Date().toLocaleString('ru-RU'),
     store: S.store?.name || 'Магазин',
     cashier: S.employee?.name || '',
+    // КЛЮЧ КАССИРА, А НЕ ТОЛЬКО ИМЯ. Одним именем чек с сотрудником не
+    // связать: две Айгуль за год — обычное дело, одна ушла, другая
+    // пришла. Без ключа выручку по кассирам не сверить и спросить не с
+    // кого. Особенно у чеков, пробитых БЕЗ СЕТИ: они дойдут позже, и
+    // разбирать их будут по этому полю.
+    cashierId: S.employee?.id || null,
     items: cart.map((l) => ({ ...l, discount: l.discount || 0, total: l.price * l.qty - (l.discount || 0),
       // Коды маркировки едут вместе со строкой: ОФД передаёт их в систему
       // маркировки, и товар выходит из оборота.
