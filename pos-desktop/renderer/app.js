@@ -830,7 +830,7 @@ function drawCart() {
 
         if (l.qty <= 0) cart.splice(b.dataset.m, 1);
         voids++;
-        logAction(code, { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+        logAction(code, { productName: l.name, amount: l.price, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
       }
       if (b.dataset.d != null) {
         // Первое касание взводит, второе убирает. Окна нет — очередь ждёт, —
@@ -846,7 +846,7 @@ function drawCart() {
         if (!ok) return;
         cart.splice(b.dataset.d, 1);
         voids += 1;
-        logAction('act_remove_item', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+        logAction('act_remove_item', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
       }
       if (b.dataset.dup != null) {
         // УДВОЕНИЕ ПОЗИЦИИ (модель МоегоСклада). Покупатель берёт «ещё
@@ -922,7 +922,7 @@ async function openPriceSheet(i) {
     if (np <= 0) { $('prErr').textContent = 'Введите цену'; return; }
     if (SET.noPriceDown && np < base) { $('prErr').textContent = `Снижать цену нельзя. В карточке ${money(base)}`; return; }
     l.price = np; l.priceChanged = np !== base;
-    if (np !== base) logAction('price_change', { productName: l.name, amount: np - base, approvedBy: okp.approvedBy });
+    if (np !== base) logAction('price_change', { productName: l.name, amount: np - base, approvedBy: okp.approvedBy, approvedName: okp.approvedName, offlineNote: okp.offlineNote });
     closeModal(); drawCart();
   };
   setTimeout(() => $('prVal')?.focus(), 50);
@@ -963,7 +963,7 @@ async function openLineDiscountSheet(i) {
     const d = calc();
     if (d > 0 && d !== (l.discount || 0)) {
       discounts += 1;
-      logAction('discount', { productName: l.name, amount: d, approvedBy: ok.approvedBy });
+      logAction('discount', { productName: l.name, amount: d, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
     }
     l.discount = d;
     closeModal(); drawCart();
@@ -1070,7 +1070,7 @@ $('btnParked').onclick = async () => {
       await K.receiptAdd(ref);
       await K.outboxAdd({ id: ref.id, entity: 'sale', entityId: ref.id, op: 'insert', payload: ref });
       voids++;                                  // в счётчик отмен — это след
-      logAction('act_refund_free', { productName: name, amount: sum, approvedBy: okr.approvedBy });
+      logAction('act_refund_free', { productName: name, amount: sum, approvedBy: okr.approvedBy, approvedName: okr.approvedName, offlineNote: okr.offlineNote });
       S = (await K.saveState({ lastNumber: ref.number, cashInDrawer: (S.cashInDrawer || 0) - sum })).data;
       await K.print(ref);
       closeModal(); updatePending(); drawTop(); drawVoids(); trySync();
@@ -1174,7 +1174,7 @@ $('btnDiscount').onclick = async () => {
     if (d <= 0) { $('discErr').textContent = 'Введите скидку'; return; }
     cartDiscount = d;
     discounts += 1; drawVoids();
-    logAction('discount', { productName: 'Скидка на чек', amount: d, approvedBy: ok.approvedBy });
+    logAction('discount', { productName: 'Скидка на чек', amount: d, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
     closeModal(); drawCart();
   };
   setTimeout(() => $('discVal')?.focus(), 50);
@@ -1752,12 +1752,12 @@ async function applyPadQty() {
     const ok = await allowAction('act_remove_item', 'Удаление позиции');
     if (!ok) { drawPadValue(); return; }
     cart.splice(cart.indexOf(l), 1); voids++;
-    logAction('act_remove_item', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+    logAction('act_remove_item', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
   } else if (n < l.qty) {
     const ok = await allowAction('act_reduce_qty', 'Уменьшение количества');
     if (!ok) { drawPadValue(); return; }
     l.qty = n;
-    logAction('act_reduce_qty', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
+    logAction('act_reduce_qty', { productName: l.name, amount: l.price, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
   } else {
     l.qty = n;
   }
@@ -2196,7 +2196,14 @@ async function allowAction(code, title) {
   if (me.isOwner || me.isShiftAdmin) {
     // Записываем, КТО разрешил: в журнале должно остаться имя, даже
     // если код никто не вводил.
-    return { approvedBy: me.name || 'старший смены' };
+    //
+    // Пометки «без связи» тут нет нарочно: старший стоит за кассой
+    // сам, и связь ни при чём — подпись настоящая.
+    return {
+      approvedBy: me.id || null,
+      approvedName: me.name || 'старший смены',
+      offlineNote: null,
+    };
   }
 
   // БЕЗ СВЯЗИ КОД СТАРШЕГО НЕ СВЕРИТЬ — правило донора, и оно верное:
@@ -2238,9 +2245,54 @@ async function allowAction(code, title) {
         else if (pin.length < 4) pin += d;
         draw();
         if (pin.length === 4) {
+          // КОД СТАРШЕГО БЕЗ СЕТИ — правило донора:
+          //
+          //   «Пад старшего работает и без интернета: если старший уже
+          //    входил на этой кассе, его PIN узнаваем локально, и
+          //    права проверяются по-настоящему. Совсем незнакомый PIN
+          //    без связи — отказ пропускается с честной пометкой в
+          //    отчёт: гость уже отказался, зал не может ждать роутер.»
+          //
+          // Раньше код уходил ТОЛЬКО на сервер. Сети нет — «PIN не
+          // подошёл», и касса ВРЁТ: код верный. Старший вводит снова и
+          // снова, а отменить позицию нельзя вовсе.
           const r = await K.approve(pin);
-          if (r.ok && r.data?.ok) { closeModal(); resolve({ approvedBy: r.data.employeeId, approvedName: r.data.name }); }
-          else { $('apErr').textContent = r.data?.reason || 'PIN не подошёл'; pin = ''; draw(); }
+
+          if (r.ok && r.data?.ok) {
+            closeModal();
+            resolve({ approvedBy: r.data.employeeId, approvedName: r.data.name });
+          } else if (r.ok) {
+            // Сервер ЖИВ и сказал «не подошёл» — это про код, не про
+            // связь. Верить ему.
+            $('apErr').textContent = r.data?.reason || 'Код не подошёл';
+            pin = ''; draw();
+          } else {
+            // Связи нет — смотрим пропуска на кассе.
+            const pass = passRead(await pinPrint(pin, S.deviceToken || S.device?.id || ''));
+            if (pass && (pass.employee?.isOwner || pass.employee?.isShiftAdmin)) {
+              closeModal();
+              resolve({
+                approvedBy: pass.employee.id,
+                approvedName: pass.employee.name,
+                // Пометка идёт В ОТЧЁТ: владелец должен видеть, что
+                // подпись проверена на кассе, а не сервером.
+                offlineNote: 'код старшего проверен на кассе (без связи)',
+              });
+            } else if (pass) {
+              // Код узнан, но человек не старший — отказ настоящий.
+              $('apErr').textContent = 'Этот код не даёт права разрешать';
+              pin = ''; draw();
+            } else {
+              // Незнакомый код без связи. Их правило: очередь важнее
+              // строгости, но отчёт узнает правду.
+              closeModal();
+              resolve({
+                approvedBy: null,
+                approvedName: 'без проверки',
+                offlineNote: 'без связи, код старшего не проверен',
+              });
+            }
+          }
         }
       };
       pad.appendChild(b);
@@ -2463,7 +2515,7 @@ $('btnRefund').onclick = async () => {
     const ref = { ...r, id: uuid(), isRefund: true, refundOf: r.id, date: new Date().toLocaleString('ru-RU') };
     await K.receiptAdd(ref);
     await K.outboxAdd({ id: ref.id, entity: 'sale', entityId: ref.id, op: 'insert', payload: ref });
-    logAction('act_refund', { productName: 'Чек №' + r.number, amount: r.total, approvedBy: ok.approvedBy });
+    logAction('act_refund', { productName: 'Чек №' + r.number, amount: r.total, approvedBy: ok.approvedBy, approvedName: ok.approvedName, offlineNote: ok.offlineNote });
     await K.print(ref);
     closeModal(); updatePending(); trySync();
     toast('Возврат по чеку №' + r.number + ' · ' + money(r.total));
