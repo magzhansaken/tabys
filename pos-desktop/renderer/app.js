@@ -146,11 +146,35 @@ async function loadPrinters() {
   const r = await K.printers();
   if (!r.ok) return;
   const sel = $('printerSel');
+
+  /* ВИРТУАЛЬНЫЙ ПРИНТЕР МОЛЧА СЪЕДАЕТ ЧЕК — урок донора:
+   *
+   *   «Виртуальные принтеры Windows (PDF, XPS, OneNote, факс) не
+   *    понимают сырые ESC/POS-байты: очередь принимает задание
+   *    "успешно", а файл выходит пустым.»
+   *
+   * Владелец ставит кассу и тычет в первый принтер списка — а там
+   * часто «Microsoft Print to PDF», он есть всегда. Касса скажет «чек
+   * напечатан», бумаги не будет, и покупатели уйдут без чеков весь
+   * день, а причины никто не поймёт.
+   *
+   * Не запрещаем: бывает, что человек вправду хочет в файл. Но
+   * называем вещи своими именами прямо в списке.
+   */
+  const virtual = /pdf|xps|onenote|fax|факс|document writer|print to/i;
+
   for (const p of r.data) {
     const o = document.createElement('option');
-    o.value = p; o.textContent = p;
+    o.value = p;
+    o.textContent = virtual.test(p) ? p + '  — НЕ ПЕЧАТАЕТ ЧЕКИ' : p;
     if (p === SET.printer) o.selected = true;
     sel.appendChild(o);
+  }
+
+  // И говорим вслух, если такой уже выбран: подпись в списке видна
+  // только когда список открыт, а беда тихая.
+  if (SET.printer && virtual.test(SET.printer)) {
+    toast(`«${SET.printer}» — это печать в файл, чеки на бумагу не выйдут`, true);
   }
 }
 
@@ -1513,7 +1537,17 @@ async function finishSale(way, total) {
   }
   closeModal();
   cart = []; cartDiscount = 0; selLine = null; drawCart(); updatePending();
-  if (wantPaper && !p.ok) toast('Чек сохранён, но не напечатался: ' + p.error, true);
+  if (wantPaper && !p.ok) {
+    // НЕ НАПЕЧАТАЛСЯ — ПРЕДЛАГАЕМ ПОВТОРИТЬ. Их правило: не вышло
+    // одним путём — пробуем другим, «работает на любом принтере».
+    //
+    // У меня чек сохранялся, но покупатель уходил без бумаги:
+    // кончилась лента, отошёл провод. Кассир видел ошибку и не знал,
+    // что делать — а очередь стоит.
+    lastPrinted = ref;
+    toast('Чек сохранён, но не напечатался: ' + p.error
+      + ' · нажмите «Повторить печать» в меню', true);
+  }
   trySync();
 }
 
@@ -1770,6 +1804,10 @@ $('btnMenu').onclick = () => {
     ['Маркировка', 'как продавать табак и пиво', () => openMarkHelp()],
     ['Горячие клавиши', 'F2 · F4 · F6 · F8', () => openHotkeys()],
     ['Обновить каталог', 'подтянуть цены и товары', () => refreshCatalog()],
+    // ПОВТОРИТЬ ПЕЧАТЬ — рядом с настройками печати: кассир ищет её
+    // именно там, когда чек не вышел из принтера.
+    ['Повторить печать', 'последний чек: кончилась лента, отошёл провод',
+      () => reprintLast()],
     ['Настройки печати', 'принтер, лента, пробная печать', () => openPrintSheet()],
     ['Выход', 'смена остаётся открытой', () => $('btnLogout').onclick(), 'bad'],
   ]);
@@ -1792,6 +1830,28 @@ $('btnMore').onclick = () => {
     }, 'warn'],
   ]);
 };
+
+/* Последний напечатанный чек — для повтора. Держим в памяти, а не
+   ищем в хранилище: кассиру нужен именно тот, что сейчас не вышел. */
+let lastPrinted = null;
+
+/* ПОВТОРИТЬ ПЕЧАТЬ. Кончилась лента, отошёл провод, принтер уснул —
+ * чек сохранён, но покупатель без бумаги.
+ *
+ * Берём последний напечатанный, а нет его — последний из хранилища:
+ * кассир мог перезапустить кассу, пока менял ленту. */
+async function reprintLast() {
+  closeModal();
+  let ref = lastPrinted;
+  if (!ref && typeof K.receiptsRecent === 'function') {
+    const r = await K.receiptsRecent(1).catch(() => null);
+    ref = (r && r.data && r.data[0]) || (Array.isArray(r) ? r[0] : null);
+  }
+  if (!ref) { toast('Нечего перепечатывать — чеков ещё не было', true); return; }
+  const p = await K.print(ref);
+  if (p && p.ok) { lastPrinted = null; toast('Чек №' + (ref.number ?? '') + ' напечатан'); }
+  else toast('Снова не вышло: ' + ((p && p.error) || 'проверьте принтер и ленту'), true);
+}
 
 async function refreshCatalog() {
   closeModal();

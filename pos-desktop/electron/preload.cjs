@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('kassa', {
 
   // местная история чеков — для возвратов и «повторить чек»
   receiptAdd: (r) => call('receipts:add', r),
+  /* ПЕРЕПЕЧАТКА. Хранилище умело отдавать последние чеки, но наружу
+     это не было выведено: кассир не мог перепечатать даже последний.
+     Кончилась лента, отошёл провод — покупатель уходит без бумаги. */
+  receiptsRecent: (n) => call('receipts:recent', n),
   receiptsRecent: (n) => call('receipts:recent', n),
 
   // печать
