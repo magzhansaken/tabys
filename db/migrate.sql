@@ -249,5 +249,8 @@
 \echo '--- 091 помощники для данных проверки ---'
 \i db/migrations/091_seed_helpers.sql
 
+\echo '--- 092 подсчёт перед очисткой ---'
+\i db/migrations/092_wipe_preview.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';
