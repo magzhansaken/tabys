@@ -1,166 +1,202 @@
 /*
- * ЧЕК: строки, количество, отложенные.
+ * ЧЕК: строки, количество, отмена.
  *
- * Их правило взято целиком: «Заказ как чистый редьюсер событий. Один и
- * тот же код гоняет состояние на кассе и материализует чек на сервере
- * — расхождения между "что видел кассир" и "что легло в базу"
- * исключены by design».
+ * Их правило слияния взято и переложено на магазин:
  *
- * У меня то же, но проще: чек — список строк, и каждое действие над ним
- * — отдельная свёртка. Проверить можно каждую, не поднимая кассу.
+ *   «Тот же товар С ТЕМ ЖЕ набором модификаторов подряд — наращиваем
+ *    количество; острый лагман и обычный лагман — разные строки.»
  *
- * ПОЧЕМУ СТРОКИ, А НЕ СОБЫТИЯ. У них событиями, потому что заказ живёт
- * часами и переходит между официантами. В магазине чек живёт минуту и
- * не переходит никуда — событий было бы больше, чем пользы.
+ * В магазине модификаторов нет, но разное есть:
+ *   ВЕСОВОЙ товар не сливается: 0.45 кг сыра и 0.6 кг — это два
+ *     взвешивания, и кассир должен видеть оба;
+ *   товар с ИЗМЕНЁННОЙ ЦЕНОЙ не сливается с обычным: иначе скидка
+ *     расползётся на весь товар;
+ *   товар со СКИДКОЙ НА ПОЗИЦИЮ — тоже отдельно.
+ *
+ * ЧТО НЕ ДЕЛАЕМ. Числа держим целыми (тиыны), а не дробными: 0.1 + 0.2
+ * в дробных даёт 0.30000000000000004, и на сотне чеков итог разъедется
+ * с копейками. В тенге дробей нет, но вес дробный — и цена × вес легко
+ * даёт хвост.
  */
 
-/** Предел количества в одной строке. Больше — опечатка. */
-const MAX_QTY = 1000;
-
-/** Пересчитать строку: сумма минус её скидка. */
+/** Итог строки: цена × количество минус скидка. Всегда целое. */
 function lineSum(l) {
-  return Math.round(l.price * l.qty) - (l.discount || 0);
+  const raw = Number(l.price) * Number(l.qty);
+  return Math.round(raw) - Math.round(Number(l.discount || 0));
 }
 
 /** Итог чека. */
-function cartTotal(cart, cartDiscount = 0) {
-  const sum = cart.reduce((a, l) => a + lineSum(l), 0);
-  return Math.max(0, sum - (cartDiscount || 0));
+function cartTotal(cart) {
+  return (cart || []).reduce((a, l) => a + lineSum(l), 0);
+}
+
+/** Сколько всего штук: для шапки «в чеке 7». */
+function cartCount(cart) {
+  return (cart || []).reduce((a, l) => a + (Number(l.qty) % 1 ? 1 : Number(l.qty)), 0);
+}
+
+/**
+ * МОЖНО ЛИ СЛИТЬ со строкой.
+ *
+ * Сливаем только точно такое же: тот же товар, обычная цена, без
+ * скидки, не весовой, не маркированный.
+ *
+ * МАРКИРОВАННЫЙ НЕ СЛИВАЕМ НАРОЧНО: у каждой пачки своя марка, и
+ * держать их в одной строке значит путать, какая к чему.
+ */
+function canMerge(line, g) {
+  if (!line || line.productId !== g.id) return false;
+  if (line.qty % 1) return false;            // весовой
+  if (line.priceChanged || line.discount) return false;
+  if (line.marked || g.marked) return false;
+  return true;
 }
 
 /**
  * ДОБАВИТЬ ТОВАР.
  *
- * СЛИЯНИЕ СТРОК — их правило, но с моей поправкой.
- *
- * У них сливается только ПОСЛЕДНЯЯ строка: «тот же товар с тем же
- * набором модификаторов ПОДРЯД». В магазине покупатель выкладывает
- * товар вперемешку — три пачки молока могут пройти через сканер с
- * хлебом между ними.
- *
- * Поэтому ищем СРЕДИ ВСЕХ строк, а не только в последней. Иначе в чеке
- * будет «Молоко ×1» три раза, и покупатель решит, что его обсчитали.
- *
- * НЕ СЛИВАЕМ:
- *   весовой товар — 0,45 кг и 1,2 кг это разные взвешивания;
- *   строку со своей скидкой — она уже посчитана;
- *   строку с изменённой ценой — их правило про «закрытую строку».
+ * Сливаем с ПОСЛЕДНЕЙ строкой, а не с любой в чеке — их правило.
+ * Иначе кассир пробил хлеб, потом молоко, потом снова хлеб — и второй
+ * хлеб прыгнул наверх, к первому. Кассир смотрит на конец чека и не
+ * находит того, что сейчас пробил.
  */
-function addGood(cart, good, qty = 1) {
+function addToCart(cart, g, qty = 1, newId) {
   const n = Number(qty) || 1;
-  const дробное = n % 1 !== 0;
+  const last = cart.length ? cart[cart.length - 1] : null;
 
-  const same = дробное ? null : cart.find((l) =>
-    l.productId === good.id
-    && !(l.qty % 1)            // не весовая
-    && !l.discount             // без своей скидки
-    && !l.priceChanged);       // цену не меняли
-
-  if (same) {
-    same.qty += n;
-    return { cart, line: same, merged: true };
+  if (canMerge(last, g) && n % 1 === 0) {
+    last.qty += n;
+    return { line: last, merged: true };
   }
 
   const line = {
-    productId: good.id,
-    name: good.name,
-    price: Number(good.price) || 0,
+    id: newId(),
+    productId: g.id,
+    name: g.name,
+    price: Number(g.price) || 0,
     qty: n,
-    unit: good.unit || 'шт',
-    barcodes: good.barcodes || [],
-    marked: !!good.marked,
-    codes: [],            // марки, собранные сканером
+    unit: g.unit || 'шт',
+    barcodes: g.barcodes || [],
+    marked: !!g.marked,
+    codes: [],            // марки соберутся на этапе 14
     discount: 0,
     priceChanged: false,
   };
   cart.push(line);
-  return { cart, line, merged: false };
+  return { line, merged: false };
+}
+
+/**
+ * ПРЕДЕЛ КОЛИЧЕСТВА.
+ *
+ * Опечатка в одну лишнюю цифру давала чек на миллион: кассир набрал 99
+ * вместо 9, промахнулся мимо кнопки — и покупатель видит сумму с
+ * шестью нулями, а отменять её через старшего, при очереди.
+ *
+ * Тысяча за раз — верхняя граница здравого смысла для магазина.
+ */
+const QTY_MAX = 1000;
+
+function qtyAllowed(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return { ok: false, said: 'Количество должно быть больше нуля' };
+  if (v > QTY_MAX) {
+    return { ok: false, said: `${v} — похоже на опечатку. Больше ${QTY_MAX} за раз не бывает` };
+  }
+  return { ok: true };
 }
 
 /**
  * ПОСТАВИТЬ КОЛИЧЕСТВО.
  *
- * Возвращает, что надо сделать: сразу поставить, спросить разрешение
- * или отказать. Само не решает — решает экран, у которого есть права.
+ * Уменьшение требует разрешения — это след для владельца: кассир мог
+ * пробить товар, а потом убрать его из чека, положив себе.
+ *
+ * @param allow  свёртка разрешения из этапа 9
  */
-function planQty(line, n) {
-  const q = Number(n);
+async function setQty(cart, line, n, { allow, trimMarks }) {
+  const стало = Number(n);
+  const было = Number(line.qty);
 
-  if (!Number.isFinite(q) || q < 0) {
-    return { act: 'deny', said: 'Не понял количество' };
+  /* НОЛЬ ЗНАЧИТ «УБРАТЬ», А НЕ ОШИБКА.
+   *
+   * Найдено проверкой: убрать строку было НЕЛЬЗЯ ВОВСЕ — проверка
+   * «больше нуля» била раньше. Покупатель передумал брать хлеб, а
+   * кассир не может его вынуть: пришлось бы отменять весь чек и
+   * пробивать заново, при очереди.
+   *
+   * Проверяем предел только для НАСТОЯЩЕГО количества. */
+  if (стало > 0) {
+    const проверка = qtyAllowed(стало);
+    if (!проверка.ok) return { ok: false, said: проверка.said };
+  } else if (!Number.isFinite(стало) || стало < 0) {
+    return { ok: false, said: 'Количество не может быть отрицательным' };
   }
 
-  /* ПРЕДЕЛ. Опечатка в лишнюю цифру давала чек на миллион: кассир
-     набрал 99 вместо 9, промахнулся мимо кнопки — и покупатель видит
-     сумму с шестью нулями, а отменять её через старшего при очереди. */
-  if (q > MAX_QTY) {
-    return { act: 'deny', said: `${q} — похоже на опечатку. Больше ${MAX_QTY} за раз не бывает` };
+  if (стало < было) {
+    const r = await allow(стало <= 0 ? 'remove_item' : 'reduce_qty');
+    if (!r.ok) return r;
+
+    if (стало <= 0) {
+      cart.splice(cart.indexOf(line), 1);
+      return { ok: true, removed: true, approval: r };
+    }
+
+    line.qty = стало;
+    if (trimMarks) trimMarks(line);      // марки снимутся вместе с товаром
+    return { ok: true, approval: r };
   }
 
-  if (q === 0) return { act: 'ask', action: 'remove_item', qty: 0 };
-  if (q < line.qty) return { act: 'ask', action: 'reduce_qty', qty: q };
-  return { act: 'set', qty: q };
+  line.qty = стало;
+  return { ok: true };
 }
 
 /** Убрать строку целиком. */
-function removeLine(cart, line) {
-  const i = cart.indexOf(line);
-  if (i >= 0) cart.splice(i, 1);
-  return cart;
+async function removeLine(cart, line, { allow, trimMarks }) {
+  return setQty(cart, line, 0, { allow, trimMarks });
 }
 
 /*
  * ОТЛОЖЕННЫЕ ЧЕКИ.
  *
- * Покупатель забыл кошелёк в машине, или ему звонят и он выходит.
- * Очередь стоит, а чек набран — десять позиций.
- *
- * Откладываем: чек уходит в сторону, касса чистая, следующий проходит.
- * Вернулся — достали и продолжили.
+ * Покупатель забыл кошелёк, ушёл за деньгами, а за ним очередь.
+ * Откладываем его чек и берём следующего.
  *
  * ЛЕЖАТ НА ДИСКЕ, а не в памяти: касса может перезапуститься, пока
- * покупатель ходит за деньгами.
+ * человек ходит, и товар в чеке — это его выбор, а не наш.
  */
-function parkCart(parked, cart, cartDiscount, { newId, now = new Date() }) {
+async function parkCart(store, cart, { newId, who }) {
   if (!cart.length) return { ok: false, said: 'Чек пуст — откладывать нечего' };
 
-  const entry = {
+  const st = await store.getState();
+  const parked = [...(st.parked || [])];
+
+  parked.push({
     id: newId(),
-    at: now.toISOString(),
-    // Время короткое: кассир ищет «тот, что в 14:20», а не по ключу.
-    label: now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-    items: cart.length,
-    total: cartTotal(cart, cartDiscount),
-    cart: JSON.parse(JSON.stringify(cart)),   // копия: дальше чек чистят
-    cartDiscount: cartDiscount || 0,
-  };
-  parked.push(entry);
-  return { ok: true, entry, parked };
+    at: new Date().toISOString(),
+    by: who || null,
+    total: cartTotal(cart),
+    lines: JSON.parse(JSON.stringify(cart)),   // копия: чек больше не наш
+  });
+
+  await store.saveState({ parked });
+  return { ok: true, count: parked.length };
 }
 
-/** Достать отложенный. */
-function unparkCart(parked, id) {
-  const i = parked.findIndex((p) => p.id === id);
-  if (i < 0) return { ok: false, said: 'Этот чек уже забрали' };
-  const [entry] = parked.splice(i, 1);
-  return { ok: true, cart: entry.cart, cartDiscount: entry.cartDiscount, parked };
-}
+/** Вернуть отложенный чек. Он уходит из списка: чек один, не копия. */
+async function unparkCart(store, id) {
+  const st = await store.getState();
+  const parked = st.parked || [];
+  const found = parked.find((p) => p.id === id);
+  if (!found) return { ok: false, said: 'Этот чек уже забрали' };
 
-/**
- * СТАРЫЕ ОТЛОЖЕННЫЕ.
- *
- * Покупатель ушёл и не вернулся — чек висит третий день. Товар при
- * этом числится непроданным, а кассир видит чужой список и не решается
- * его тронуть.
- *
- * Говорим про такие, но НЕ УДАЛЯЕМ сами: вдруг это заказ, который
- * ждут.
- */
-function staleParked(parked, hours = 12, now = Date.now()) {
-  return parked.filter((p) => (now - new Date(p.at).getTime()) / 3600000 > hours);
+  await store.saveState({ parked: parked.filter((p) => p.id !== id) });
+  return { ok: true, lines: found.lines };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { MAX_QTY, lineSum, cartTotal, addGood, planQty, removeLine,
-    parkCart, unparkCart, staleParked };
+  module.exports = {
+    lineSum, cartTotal, cartCount, canMerge, addToCart,
+    QTY_MAX, qtyAllowed, setQty, removeLine, parkCart, unparkCart,
+  };
 }
