@@ -1944,6 +1944,57 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ЗА ТАРИФ НЕ БЕРЁМ ДВАЖДЫ ──────────────────────────────────
+  //
+  // Замечание владельца платформы: «оплатил тариф, добавил кассу — не
+  // берёт ли программа за тариф второй раз?»
+  //
+  // Не берёт, и это проверяется здесь навсегда. Доплата считается
+  // ТОЛЬКО за устройство и только за оставшиеся дни.
+  //
+  // Но цифра пугала: касса стоит 3 000, а доплата 4 400 — потому что
+  // оплачено 44 дня вперёд, полтора месяца. Теперь название объясняет:
+  // «Касса 2 · 44 дн. по 3 000 ₸/мес».
+  {
+    const phone = `+7701${String(Date.now()).slice(-7)}`;
+    const made = await j('POST', '/platform/tenants', {
+      name: 'Не дважды', ownerName: 'Проверка', ownerPhone: phone,
+    }, SUPER);
+    if (made.d?.id && made.d?.password) {
+      const id = made.d.id;
+      const book = (await j('GET', '/platform/price-book', null, SUPER)).d;
+
+      // Платит за тариф.
+      const p1 = await j('POST', '/platform/payments',
+        { accountId: id, amount: book.base, months: 1, method: 'kaspi' }, SUPER);
+      if (p1.d?.id) await j('POST', `/platform/payments/${p1.d.id}/approve`, {}, SUPER);
+
+      // Добавляем кассу.
+      const add = await j('POST', '/platform/device/add',
+        { accountId: id, kind: 'pos' }, SUPER);
+
+      const login = await j('POST', '/auth/login', { phone, password: made.d.password });
+      const sub = (await j('GET', '/billing/subscription', null, login.d?.access)).d;
+      const charge = (sub?.charges ?? [])[0];
+
+      // Месячный счёт: тариф ОДИН раз плюс касса.
+      ok(sub?.monthly === book.base + book.extraPos,
+         `★ Тариф в счёте ОДИН раз: ${book.base} + ${book.extraPos} = ${sub?.monthly}`);
+
+      // Доплата считается ТОЛЬКО от цены кассы, а не от всего счёта.
+      const days = add.d?.daysLeft ?? 0;
+      const rightAmount = Math.round(book.extraPos * days / 30);
+      ok(charge?.amount === rightAmount,
+         `★ Доплата только за кассу: ${charge?.amount} = ${book.extraPos} × ${days} ÷ 30`);
+      ok(charge && charge.amount < book.base + book.extraPos,
+         '★ И она меньше полного счёта — тариф в неё не входит');
+
+      // Название объясняет цифру: иначе «4 400 при цене 3 000» пугает.
+      ok(/дн\. по/.test(charge?.title ?? ''),
+         `★ Название объясняет цифру: «${charge?.title}»`);
+    }
+  }
+
   // ── КОД ЖИВЁТ ДО ПРИВЯЗКИ, И У КАЖДОГО СВОЙ ───────────────────
   //
   // Как у донора: код рождается вместе с устройством и виден в списке,

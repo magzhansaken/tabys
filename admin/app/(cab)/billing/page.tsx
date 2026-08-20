@@ -112,6 +112,10 @@ export default function BillingPage() {
             <b>{money(sub.monthly + sub.charges.reduce((a: number, c: any) => a + c.amount, 0))}</b>
           </div>
           <div style={{ fontSize: 12, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>
+            Устройства подключены посреди оплаченного срока. Доплата —
+            только за них и только за оставшиеся дни: за тариф вы уже
+            заплатили, второй раз он не берётся.
+            <br />
             Переведите одной суммой — доплаты закроются вместе с месяцем.
           </div>
         </Card>
