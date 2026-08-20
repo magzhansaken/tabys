@@ -26,6 +26,53 @@ const K = window.kassa;
 // папки renderer) кнопка «Дисплей покупателя» уходит не туда.
 const APP_BASE = (document.currentScript && document.currentScript.src) || location.href;
 
+/* КАНАРЕЙКА: касса упала — сервер узнал.
+ *
+ * Их слово точное: птица в шахте падает первой, и все узнают о газе.
+ *
+ * Касса упала у клиента в Шымкенте. Кассир перезапустил и работает
+ * дальше — ему некогда звонить. Мы не узнаём НИКОГДА, а падение
+ * повторяется каждый день у десяти клиентов, и мы думаем, что всё
+ * хорошо.
+ *
+ * Два их правила:
+ *   ДЕДУП раз в минуту — одна и та же ошибка не должна залить сервер
+ *     тысячей писем за смену;
+ *   СБОИ ОТПРАВКИ ГЛОТАЕМ — отчёт о падении не имеет права уронить
+ *     кассу ещё раз, уже своей ошибкой.
+ */
+const crashSeen = new Map();
+function reportCrash(message, stack) {
+  try {
+    const msg = String(message || '').slice(0, 500);
+    if (!msg) return;
+    const now = Date.now();
+    if (now - (crashSeen.get(msg) || 0) < 60000) return;
+    crashSeen.set(msg, now);
+
+    // Шлём НЕ через api(): тот бросает при отказе и требует токен, а
+    // касса могла упасть как раз до привязки.
+    fetch(String(SET.apiUrl || '').replace(/\/$/, '') + '/pos/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: msg,
+        stack: String(stack || '').slice(0, 2000),
+        version: (SET && SET.version) || '',
+        accountId: S && S.accountId,
+        registerId: S && S.cashRegisterId,
+        at: new Date().toISOString(),
+      }),
+    }).catch(() => { /* сбои отправки глотаем — иначе уроним кассу дважды */ });
+  } catch { /* сам отчёт падать не имеет права */ }
+}
+
+window.addEventListener('error', (e) => reportCrash(e.message, e.error && e.error.stack));
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  reportCrash(r && r.message ? r.message : String(r), r && r.stack);
+});
+
 const $ = (id) => document.getElementById(id);
 const show = (id) => {
   document.querySelectorAll('.screen').forEach((s) => s.classList.add('hidden'));
@@ -1575,7 +1622,14 @@ async function finishSale(way, total) {
     receiptPhone = '';
   }
   closeModal();
+  const paidInfo = {
+    number: receipt.number,
+    total: receipt.total,
+    change: receipt.change || 0,
+    items: receipt.items ? receipt.items.length : 0,
+  };
   cart = []; cartDiscount = 0; selLine = null; drawCart(); updatePending();
+  showPaid(paidInfo);
   if (wantPaper && !p.ok) {
     // НЕ НАПЕЧАТАЛСЯ — ПРЕДЛАГАЕМ ПОВТОРИТЬ. Их правило: не вышло
     // одним путём — пробуем другим, «работает на любом принтере».
@@ -2026,6 +2080,47 @@ function clockOut() {
     pad.appendChild(b);
   }
   $('coCancel').onclick = closeModal;
+}
+
+/* ЭКРАН ПОСЛЕ ОПЛАТЫ — часть 20 разбора их кассы. Их довод:
+ *
+ *   «Раньше экран сбрасывался мгновенно: чек ушёл в принтер, а кассир
+ *    оставался перед пустым заказом. Если гость спрашивал "сколько
+ *    сдачи?" или "а что вошло?", ответить было нечем — только искать в
+ *    чеках. Сдача — самое большое на экране: её называют вслух, и
+ *    ошибиться тут дороже всего.»
+ *
+ * Закрывается САМА через восемь секунд или по касанию: очередь не
+ * должна ждать, пока кассир дочитает. */
+let paidTimer = null;
+function showPaid(info) {
+  const box = document.getElementById('paidScreen');
+  if (!box) return;
+
+  box.innerHTML = `
+    <div class="paid-card">
+      <div class="paid-num">Чек №${info.number ?? ''} · ${info.items} поз.</div>
+      <div class="paid-sum">${money(info.total)}</div>
+      ${info.change > 0
+        // Сдача КРУПНЕЕ суммы: её называют вслух, и ошибка здесь стоит
+        // дороже всего — либо недостача в ящике, либо обиженный
+        // покупатель у кассы.
+        ? `<div class="paid-change-label">Сдача</div>
+           <div class="paid-change">${money(info.change)}</div>`
+        : '<div class="paid-change-label">Без сдачи</div>'}
+      <div class="paid-hint">Коснитесь, чтобы продолжить</div>
+    </div>`;
+  box.classList.remove('hidden');
+
+  clearTimeout(paidTimer);
+  const hide = () => {
+    clearTimeout(paidTimer);
+    box.classList.add('hidden');
+    box.onclick = null;
+    focusScanner();
+  };
+  box.onclick = hide;
+  paidTimer = setTimeout(hide, 8000);
 }
 
 async function reprintLast() {

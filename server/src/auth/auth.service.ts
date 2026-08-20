@@ -269,6 +269,32 @@ export class AuthService {
   }
 
   /** Проверка токена устройства (заголовок X-Device-Token). */
+  /**
+   * КАНАРЕЙКА: отчёт о падении кассы.
+   *
+   * Пишем в журнал платформы — владелец увидит, что касса падает, и у
+   * кого именно. Без привязки к магазину тоже пишем: падение ДО входа
+   * самое тяжёлое, кассир там вообще ничего не может.
+   *
+   * Ничего не проверяем и ничем не отвечаем: отчёт о падении не должен
+   * стать вторым падением. Не записалось — и ладно.
+   */
+  async posClientError(d: { message?: string; stack?: string; version?: string;
+                            accountId?: string; registerId?: string }) {
+    try {
+      await this.db.raw(
+        `INSERT INTO platform_audit (actor_id, action, account_id, details)
+         VALUES (NULL, 'pos_crash', $1, $2)`,
+        [d.accountId ?? null, JSON.stringify({
+          message: String(d.message ?? '').slice(0, 500),
+          stack: String(d.stack ?? '').slice(0, 2000),
+          version: d.version ?? null,
+          registerId: d.registerId ?? null,
+        })]);
+    } catch { /* журнал не должен мешать: отчёт и так последняя надежда */ }
+    return { ok: true };
+  }
+
   async resolveDevice(token: string) {
     const { rows } = await this.db.raw(`SELECT * FROM auth_find_device_by_token($1)`, [sha256(token)]);
     const d = rows[0];

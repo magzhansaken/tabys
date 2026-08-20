@@ -297,5 +297,8 @@
 \echo '--- 107 пометка «без проверки» в журнале ---'
 \i db/migrations/107_offline_note.sql
 
+\echo '--- 107 падение кассы в журнале ---'
+\i db/migrations/107_pos_crash.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

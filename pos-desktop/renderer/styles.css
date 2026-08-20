@@ -579,3 +579,30 @@ body.pad-on .modal-card { padding-left: 306px; }
 }
 .rej-row i { font-style: normal; color: #d08770; font-size: 13px; }
 .rej-row small { color: #777; font-size: 12px; white-space: nowrap; }
+
+/* ═══ ЭКРАН ПОСЛЕ ОПЛАТЫ ═══════════════════════════════════════════
+   Держится восемь секунд: покупатель спрашивает «сколько сдачи?», и
+   ответ должен быть перед глазами, а не в чеках смены.
+
+   Сдача КРУПНЕЕ суммы нарочно — её называют вслух, и ошибка здесь
+   стоит дороже всего: либо недостача в ящике, либо обиженный
+   покупатель у кассы. */
+#paidScreen {
+  position: fixed; inset: 0; z-index: 450;
+  background: rgba(12, 14, 12, 0.96);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#paidScreen.hidden { display: none; }
+.paid-card { text-align: center; }
+.paid-num { font-size: 15px; color: #999; }
+.paid-sum {
+  margin-top: 4px; font-size: 34px; color: #e8e8e8;
+  font-variant-numeric: tabular-nums;
+}
+.paid-change-label { margin-top: 22px; font-size: 17px; color: #9ec49e; }
+.paid-change {
+  font-size: 76px; font-weight: 700; color: #7ec97e; line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.paid-hint { margin-top: 26px; font-size: 13px; color: #666; }

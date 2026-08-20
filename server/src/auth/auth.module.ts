@@ -153,6 +153,22 @@ export class PosController {
   @Public() @UseGuards(DeviceGuard) @Get('ping')
   ping() { return { ok: true, at: new Date().toISOString() }; }
 
+  /**
+   * КАНАРЕЙКА: касса упала — мы узнали.
+   *
+   * Касса падает у клиента в Шымкенте, кассир перезапускает её и
+   * работает дальше — ему некогда звонить. Без этого мы не узнаём
+   * НИКОГДА, а падение повторяется каждый день у десяти клиентов.
+   *
+   * БЕЗ СТОРОЖА УСТРОЙСТВА нарочно: касса могла упасть ДО привязки, и
+   * токена у неё нет. Отчёт важнее строгости — иначе мы не узнаем как
+   * раз о самых тяжёлых случаях, когда касса не доходит до входа.
+   */
+  @Public() @Post('client-error')
+  clientError(@Body() d: any) {
+    return this.auth.posClientError(d ?? {});
+  }
+
   @Public() @UseGuards(DeviceGuard) @Get('bootstrap')
   bootstrap(@Dev() dev: any) { return this.auth.posBootstrap(dev.account_id, dev.device_id); }
 
