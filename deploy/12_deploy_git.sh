@@ -99,6 +99,16 @@ else
   exit 1
 fi
 
+# Проверки кассы: запас каталога и очередь чеков. Взяты у донора из их
+# resilience.test.ts и queue.test.ts — тринадцать случаев про то, как
+# касса ведёт себя без связи.
+if node pos-desktop/test/kassa.test.js; then
+  :
+else
+  echo "ОСТАНОВЛЕНО: касса не проходит проверки на прочность."
+  exit 1
+fi
+
 echo
 echo "── Копирую в $DST (настройки с паролями сохраняются)"
 for d in server admin db docs shared scripts pos pos-desktop; do

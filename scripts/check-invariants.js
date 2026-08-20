@@ -1027,6 +1027,11 @@ const RULES = [
   { file: 'pos-desktop/renderer/app.js', must: 'UUID, РАСТУЩИЙ ПО ВРЕМЕНИ',
     why: 'ULID ломал отправку: поля в базе типа uuid, и ни один чек не ушёл бы на сервер' },
 
+  { file: 'deploy/12_deploy_git.sh', must: 'pos-desktop/test/kassa.test.js',
+    why: 'Проверки кассы на прочность должны идти при каждой выкладке, а не когда вспомню' },
+  { file: 'pos-desktop/renderer/app.js', must: 'БЕДА НАЗЫВАЕТСЯ ВСЛУХ',
+    why: 'Пустой каталог без объяснения: кассир думает, что касса сломалась, и звонит' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
