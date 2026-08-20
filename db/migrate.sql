@@ -282,5 +282,8 @@
 \echo '--- 102 доплаты копятся и платятся разом ---'
 \i db/migrations/102_charges.sql
 
+\echo '--- 103 первое устройство вида входит в тариф ---'
+\i db/migrations/103_first_free.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

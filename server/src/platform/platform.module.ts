@@ -1552,7 +1552,13 @@ export class PlatformService {
         id: r.id, name: r.name, kind: r.kind,
         // Код только у непривязанной: у привязанной он уже сработал.
         code: r.code, paired: r.paired,
-        lastSeen: r.last_seen, blocked: r.blocked,
+        lastSeen: r.last_seen_at, blocked: r.blocked,
+        // ВХОДИТ В ТАРИФ ИЛИ ДОПЛАЧЕНО. Первое устройство каждого вида
+        // в тарифе, остальные строкой счёта — правило донора. Без
+        // этого владелец платформы не отличит кассу из основы от
+        // платной, а именно это он и спрашивает.
+        inPlan: r.in_plan,
+        monthly: money(Number(r.monthly ?? 0)),
       })),
       lines: lines.rows.map((r: any) => ({
         id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),

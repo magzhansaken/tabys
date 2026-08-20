@@ -354,12 +354,46 @@ function Devices({ data, isSuper }: { data: any; isSuper: boolean }) {
       {/* СПИСОК С КОДАМИ. Раньше стояли одни счётчики: владелец
           платформы видел «Кассы 2 из 2», а на вопрос «какой код у моей
           второй кассы» ответить не мог — лез в базу руками. */}
+      {/* СЧЁТЧИКИ ПО ВИДАМ, как у донора: «Кассы 3 — одна в тарифе,
+          2 платных · 6 000 ₸/мес». Одним взглядом видно, за что
+          платят, без пересчёта строк глазами. */}
+      {(data.devices ?? []).length > 0 && (() => {
+        const byKind: Record<string, any[]> = {};
+        for (const d of data.devices) (byKind[d.kind] ??= []).push(d);
+        const title: Record<string, string> = { pos: 'Кассы', store: 'Точки' };
+        return (
+          <div className="dev-kinds">
+            {Object.entries(byKind).map(([k, list]) => {
+              const paid = list.filter((x) => !x.inPlan);
+              const sum = paid.reduce((a, x) => a + x.monthly, 0);
+              return (
+                <div key={k} className="dev-kind">
+                  <span>{title[k] ?? k}</span>
+                  <b>{list.length}</b>
+                  <i>
+                    {paid.length === 0
+                      ? 'одна в тарифе'
+                      : `одна в тарифе, ${paid.length} платных · ${money(sum)}/мес`}
+                  </i>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {(data.devices ?? []).length > 0 && (
         <div className="dev-list">
           {data.devices.map((d: any) => (
             <div key={d.id} className={`dev-row${d.paired ? '' : ' waiting'}`}>
               <span className="dev-name">
                 {d.kind === 'store' ? '🏬' : '🖥'} {d.name}
+              </span>
+              {/* ВХОДИТ В ТАРИФ ИЛИ ДОПЛАТА — ради этого колонка и
+                  нужна. Владелец платформы смотрел список и не мог
+                  отличить кассу из основы от платной. */}
+              <span className={`dev-plan${d.inPlan ? '' : ' paid'}`}>
+                {d.inPlan ? 'входит в тариф' : `${money(d.monthly)}/мес`}
               </span>
               {d.kind === 'store' ? (
                 <span className="dev-state">точка</span>

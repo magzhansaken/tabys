@@ -1944,6 +1944,42 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ПЕРВОЕ УСТРОЙСТВО ВИДА ВХОДИТ В ТАРИФ ─────────────────────
+  //
+  // Правило донора, взятое вместе с их доводом: «владелец платформы
+  // смотрел список и не мог отличить кассу, которая идёт в основе, от
+  // второй — платной».
+  //
+  // У нас этого правила не было вовсе: тариф давал магазин, а каждая
+  // касса считалась отдельно.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Первое в тарифе', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+
+      const card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      const pos = (card?.devices ?? []).filter((x) => x.kind === 'pos');
+
+      ok(pos[0]?.inPlan === true && pos[0]?.monthly === 0,
+         `★ Первая касса входит в тариф: ${pos[0]?.monthly} ₸`);
+      ok(pos[1]?.inPlan === false && pos[1]?.monthly > 0,
+         `★ Вторая — платная: ${pos[1]?.monthly} ₸/мес`);
+      ok(pos[2]?.inPlan === false,
+         '★ И третья тоже платная');
+
+      // Цена в списке совпадает со строкой счёта: иначе одна цифра на
+      // экране, другая в счёте, и человек не поймёт, какой верить.
+      const line = (card?.lines ?? []).find((l) => l.active && l.kind === 'pos');
+      ok(!line || pos[1]?.monthly === line.price,
+         `★ Цена устройства совпадает со строкой счёта: ${pos[1]?.monthly} = ${line?.price}`);
+    }
+  }
+
   // ── ДОПЛАТЫ КОПЯТСЯ И ПЛАТЯТСЯ РАЗОМ ──────────────────────────
   //
   // Мы показывали «Доплата 1 400 ₸ войдёт в счёт» — и НИКУДА ЕЁ НЕ

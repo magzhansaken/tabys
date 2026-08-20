@@ -1228,6 +1228,21 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 
 /* ── Устройства в карточке клиента: связь с деньгами · срез 24 ── */
+/* Счётчики по видам: сколько всего, сколько в тарифе, сколько платных.
+   Как у донора — одним взглядом видно, за что платят. */
+.dev-kinds { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+.dev-kind {
+  flex: 1 1 160px; min-width: 0; padding: 8px 10px;
+  background: var(--surface-sunk); border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.dev-kind span { display: block; font-size: var(--text-12); color: var(--ink-dim); }
+.dev-kind b { font-size: var(--text-20); font-variant-numeric: tabular-nums; }
+.dev-kind i {
+  display: block; margin-top: 2px; font-style: normal;
+  font-size: var(--text-11); color: var(--ink-faint); line-height: 1.35;
+}
+
 /* Список устройств с кодами. Владелец платформы отвечает по нему на
    звонок «какой код у моей второй кассы» — раньше лез в базу. */
 .dev-list { display: flex; flex-direction: column; gap: 4px; margin: var(--space-3) 0; }
@@ -1243,6 +1258,12 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   font-family: var(--font-mono); font-size: var(--text-14);
   letter-spacing: 0.08em; font-weight: var(--weight-medium);
 }
+/* Входит в тариф или доплачено. Первое устройство каждого вида — в
+   основе, остальные строкой счёта: правило донора. */
+.dev-plan {
+  font-size: var(--text-12); color: var(--ink-faint); white-space: nowrap;
+}
+.dev-plan.paid { color: var(--ink-dim); font-weight: var(--weight-medium); }
 .dev-state { font-size: var(--text-12); color: var(--ink-dim); white-space: nowrap; }
 .dev-state.ok { color: var(--ok-strong); }
 .dev-state.bad { color: var(--danger-strong); }
