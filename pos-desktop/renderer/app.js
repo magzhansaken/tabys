@@ -475,6 +475,15 @@ function openSale() {
       drawI();
     }
   }
+  // КАТАЛОГ УСТАРЕЛ — говорим один раз при открытии экрана продажи.
+  // Два дня терпимо: цены меняют не каждый день. Три и больше — уже
+  // повод позвонить владельцу, пока покупатель не заметил первым.
+  const days = catalogAgeDays();
+  if (days != null && days >= 3 && !window.__oldCatSaid) {
+    window.__oldCatSaid = true;
+    toast(`Цены не обновлялись ${days} дн. — если владелец их менял, касса об этом не знает`, true);
+  }
+
   idleArm();
 
   const lock = $('lockBtn');
@@ -2539,12 +2548,52 @@ async function pullCatalog() {
     category: g.category_name ?? g.category ?? null,
     plu: g.plu_code ?? g.plu ?? null,
   }));
-  if (items.length) { catalog = items; await K.saveCatalog(items); }
+  if (items.length) {
+    catalog = items;
+    await K.saveCatalog(items);
+    // ВОЗРАСТ КАТАЛОГА — их находка (catalogAge). Касса без связи
+    // работает по сохранённому, и это верно: «несравнимо меньшая
+    // беда, чем закрытая касса».
+    //
+    // Но владелец поднял цены вчера, а касса не выходила в сеть три
+    // дня — она продаёт по СТАРЫМ ценам, и не знает об этом никто.
+    try { localStorage.setItem('tabys.catalogAt', new Date().toISOString()); }
+    catch { /* хранилище тесно */ }
+  }
+}
+
+/* Сколько дней каталогу. Пусто — ни разу не приходил с сервера. */
+function catalogAgeDays() {
+  try {
+    const at = localStorage.getItem('tabys.catalogAt');
+    if (!at) return null;
+    return Math.floor((Date.now() - new Date(at).getTime()) / 86400000);
+  } catch { return null; }
 }
 
 async function trySync() {
   const pending = (await K.outboxPending()).data || [];
-  if (!pending.length) { setDot(true); return; }
+  if (!pending.length) {
+    // СВЯЗЬ — ОТДЕЛЬНАЯ ВЕЛИЧИНА, а не «очередь пуста». Их урок:
+    // «одно застрявшее событие — и касса вечно показывала Офлайн при
+    // живой сети, а кассир искал несуществующую поломку».
+    //
+    // У меня была обратная беда: пустая очередь давала ЗЕЛЁНУЮ точку
+    // всегда, даже если сеть отвалилась час назад. Кассир видит
+    // зелёное, пробивает чеки, а они копятся — и узнаёт об этом
+    // только когда первый чек попробует уйти.
+    //
+    // Стучимся коротко, даже когда слать нечего.
+    try {
+      await api('/pos/ping');
+      setDot(true);
+      if (netWasDown) { netWasDown = false; toast('Связь вернулась'); }
+    } catch {
+      setDot(false);
+      if (!netWasDown) { netWasDown = true; toast('Связь пропала — чеки будут копиться', true); }
+    }
+    return;
+  }
   try {
     const events = pending.map((e) => ({
       id: e.id, entity: e.entity, entityId: e.entityId, op: e.op,
