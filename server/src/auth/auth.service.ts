@@ -391,6 +391,50 @@ export class AuthService {
   }
 
   /**
+   * КАССИР УХОДИТ — закрыть явку и назвать отработанное время.
+   *
+   * Код проверяем тот же, что при входе: уходит ЧЕЛОВЕК, а не
+   * устройство, и уйти он должен под своим именем. Иначе один кассир
+   * закрыл бы явку другому — случайно или нарочно.
+   */
+  async posClockOut(accountId: string, deviceId: string, pin: string) {
+    return this.db.withTenant(accountId, async (c) => {
+      const emp = (await c.query(
+        `SELECT e.id, e.first_name, e.last_name, e.pos_pin_hash FROM employee e
+          WHERE e.account_id=$1 AND e.pos_pin_hash IS NOT NULL AND e.deleted_at IS NULL`,
+        [accountId])).rows;
+
+      let found: any = null;
+      for (const e of emp) {
+        if (await bcrypt.compare(pin, e.pos_pin_hash)) { found = e; break; }
+      }
+      if (!found) throw new UnauthorizedException('Код не подошёл');
+
+      // Закрываем ТОЛЬКО свою явку на этом устройстве: чужую трогать
+      // нельзя, а на другой кассе человек мог остаться работать.
+      const done = (await c.query(
+        `UPDATE pos_session SET ended_at = now(), end_reason = 'clock_out'
+          WHERE device_id = $1 AND employee_id = $2 AND ended_at IS NULL
+          RETURNING started_at`,
+        [deviceId, found.id])).rows[0];
+
+      if (!done) {
+        // Явки не было — говорим прямо, а не молчим: человек думает,
+        // что отметился, а в учёте пусто.
+        return { ok: false, reason: 'noopen' as const,
+          note: 'Открытой явки на этой кассе нет — отметиться не получилось' };
+      }
+
+      const min = Math.max(0, Math.round(
+        (Date.now() - new Date(done.started_at).getTime()) / 60000));
+      const name = [found.first_name, found.last_name].filter(Boolean).join(' ') || 'Кассир';
+
+      return { ok: true as const, name, workedMin: min,
+        note: `${name}, вы отработали ${Math.floor(min / 60)} ч ${min % 60} мин. До свидания` };
+    });
+  }
+
+  /**
    * Подтверждение действия старшим (UMAG: скан штрихкода администратора).
    * Наше расширение: бейдж ИЛИ PIN, обе подписи в журнале, работает офлайн.
    */

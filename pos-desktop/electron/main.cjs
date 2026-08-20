@@ -213,6 +213,11 @@ const srv = async (path, opts = {}) => {
 };
 
 ipcMain.handle('pos:approve', safe(async (_e, pin) => srv('/pos/settings/approve', { method: 'POST', body: { pin } })));
+
+/* КАССИР УХОДИТ — закрыть явку. Идёт через оболочку, потому что нужен
+   токен устройства: уходит человек с ЭТОЙ кассы, а не вообще. */
+ipcMain.handle('pos:clock-out', safe(async (_e, pin) =>
+  srv('/pos/clock-out', { method: 'POST', body: { pin } })));
 ipcMain.handle('pos:log', safe(async (_e, d) => srv('/pos/settings/log', { method: 'POST', body: d })));
 // Чтение журнала — для показа при пересменке: сменщик видит, что делали
 // до него. Это снимает главное условие кражи — незаметность.

@@ -1859,7 +1859,12 @@ $('btnMenu').onclick = () => {
     // разбор перестаёт быть гаданием.
     ['Журнал печати', 'что писала касса — для разбора с владельцем',
       () => { closeModal(); K.openLog().catch(() => toast('Журнал не открылся', true)); }],
-    ['Выход', 'смена остаётся открытой', () => $('btnLogout').onclick(), 'bad'],
+    // «Я УХОЖУ» — отдельно от «Выхода». Выход запирает кассу на
+    // обед, уход закрывает ЯВКУ насовсем. Это разные дела: ушёл
+    // домой, а явка висит — владелец думает, что человек на работе.
+    ['Я ухожу домой', 'закрыть явку и узнать отработанное время',
+      () => clockOut()],
+    ['Выход', 'запереть кассу — смена и явка остаются', () => $('btnLogout').onclick(), 'bad'],
   ]);
 };
 
@@ -1931,6 +1936,60 @@ function openRejected() {
     // никуда не деваются.
     rejectedWrite([]); closeModal(); toast('Список очищен — чеки на кассе остались');
   };
+}
+
+/* КАССИР УХОДИТ ДОМОЙ. Спрашиваем код — уходит ЧЕЛОВЕК, а не
+ * устройство, и уйти он должен под своим именем. Иначе один закрыл бы
+ * явку другому: случайно или нарочно.
+ *
+ * Их правило: «касса прощается с человеком, назвав отработанное
+ * время». Это не только учёт, но и уважение — он видит, сколько
+ * отработал, и знает, что это записано. */
+function clockOut() {
+  closeModal();
+  openModal(`
+    <h2>Я ухожу домой</h2>
+    <p class="muted">Явка закроется, и в учёт запишется отработанное
+      время. Смена магазина при этом НЕ закрывается — её закрывают
+      отдельно, с пересчётом денег.</p>
+    <div class="dots" id="coDots"></div>
+    <div class="err" id="coErr"></div>
+    <div class="keypad" id="coPad"></div>
+    <div class="modal-actions"><button id="coCancel">Отмена</button></div>`);
+
+  let pin = '';
+  const draw = () => {
+    const d = $('coDots');
+    if (d) d.innerHTML = [0,1,2,3].map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
+  };
+  draw();
+  const pad = $('coPad'); pad.innerHTML = '';
+  for (const k of ['1','2','3','4','5','6','7','8','9','C','0','←']) {
+    const b = document.createElement('button');
+    b.textContent = k;
+    b.onclick = async () => {
+      if (k === 'C') pin = '';
+      else if (k === '←') pin = pin.slice(0, -1);
+      else if (pin.length < 4) pin += k;
+      draw();
+      if (pin.length === 4) {
+        const r = await K.clockOut(pin);
+        if (r.ok && r.data?.ok) {
+          closeModal();
+          toast(r.data.note);
+          // Кассу запираем: человек ушёл, за ней никого нет.
+          idleLock();
+        } else {
+          $('coErr').textContent = r.data?.note || r.data?.reason === 'noopen'
+            ? 'Открытой явки на этой кассе нет'
+            : 'Код не подошёл';
+          pin = ''; draw();
+        }
+      }
+    };
+    pad.appendChild(b);
+  }
+  $('coCancel').onclick = closeModal;
 }
 
 async function reprintLast() {

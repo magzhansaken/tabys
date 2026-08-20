@@ -168,6 +168,23 @@ export class PosController {
     return this.auth.posLogin(dev.account_id, dev.device_id, d.pin, d.offline ?? false);
   }
 
+  /**
+   * КАССИР УХОДИТ — закрываем явку. Их правило: «„Я ухожу" — тот же
+   * PIN, но явка закрывается и касса прощается с человеком, назвав
+   * отработанное время».
+   *
+   * Раньше явка открывалась при входе и не закрывалась вовсе.
+   * Владелец смотрит, кто на смене, — видит Айгуль, а она ушла домой
+   * три часа назад.
+   *
+   * Отработанное время возвращаем: это не только учёт, но и уважение —
+   * человек видит, сколько отработал, и знает, что это записано.
+   */
+  @Public() @UseGuards(DeviceGuard) @Post('clock-out')
+  clockOut(@Dev() dev: any, @Body() d: PinDto) {
+    return this.auth.posClockOut(dev.account_id, dev.device_id, d.pin);
+  }
+
   /** Подтверждение действия старшим: бейдж или PIN (расширенный UMAG). */
   @Public() @UseGuards(DeviceGuard) @Post('approve')
   approve(@Dev() dev: any, @Body() d: ApproveDto) {

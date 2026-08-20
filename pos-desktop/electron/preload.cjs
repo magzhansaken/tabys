@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('kassa', {
      говорим «меню → Журнал печати», и он присылает файл вместо того,
      чтобы описывать беду словами. */
   openLog: () => call('log:open'),
+  /* Кассир уходит: закрыть явку и узнать отработанное время. */
+  clockOut: (pin) => call('pos:clock-out', pin),
 
   // печать
   print: (data) => call('print:receipt', data),
