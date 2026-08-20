@@ -252,5 +252,8 @@
 \echo '--- 092 подсчёт перед очисткой ---'
 \i db/migrations/092_wipe_preview.sql
 
+\echo '--- 093 оплата сильнее ручного этапа ---'
+\i db/migrations/093_paid_beats_manual.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

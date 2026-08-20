@@ -1943,6 +1943,46 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── ОПЛАТА СИЛЬНЕЕ РУЧНОГО ЭТАПА ──────────────────────────────
+  //
+  // Найдено вами: подтвердили оплату, а карточка осталась в
+  // «Связались». Ручной этап сильнее выведенного — и это верно,
+  // человек знает больше системы. Но ОПЛАТА ЭТО ФАКТ: деньги пришли и
+  // подтверждены, спорить не о чем.
+  //
+  // Исключение — «отказ»: человек мог узнать об уходе клиента раньше,
+  // чем это стало видно системе.
+  {
+    let v = await j('GET', '/platform/clients', null, SUPER);
+    const fit = (v.d?.rows ?? []).filter((x) => !x.isDemo && x.partner);
+    const cl = fit[fit.length - 1];
+    if (cl) {
+      // Двигаем руками в «связались».
+      await j('POST', `/platform/funnel/${cl.id}`,
+        { stage: 'contacted', note: 'позвонил' }, SUPER);
+
+      // Платим и подтверждаем.
+      const r = await j('POST', '/platform/payments',
+        { accountId: cl.id, amount: 6900, months: 1, method: 'kaspi' }, SUPER);
+      if (r.d?.id) await j('POST', `/platform/payments/${r.d.id}/approve`, {}, SUPER);
+
+      v = await j('GET', '/platform/funnel', null, SUPER);
+      const where = (v.d?.stages ?? []).find((st) =>
+        (st.cards ?? []).some((c) => c.id === cl.id));
+      ok(where?.key === 'paid',
+         `★ После оплаты карточка в «Оплатил», а не там, куда двигали: «${where?.key}»`);
+
+      // А «отказ» держится: человек знает больше.
+      await j('POST', `/platform/funnel/${cl.id}`,
+        { stage: 'lost', note: 'сказали что уходят' }, SUPER);
+      v = await j('GET', '/platform/funnel', null, SUPER);
+      const lost = (v.d?.stages ?? []).find((st) =>
+        (st.cards ?? []).some((c) => c.id === cl.id));
+      ok(lost?.key === 'lost',
+         '★ «Отказ» оплата не затирает — человек мог узнать об уходе раньше');
+    }
+  }
+
   // ── ВОРОНКА: ручной этап сильнее, но его можно снять ─────────────
   //
   // Дописано после находки: карточка, двинутая в «Отказ» руками,
