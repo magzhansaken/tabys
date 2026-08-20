@@ -285,5 +285,11 @@
 \echo '--- 103 первое устройство вида входит в тариф ---'
 \i db/migrations/103_first_free.sql
 
+\echo '--- 104 код живёт до привязки ---'
+\i db/migrations/104_code_lives.sql
+
+\echo '--- 105 своя строка счёта у устройства ---'
+\i db/migrations/105_own_line.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

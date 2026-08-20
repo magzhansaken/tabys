@@ -1264,6 +1264,11 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
   font-size: var(--text-12); color: var(--ink-faint); white-space: nowrap;
 }
 .dev-plan.paid { color: var(--ink-dim); font-weight: var(--weight-medium); }
+/* Название строки счёта под ценой: за что именно платит. */
+.dev-plan i {
+  display: block; font-style: normal; margin-top: 1px;
+  font-size: var(--text-11); color: var(--ink-faint);
+}
 .dev-state { font-size: var(--text-12); color: var(--ink-dim); white-space: nowrap; }
 .dev-state.ok { color: var(--ok-strong); }
 .dev-state.bad { color: var(--danger-strong); }

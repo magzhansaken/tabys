@@ -323,6 +323,9 @@ export default function TenantCard({ me, accountId, onBack, onPay, onRequest }: 
  * на одной — это видно только здесь.
  */
 function Devices({ data, isSuper }: { data: any; isSuper: boolean }) {
+  // Сообщения нужны для копирования кода. Объявляем ЗДЕСЬ, до любых
+  // выходов ниже: память после выхода роняет страницу.
+  const toast = useToast();
   const paid = (data.lines ?? []).filter((l: any) => l.active && l.kind === 'pos')
     .reduce((a: number, l: any) => a + (l.qty ?? 1), 0) + 1;   // одна в тарифе
 
@@ -391,9 +394,16 @@ function Devices({ data, isSuper }: { data: any; isSuper: boolean }) {
               </span>
               {/* ВХОДИТ В ТАРИФ ИЛИ ДОПЛАТА — ради этого колонка и
                   нужна. Владелец платформы смотрел список и не мог
-                  отличить кассу из основы от платной. */}
+                  отличить кассу из основы от платной.
+                  Название строки рядом, как у донора: человек видит
+                  связь со счётом и не ищет её глазами. */}
               <span className={`dev-plan${d.inPlan ? '' : ' paid'}`}>
-                {d.inPlan ? 'входит в тариф' : `${money(d.monthly)}/мес`}
+                {d.inPlan ? 'входит в тариф' : (
+                  <>
+                    {money(d.monthly)}/мес
+                    {d.lineTitle && <i>строка «{d.lineTitle}»</i>}
+                  </>
+                )}
               </span>
               {d.kind === 'store' ? (
                 <span className="dev-state">точка</span>
@@ -409,10 +419,24 @@ function Devices({ data, isSuper }: { data: any; isSuper: boolean }) {
                       вечно: полчаса и заново по кнопке — как ключ от
                       двери. Слова «код не выдан» пугали, будто чего-то
                       не хватает, а это обычное состояние. */}
-                  {d.code
-                    ? <span className="dev-code">{d.code}</span>
-                    : <span className="dev-state">код берётся кнопкой «Код для кассы»</span>}
-                  <span className="dev-state">не подключено</span>
+                  {d.code ? (
+                    <>
+                      <span className="dev-code">{d.code}</span>
+                      {/* Копировать рядом с кодом: его диктуют по
+                          телефону или шлют сообщением, а выделять
+                          мышью в таблице неудобно. */}
+                      <button className="btn small ghost"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(d.code)
+                            .then(() => toast({ text: `Код ${d.name} скопирован` }))
+                            .catch(() => toast({
+                              text: 'Скопировать не вышло — выделите вручную', kind: 'err' }));
+                        }}>Скопировать</button>
+                    </>
+                  ) : (
+                    <span className="dev-state">код не выдан</span>
+                  )}
+                  <span className="dev-state">ждёт кода</span>
                 </>
               )}
             </div>

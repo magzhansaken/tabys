@@ -1944,6 +1944,41 @@ const shop = async (name, owner) => {
     }
   }
 
+  // ── КОД ЖИВЁТ ДО ПРИВЯЗКИ, И У КАЖДОГО СВОЙ ───────────────────
+  //
+  // Как у донора: код рождается вместе с устройством и виден в списке,
+  // пока его не ввели. Владелец платформы открывает карточку и диктует
+  // нужный, не нажимая ничего.
+  //
+  // У меня код брался кнопкой и жил полчаса — это звонок владельцу,
+  // поиск кассира, установка приложения. Не успел — звони заново.
+  {
+    const r = await j('POST', '/platform/tenants', {
+      name: 'Коды сразу', ownerName: 'Проверка',
+      ownerPhone: `+7701${String(Date.now()).slice(-7)}`,
+    }, SUPER);
+    if (r.d?.id) {
+      const id = r.d.id;
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+      await j('POST', '/platform/device/add', { accountId: id, kind: 'pos' }, SUPER);
+
+      const card = (await j('GET', `/platform/clients/${id}/card`, null, SUPER)).d;
+      const pos = (card?.devices ?? []).filter((x) => x.kind === 'pos' && !x.paired);
+
+      ok(pos.every((x) => !!x.code),
+         `★ Код виден сразу у каждой кассы, без кнопки: ${pos.length} шт.`);
+
+      const codes = new Set(pos.map((x) => x.code));
+      ok(codes.size === pos.length,
+         '★ У каждой кассы СВОЙ код — не один на всех');
+
+      // Название строки счёта — своё, а не любое того же вида.
+      const paid = (card?.devices ?? []).filter((x) => !x.inPlan && x.kind === 'pos');
+      ok(paid.every((x) => x.lineTitle === x.name),
+         `★ Устройство показывает СВОЮ строку счёта: ${paid.map((x) => x.lineTitle).join(', ')}`);
+    }
+  }
+
   // ── ПЕРВОЕ УСТРОЙСТВО ВИДА ВХОДИТ В ТАРИФ ─────────────────────
   //
   // Правило донора, взятое вместе с их доводом: «владелец платформы

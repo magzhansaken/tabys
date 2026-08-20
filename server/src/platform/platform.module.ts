@@ -1559,6 +1559,10 @@ export class PlatformService {
         // платной, а именно это он и спрашивает.
         inPlan: r.in_plan,
         monthly: money(Number(r.monthly ?? 0)),
+        // ЗА ЧТО ИМЕННО ПЛАТИТ. У донора в колонке «в счёте» стоит не
+        // просто цена, а название строки: человек видит связь
+        // устройства со счётом и не ищет её глазами.
+        lineTitle: r.line_title,
       })),
       lines: lines.rows.map((r: any) => ({
         id: r.id, kind: r.kind, title: r.title, qty: Number(r.qty),
