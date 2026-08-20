@@ -2042,8 +2042,28 @@ $('btnShift').onclick = async () => {
         : `<span class="bad">Не хватает ${money(-d)}</span>`;
     };
     $('ok').onclick = async () => {
-      const fact = Number($('fact').value || 0);
       const must = S.cashInDrawer || 0;
+
+      // ПУСТОЕ ПОЛЕ ДАВАЛО НОЛЬ — а это недостача на всю кассу.
+      //
+      // Кассир закрывает смену не глядя, поле пустое, и в отчёт
+      // уходит «недостача 45 000». Назавтра его спросят о пропавших
+      // деньгах, которых он не брал.
+      //
+      // У донора пустое значит «согласен с расчётом». Верно, но мягко:
+      // тогда пересчёт можно и не делать вовсе, а ради него всё и
+      // затевается. Спрашиваем прямо.
+      if ($('fact').value.trim() === '') {
+        const sure = confirm(
+          `Вы не вписали, сколько насчитали.\n\n`
+          + `По расчёту в ящике ${money(must)}.\n\n`
+          + `«Да» — пересчитал, всё сходится: в отчёт уйдёт ${money(must)}.\n`
+          + `«Отмена» — вернуться и вписать: потом доказать будет нечем.`);
+        if (!sure) return;
+        $('fact').value = String(must);
+      }
+
+      const fact = Number($('fact').value || 0);
       const close = { id: uuid(), shiftId: S.shift.id, closedAt: new Date().toISOString(), factCash: fact };
       await K.outboxAdd({ id: close.id, entity: 'shift_close', entityId: S.shift.id, op: 'update', payload: close });
 
