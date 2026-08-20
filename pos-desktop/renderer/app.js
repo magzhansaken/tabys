@@ -106,6 +106,8 @@ async function api(path, { method = 'GET', body, device = true } = {}) {
 
   $('apiUrl').value = SET.apiUrl;
   $('printWidth').value = String(SET.printWidth || 48);
+  // Копий чека: одна по умолчанию — так работает большинство касс.
+  $('printCopies').value = String(SET.printCopies || 1);
   loadPrinters();
 
   if (!S.deviceToken) { show('scr-setup'); return; }
@@ -159,6 +161,7 @@ $('btnPair').onclick = async () => {
     apiUrl: $('apiUrl').value.trim(),
     printer: $('printerSel').value,
     printWidth: Number($('printWidth').value),
+    printCopies: Number($('printCopies').value),
   })).data;
   const code = $('pairCode').value.trim();
   if (!code) { err.textContent = 'Введите код привязки из кабинета'; return; }
@@ -177,7 +180,7 @@ $('btnPair').onclick = async () => {
 };
 
 $('btnTestPrint').onclick = async () => {
-  await K.saveSettings({ printer: $('printerSel').value, printWidth: Number($('printWidth').value) });
+  await K.saveSettings({ printer: $('printerSel').value, printWidth: Number($('printWidth').value), printCopies: Number($('printCopies').value) });
   // Печатаем диагностический лист, а не просто строку: по нему сразу видно
   // ширину ленты, кириллицу, выделение и вид денег. Простая «пробная
   // строка» печатается даже при неверных настройках и ничего не проверяет.

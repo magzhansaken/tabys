@@ -203,7 +203,15 @@ const money = (n) => {
 function printReceipt(data) {
   return enqueue(async () => {
     const s = store().readSettings();
-    const bytes = buildReceipt(data, s.printWidth || 48);
+    // КОПИИ ОДНИМ ЗАДАНИЕМ, а не несколькими. Отдельные задания
+    // встают в очередь порознь и могут перемешаться с чужим чеком —
+    // лента порвётся посреди. Отрез после каждой копии уже внутри
+    // сборки, поэтому кассир снимает готовые листы.
+    const one = buildReceipt(data, s.printWidth || 48);
+    const copies = Math.min(3, Math.max(1, Number(s.printCopies) || 1));
+    const bytes = copies === 1
+      ? one
+      : Buffer.concat(Array.from({ length: copies }, () => one));
     await sendRaw(bytes, s.printer);
     if (s.openDrawerOnCash && data.hasCash) await sendRaw([ESC, 0x70, 0x00, 0x19, 0xfa], s.printer);
     return true;

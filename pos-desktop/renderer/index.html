@@ -51,6 +51,16 @@
         <option value="48">80 мм (48 знаков)</option>
         <option value="32">58 мм (32 знака)</option>
       </select>
+      <label>Копий чека</label>
+      <!-- ЧИСЛО КОПИЙ. Их довод: «одна гостю, вторая заведению — на
+           второй кассир ставит подпись и кладёт в ящик».
+           В магазине то же: вторая идёт с товаром при доставке, а при
+           продаже в долг покупатель на ней расписывается. -->
+      <select id="printCopies">
+        <option value="1">Одна</option>
+        <option value="2">Две — вторая остаётся в кассе</option>
+        <option value="3">Три</option>
+      </select>
       <button id="btnTestPrint">Пробная печать</button>
     </details>
   </div>
