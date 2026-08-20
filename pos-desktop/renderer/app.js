@@ -669,6 +669,18 @@ function drawCart() {
         const ok = await allowAction(code, l.qty <= 1 ? 'Удаление позиции' : 'Уменьшение количества');
         if (!ok) return;
         l.qty -= 1;
+
+        // ЛИШНЯЯ МАРКА ОСТАВАЛАСЬ В ЧЕКЕ. Было 3 бутылки и 3 считанные
+        // марки; убрали одну — осталось 2 бутылки и ТРИ марки. Лишняя
+        // ушла бы в налоговую как проданная, а товар стоит на полке.
+        //
+        // Снимаем последнюю считанную: она считана позже всех, значит
+        // её проще пересканировать, если кассир передумает.
+        if (l.marked && (l.codes || []).length > Math.max(0, Math.ceil(l.qty))) {
+          const back = l.codes.pop();
+          toast(`Марка снята с чека — отсканируйте заново, если нужна (${back.slice(-6)})`);
+        }
+
         if (l.qty <= 0) cart.splice(b.dataset.m, 1);
         voids++;
         logAction(code, { productName: l.name, amount: l.price, approvedBy: ok.approvedBy });
@@ -1243,7 +1255,18 @@ async function finishSale(way, total) {
 
   // Марки: последняя проверка перед сохранением. Оплата и так не откроется
   // без них, но чек — то, что уйдёт в ОФД: здесь дешевле ошибки нет.
-  if (marksMissing()) { $('payErr').textContent = 'Не все марки отсканированы'; return; }
+  // ОТКАЗ ОБЪЯСНЯЕТ СЕБЯ — правило донора: у них не «нельзя», а «Блюдо
+  // уже готовят, снять может только старший».
+  //
+  // «Не все марки отсканированы» не говорит НИ СКОЛЬКО осталось, НИ У
+  // КАКОГО товара. Кассир при очереди ищет глазами по всему чеку.
+  const needLeft = marksMissing();
+  if (needLeft) {
+    const who = cart.filter((l) => needMarks(l) > 0)
+      .map((l) => `${l.name} (${needMarks(l)})`).join(', ');
+    $('payErr').textContent = `Осталось отсканировать марок: ${needLeft} — ${who}`;
+    return;
+  }
 
   // В долг: деньги сейчас не приходят, приходит обязательство.
   let debtorId = null, debtorName = '';
