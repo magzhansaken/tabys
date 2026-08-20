@@ -967,6 +967,9 @@ const RULES = [
   { file: 'pos-desktop/renderer/app.js', must: 'netWasDown',
     why: 'Пропажа связи не говорилась вовсе: кассир бил чеки час и узнавал при закрытии смены' },
 
+  { file: 'pos-desktop/renderer/app.js', must: 'СТРАЖ ЗАБЫТОЙ СМЕНЫ',
+    why: 'Смена со вчера: сегодняшние чеки уходят во вчерашний день, и выручка двух дней сливается' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

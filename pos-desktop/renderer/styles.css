@@ -537,3 +537,12 @@ body.pad-on .modal-card { padding-left: 306px; }
 .kb-space { flex: 4 1 0; font-size: 15px; }
 .kb-wide { flex: 2 1 0; font-size: 15px; }
 .kb-done { background: #2d4a2d; }
+
+/* Страж забытой смены: полоса поверх всего, мимо неё не пройти.
+   Не запрещает работать — очередь важнее отчёта, — но заметна. */
+.stale-shift {
+  display: block; width: 100%; border: 0; cursor: pointer;
+  background: #7a4a10; color: #ffe7c2;
+  padding: 10px 14px; font-size: 15px; text-align: left;
+}
+.stale-shift.hidden { display: none; }

@@ -108,7 +108,11 @@
     <!-- ЛЕВО: каталог, а во время оплаты — способы оплаты и номиналы -->
     <div class="col col-left">
       <div id="catalogPane" class="pane">
-        <div class="searchrow">
+        <!-- СТРАЖ ЗАБЫТОЙ СМЕНЫ. Кассир ушёл домой не закрыв смену; утром
+       другой бьёт чеки, и они ложатся во ВЧЕРАШНИЙ день. Владелец
+       смотрит выручку и видит чужие деньги. -->
+  <button class="stale-shift hidden" id="staleShift"></button>
+  <div class="searchrow">
           <input id="search" placeholder="Поиск или штрихкод" autofocus>
           <!-- Вызов клавиатуры: кассир ищет товар по названию, а
                набрать его без клавиатуры нечем. -->
