@@ -1022,6 +1022,9 @@ const RULES = [
   { file: 'pos-desktop/renderer/app.js', must: 'ВОЗРАСТ КАТАЛОГА',
     why: 'Касса три дня продавала по старым ценам, и не знал об этом никто' },
 
+  { file: 'pos-desktop/renderer/app.js', must: 'UUID, РАСТУЩИЙ ПО ВРЕМЕНИ',
+    why: 'ULID ломал отправку: поля в базе типа uuid, и ни один чек не ушёл бы на сервер' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
