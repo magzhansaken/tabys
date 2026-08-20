@@ -1,183 +1,164 @@
 /*
  * ПРОВЕРКА МАРКИРОВКИ.
  *
- * Главное: марка снимается вместе с товаром ЛЮБЫМ путём. Эту беду я
- * находил дважды — на кнопке и на цифрах.
+ * Главное: ВСЕ пути уменьшения снимают марки. Дважды на этом обжёгся.
  */
-const { needMarks, marksMissing, trimMarks, trimAll, addMark, payBlock, markBar } = require('../renderer/marks.js');
+const { needMarks, marksMissing, trimMarks, parseMark, takeMark, marksReady } = require('../renderer/marks.js');
 const { addToCart, setQty, removeLine } = require('../renderer/cart.js');
 
 let passed = 0, failed = 0;
 const ok = (c, n) => { if (c) { passed++; console.log('✔ ' + n); } else { failed++; console.log('✘ ' + n); } };
 
-const водка = { id: 'g1', name: 'Водка «Алтай»', price: 3200, marked: true, barcodes: ['4870001234567'] };
-const сиг = { id: 'g2', name: 'Сигареты Winston', price: 1200, marked: true, barcodes: ['4870007654321'] };
-const хлеб = { id: 'g3', name: 'Хлеб', price: 250 };
-const всем = async () => ({ ok: true });   // разрешаем всё
-let ln = 0; const newId = () => `l${++ln}`;
+let счёт = 0;
+const newId = () => `l${++счёт}`;
+const да = async () => ({ ok: true, approvedName: 'Ерлан' });
+
+const водка = { id: 'g1', name: 'Водка «Алтай»', price: 2500, marked: true, barcodes: ['04870001234567'] };
+const сиги  = { id: 'g2', name: 'Сигареты Winston', price: 800, marked: true, barcodes: ['04870009999999'] };
+const хлеб  = { id: 'g3', name: 'Хлеб', price: 250 };
+
+const марка = (gtin, серия) => `01${gtin}21${серия}\u001d93dGVz`;
 
 console.log('═══ ЭТАП 14 · МАРКИРОВКА ═══\n');
 
 (async () => {
 
-// ── СЧЁТ МАРОК ─────────────────────────────────────────────────────
+// ── СКОЛЬКО НУЖНО ──────────────────────────────────────────────────
 {
   const cart = [];
   addToCart(cart, водка, 3, newId);
-  ok(needMarks(cart[0]) === 3, 'Три бутылки — нужно три марки');
-  cart[0].codes = ['M1'];
+  ok(needMarks(cart[0]) === 3, 'Три бутылки — три марки');
+  cart[0].codes = ['М1'];
   ok(needMarks(cart[0]) === 2, 'Одну считали — осталось две');
-  ok(needMarks({ marked: false, qty: 5 }) === 0, 'Немаркированный товар марок не просит');
-}
-
-// ── ТА САМАЯ БЕДА: КНОПКА «−» ──────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, водка, 3, newId);
-  cart[0].codes = ['M1', 'M2', 'M3'];
-
-  await setQty(cart, cart[0], 2, { allow: всем, trimMarks });
-
-  ok(cart[0].codes.length === 2,
-     '★ Убрали бутылку кнопкой — марка снялась: 2 товара, 2 марки');
-}
-
-// ── ТА ЖЕ БЕДА: ВВОД ЦИФРАМИ ───────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, водка, 3, newId);
-  cart[0].codes = ['M1', 'M2', 'M3'];
-
-  // Кассир набрал «1» на цифровой клавиатуре — ДРУГОЙ путь
-  await setQty(cart, cart[0], 1, { allow: всем, trimMarks });
-
-  ok(cart[0].codes.length === 1,
-     '★ Набрали «1» цифрами — марки тоже снялись: ТА ЖЕ ДВЕРЬ');
-}
-
-// ── И УДАЛЕНИЕ СТРОКИ ──────────────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, водка, 2, newId);
-  cart[0].codes = ['M1', 'M2'];
   addToCart(cart, хлеб, 1, newId);
-
-  await removeLine(cart, cart[0], { allow: всем, trimMarks });
-  ok(cart.length === 1 && cart[0].name === 'Хлеб',
-     '★ Строку убрали целиком — марки ушли с ней');
+  ok(needMarks(cart[1]) === 0, '★ Хлеб марок не требует');
+  ok(marksMissing(cart) === 2, 'По чеку не хватает двух');
 }
 
-// ── ПРОВЕРКА ПО ВСЕМУ ЧЕКУ ─────────────────────────────────────────
+// ── РАЗБОР МАРКИ ───────────────────────────────────────────────────
 {
-  const cart = [];
-  addToCart(cart, водка, 3, newId);
-  addToCart(cart, сиг, 2, newId);
-  cart[0].codes = ['M1', 'M2', 'M3'];
-  cart[1].codes = ['S1', 'S2'];
-
-  cart[0].qty = 1; cart[1].qty = 1;      // как будто правили мимо двери
-  const снято = trimAll(cart);
-
-  ok(снято === 3 && cart[0].codes.length === 1 && cart[1].codes.length === 1,
-     '★ Проверка по всему чеку ловит расхождение: снято 3 лишних');
+  const m = parseMark(марка('04870001234567', 'AbCd12'));
+  ok(m && m.gtin === '04870001234567', `★ GTIN вынут: ${m && m.gtin}`);
+  ok(parseMark('4870001') === null, 'Обычный штрихкод маркой не считаем');
+  ok(parseMark('') === null && parseMark(null) === null, 'Пусто — не марка');
+  ok(parseMark('01abcdefghijklmn21xx') === null, 'Буквы вместо GTIN — не марка');
 }
 
-// ── СБОР МАРОК ─────────────────────────────────────────────────────
-console.log('\n═══ СБОР МАРОК ═══\n');
+// ── ПРИЁМ МАРКИ ────────────────────────────────────────────────────
 {
   const cart = [];
   addToCart(cart, водка, 2, newId);
 
-  const r1 = addMark(cart, 'МАРКА-001');
+  const r1 = takeMark(cart, марка('04870001234567', 'A1'));
   ok(r1.ok && cart[0].codes.length === 1, 'Первая марка принята');
-  ok(/осталось отсканировать: 1/.test(r1.said),
-     `★ И сказано, сколько осталось: «${r1.said}»`);
+  ok(/осталось отсканировать: 1/.test(r1.said), `★ И сказано сколько: «${r1.said}»`);
 
-  const r2 = addMark(cart, 'МАРКА-002');
-  ok(r2.ok && /можно к оплате/.test(r2.said),
-     `★ Собрали все: «${r2.said}»`);
+  const r2 = takeMark(cart, марка('04870001234567', 'A2'));
+  ok(r2.ok && /Марки собраны/.test(r2.said),
+     `★ Собрали все — сказано: «${r2.said}»`);
 }
 
-// ── ТА ЖЕ МАРКА ДВАЖДЫ ─────────────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, водка, 3, newId);
-  addMark(cart, 'МАРКА-001');
-  const r = addMark(cart, 'МАРКА-001');
-
-  ok(!r.ok && /уже в чеке/.test(r.said),
-     '★ Та же марка дважды отбита: иначе две марки на одну бутылку');
-  ok(cart[0].codes.length === 1, 'И в чеке осталась одна');
-}
-
-// ── МАРКА БЕЗ ТОВАРА ───────────────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, хлеб, 1, newId);
-  const r = addMark(cart, 'МАРКА-001');
-  ok(!r.ok && /Сначала пробейте сам товар/.test(r.said),
-     '★ Марка есть, товара нет — сказано, что делать');
-}
-
-// ── ВСЕ МАРКИ УЖЕ СОБРАНЫ ──────────────────────────────────────────
+// ── ЧЕТЫРЕ ОТКАЗА ──────────────────────────────────────────────────
 {
   const cart = [];
   addToCart(cart, водка, 1, newId);
-  addMark(cart, 'M1');
-  const r = addMark(cart, 'M2');
-  ok(!r.ok && /проверьте количество/.test(r.said),
-     'Лишняя марка — подсказано проверить количество');
+
+  ok(!takeMark(cart, '4870001').ok, 'Не марка — отказ');
+  ok(/Data Matrix/.test(takeMark(cart, '4870001').said),
+     'И сказано, что сканировать');
+
+  takeMark(cart, марка('04870001234567', 'A1'));
+  const дубль = takeMark(cart, марка('04870001234567', 'A1'));
+  ok(!дубль.ok && /уже в чеке/.test(дубль.said),
+     '★ Та же марка дважды — отказ: кассир пикнул пачку два раза');
+
+  const все = takeMark(cart, марка('04870001234567', 'A2'));
+  ok(!все.ok && /все марки уже собраны/.test(все.said),
+     '★ Марок больше, чем товара — отказ с объяснением');
+
+  const чужая = takeMark(cart, марка('04870009999999', 'B1'));
+  ok(!чужая.ok && /нет в чеке/.test(чужая.said),
+     '★ Марка от товара не из чека — «сперва пробейте его»');
 }
 
-// ── МАРКА К СВОЕЙ СТРОКЕ ───────────────────────────────────────────
-{
-  const cart = [];
-  addToCart(cart, водка, 1, newId);
-  addToCart(cart, сиг, 1, newId);
-
-  /* Разбор кода: в марке после «01» идёт штрихкод товара, 13 знаков.
-     Пример настоящей марки: 01 4870007654321 21 XXXX */
-  const gtinOf = (c) => (c.startsWith('01') ? c.slice(2, 15) : null);
-  addMark(cart, '014870007654321' + '21XXXX', { gtinOf });
-
-  const кому = cart.find((l) => (l.codes || []).length);
-  ok(кому && кому.name === 'Сигареты Winston',
-     '★ Марка легла к СВОЕЙ строке по штрихкоду внутри кода');
-}
-
-// ── ОПЛАТА ЗАКРЫТА, И ОТКАЗ НАЗЫВАЕТ ТОВАР ─────────────────────────
-console.log('\n═══ ОПЛАТА ═══\n');
+// ── ГОТОВНОСТЬ К ОПЛАТЕ ────────────────────────────────────────────
 {
   const cart = [];
   addToCart(cart, водка, 3, newId);
-  addToCart(cart, сиг, 2, newId);
-  cart[0].codes = ['M1'];
+  addToCart(cart, сиги, 2, newId);
+  cart[0].codes = ['М1'];
 
-  const b = payBlock(cart);
-  ok(b !== null, 'К оплате не пускает: марок не хватает');
-  ok(/Водка «Алтай» \(2\)/.test(b) && /Winston \(2\)/.test(b),
-     `★ И НАЗВАН ТОВАР: «${b}»`);
-  ok(/Осталось отсканировать марок: 4/.test(b), 'И сколько всего');
+  const r = marksReady(cart);
+  ok(!r.ok && r.left === 4, `Не хватает четырёх марок`);
+  ok(/Водка «Алтай» \(2\)/.test(r.said) && /Winston \(2\)/.test(r.said),
+     `★ Отказ НАЗЫВАЕТ товары: «${r.said}»`);
 
-  cart[0].codes = ['M1', 'M2', 'M3'];
-  cart[1].codes = ['S1', 'S2'];
-  ok(payBlock(cart) === null, '★ Собрали все — оплата открыта');
+  cart[0].codes = ['М1', 'М2', 'М3'];
+  cart[1].codes = ['М4', 'М5'];
+  ok(marksReady(cart).ok, 'Все собраны — можно к оплате');
 }
-
-// ── ПОЛОСА НАД ЧЕКОМ ───────────────────────────────────────────────
 {
   const cart = [];
-  addToCart(cart, хлеб, 1, newId);
-  ok(markBar(cart) === null, 'Без маркированных полосы нет: лишнего не показываем');
+  addToCart(cart, хлеб, 5, newId);
+  ok(marksReady(cart).ok, 'Чек без маркированных — сразу готов');
+}
 
+// ── ГЛАВНОЕ: ВСЕ ПУТИ СНИМАЮТ МАРКИ ────────────────────────────────
+console.log('\n═══ ВСЕ ПУТИ УМЕНЬШЕНИЯ ═══\n');
+
+// Путь 1: кнопка «−» (уменьшение на единицу)
+{
+  const cart = [];
+  addToCart(cart, водка, 3, newId);
+  cart[0].codes = ['М1', 'М2', 'М3'];
+  const r = await setQty(cart, cart[0], 2, { allow: да });
+  ok(cart[0].codes.length === 2 && r.marksDropped === 1,
+     '★ ПУТЬ 1 — кнопка «−»: марка снялась');
+}
+
+// Путь 2: ввод цифрами (тот, что я пропустил в части 5)
+{
+  const cart = [];
+  addToCart(cart, водка, 3, newId);
+  cart[0].codes = ['М1', 'М2', 'М3'];
+  const r = await setQty(cart, cart[0], 1, { allow: да });
+  ok(cart[0].codes.length === 1 && r.marksDropped === 2,
+     '★ ПУТЬ 2 — ввод цифрами: две марки снялись');
+}
+
+// Путь 3: удаление строки целиком
+{
+  const cart = [];
+  addToCart(cart, водка, 3, newId);
+  cart[0].codes = ['М1', 'М2', 'М3'];
+  const r = await removeLine(cart, cart[0], { allow: да });
+  ok(r.removed && cart.length === 0,
+     '★ ПУТЬ 3 — удаление строки: и товар, и марки ушли вместе');
+}
+
+// Путь 4: прямой вызов свёртки
+{
+  const l = { marked: true, qty: 1, codes: ['М1', 'М2', 'М3'] };
+  ok(trimMarks(l) === 2 && l.codes.length === 1,
+     '★ ПУТЬ 4 — свёртка сама: снимает лишние');
+  ok(trimMarks(l) === 0, 'Второй раз ничего не снимает: нечего');
+}
+
+// Немаркированный не трогаем
+{
+  const l = { marked: false, qty: 1, codes: ['М1', 'М2'] };
+  ok(trimMarks(l) === 0 && l.codes.length === 2,
+     'Немаркированный не трогаем: коды там от другого');
+}
+
+// Увеличение марок НЕ снимает
+{
+  const cart = [];
   addToCart(cart, водка, 2, newId);
-  const b1 = markBar(cart);
-  ok(b1.kind === 'need' && /Нужно марок: 2/.test(b1.title), `Полоса: «${b1.title}»`);
-
-  cart[1].codes = ['M1', 'M2'];
-  const b2 = markBar(cart);
-  ok(b2.kind === 'ok' && /выведут товар из оборота/.test(b2.note),
-     '★ Собрали — сказано, что коды выведут товар из оборота');
+  cart[0].codes = ['М1', 'М2'];
+  await setQty(cart, cart[0], 5, { allow: да });
+  ok(cart[0].codes.length === 2 && needMarks(cart[0]) === 3,
+     '★ Добавили бутылок — марки целы, нужно ещё три');
 }
 
 console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);

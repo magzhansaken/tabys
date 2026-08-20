@@ -124,7 +124,21 @@ function qtyAllowed(n) {
  *
  * @param allow  свёртка разрешения из этапа 9
  */
-async function setQty(cart, line, n, { allow, trimMarks }) {
+/* СНЯТИЕ МАРОК БЕРЁТСЯ ЗДЕСЬ, а не передаётся снаружи.
+ *
+ * Раньше свёртку передавали при вызове — и путь, который забыли
+ * передать, оставался без снятия. Ровно так я пропустил ввод цифрами
+ * в части 15, починив кнопку «−».
+ *
+ * Теперь забыть невозможно: свёртка одна и берётся изнутри. */
+function trimMarksOf(line) {
+  if (typeof require === 'function' && typeof module !== 'undefined') {
+    return require('./marks.js').trimMarks(line);
+  }
+  return (typeof trimMarks === 'function') ? trimMarks(line) : 0;
+}
+
+async function setQty(cart, line, n, { allow }) {
   const стало = Number(n);
   const было = Number(line.qty);
 
@@ -153,8 +167,9 @@ async function setQty(cart, line, n, { allow, trimMarks }) {
     }
 
     line.qty = стало;
-    if (trimMarks) trimMarks(line);      // марки снимутся вместе с товаром
-    return { ok: true, approval: r };
+    // Марки снимаются ВСЕГДА: свёртка одна на все пути уменьшения.
+    const снято = trimMarksOf(line);
+    return { ok: true, approval: r, marksDropped: снято };
   }
 
   line.qty = стало;
@@ -162,8 +177,8 @@ async function setQty(cart, line, n, { allow, trimMarks }) {
 }
 
 /** Убрать строку целиком. */
-async function removeLine(cart, line, { allow, trimMarks }) {
-  return setQty(cart, line, 0, { allow, trimMarks });
+async function removeLine(cart, line, { allow }) {
+  return setQty(cart, line, 0, { allow });
 }
 
 /*
