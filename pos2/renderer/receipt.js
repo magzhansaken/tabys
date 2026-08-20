@@ -1,149 +1,115 @@
 /*
- * ЛЕНТА ЧЕКА.
+ * ЛЕНТА ЧЕКА — что печатается на бумаге.
  *
- * ИХ УРОК ПРО ВАЛЮТУ ВЗЯТ ЦЕЛИКОМ:
+ * ЧЕК ОСТАЁТСЯ НА РУССКОМ, даже если касса переключена на казахский.
+ * Его читают не только покупатель, но и проверяющий, и бухгалтер, и
+ * налоговая — а у них язык один.
  *
- *   «Деньги в теле чека — чистые числа: валюта названа один раз,
- *    строкой под итогом, как принято на хороших чеках. Значок ₸ в
- *    каждой строке только съедал ширину и, БУДУЧИ ШИРЕ ОДНОГО БАЙТА В
- *    КОДИРОВКЕ ПРИНТЕРА, ЛОМАЛ РАСКЛАДКУ.»
- *
- * Это не мелочь: на ленте 32 знака, и один сдвинутый знак превращает
- * ровный столбик сумм в лесенку. Покупатель такой чек не читает.
- *
- * ШИРИНА ЛЕНТЫ. 80 мм даёт 48 знаков (XP-80C и почти все стационарные),
- * 58 мм — 32 знака (переносные). Берём из настроек, по умолчанию 48.
+ * ШИРИНА ЛЕНТЫ. На 80 мм 48 знаков, на 58 мм — 32. Строки собираются
+ * по ширине, а не «как вышло»: иначе цена переедет на вторую строку и
+ * чек станет вдвое длиннее.
  */
 
-/** Ровно по ширине: слева и справа. */
-function padLR(left, right, width) {
-  const l = String(left);
-  const r = String(right);
-
-  /* ПРАВАЯ ЧАСТЬ ТЕРЯЛАСЬ. Найдено просмотром ленты ГЛАЗАМИ: я собрал
-     пробелы, а сам текст справа приклеить забыл.
-
-     На ленте это значило чек БЕЗ ЕДИНОЙ СУММЫ: ни цен, ни итога, ни
-     сдачи — покупатель получил бы список товаров и всё.
-
-     Проверки этого не поймали: они смотрели, что строка не длиннее
-     ленты, а короткая их устраивала. */
-  const gap = width - l.length - r.length;
-  if (gap >= 1) return l + ' '.repeat(gap) + r;
-
-  /* Не влезло. Режем ЛЕВОЕ — название товара, а не сумму: сумма
-     важнее, её кассир и покупатель сверяют. */
-  const место = Math.max(0, width - r.length - 1);
-  return l.slice(0, место) + ' '.repeat(Math.max(1, место - l.slice(0, место).length + 1)) + r;
+/** Деньги на ленте: разряды пробелом, знак словом. */
+function money(n) {
+  const v = Math.round(Number(n) || 0);
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₸';
 }
 
-/** По середине. */
-function center(s, width) {
-  const t = String(s).slice(0, width);
-  const left = Math.max(0, Math.floor((width - t.length) / 2));
-  // Дополняем и справа: лента — ровный столбец одной ширины. Иначе
-  // проверка «не длиннее ленты» пропускает обрубки, как и вышло с
-  // суммами.
-  return (' '.repeat(left) + t).padEnd(width, ' ');
-}
-
-/** Число без значка валюты — их правило. */
-function num(v) {
-  return new Intl.NumberFormat('ru-RU').format(Math.round(Number(v) || 0));
-}
-
-/** Длинное имя товара переносим, а не режем: покупатель должен понять,
-    за что заплатил. */
-function wrap(s, width) {
-  const words = String(s).split(' ');
-  const out = [];
-  let line = '';
-  for (const w of words) {
-    if (!line.length) line = w;
-    else if ((line + ' ' + w).length <= width) line += ' ' + w;
-    else { out.push(line); line = w; }
-  }
-  if (line) out.push(line);
-  return out;
+/** Количество: целое без хвоста, весовое — с граммами. */
+function qtyText(l) {
+  const q = Number(l.qty);
+  if (q % 1 === 0) return `${q} ${l.unit || 'шт'}`;
+  return `${q.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} ${l.unit || 'кг'}`;
 }
 
 /**
  * СОБРАТЬ ЛЕНТУ ЧЕКА.
  *
- * Порядок такой же, как на чеках, к которым люди привыкли: магазин,
- * номер, время, товары, итог, оплата, сдача.
+ * Порядок строк — по обычаю кассовых чеков: шапка, товары, итог,
+ * оплата, подвал. Покупатель ищет сумму глазами в одном месте.
  */
-function receiptLines(r, width = 48) {
-  const hr = '─'.repeat(width);
-  const heavy = '═'.repeat(width);     // тяжёлая линия только перед итогом
+function receiptLines(r, { width = 48 } = {}) {
+  const pair = (l, right) => {
+    const rt = String(right);
+    const место = width - rt.length;
+    const lt = String(l);
+    return lt.length >= место
+      ? lt.slice(0, Math.max(0, место - 1)) + ' ' + rt
+      : lt + ' '.repeat(место - lt.length) + rt;
+  };
+  const черта = '-'.repeat(width);
   const out = [];
 
-  // ── Шапка ───────────────────────────────────────────────────────
-  out.push(center(r.store || '', width));
-  if (r.register) out.push(center(r.register, width));
-  out.push('');
+  // ── ШАПКА ────────────────────────────────────────────────────────
+  if (r.store) out.push({ text: r.store, type: 'center', bold: true });
+  if (r.register) out.push({ text: r.register, type: 'center' });
+  out.push(черта);
 
-  const at = new Date(r.at || Date.now());
-  out.push(padLR(`Чек №${r.number}`,
-    at.toLocaleDateString('ru-RU') + ' '
-    + at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), width));
-  if (r.cashier) out.push(padLR('Кассир', r.cashier, width));
-  out.push(hr);
+  const дата = new Date(r.at);
+  out.push(pair(`Чек №${r.number}`,
+    дата.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit' })));
+  if (r.cashier) out.push(`Кассир: ${r.cashier}`);
+  out.push(черта);
 
-  // ── Товары ──────────────────────────────────────────────────────
-  for (const it of r.items || []) {
-    for (const line of wrap(it.name, width)) out.push(line);
+  // ── ТОВАРЫ ───────────────────────────────────────────────────────
+  for (const l of r.items || []) {
+    // Имя отдельной строкой: на узкой ленте оно не влезет рядом с
+    // ценой, а обрезать название товара нельзя — покупатель не поймёт,
+    // за что платит.
+    out.push(l.name);
 
-    /* Количество и цена ОТДЕЛЬНОЙ строкой под названием: так покупатель
-       видит, по какой цене считали. Спор «а почему так дорого» гасится
-       этой строкой. */
-    const кол = it.qty % 1 ? String(it.qty).replace('.', ',') : String(it.qty);
-    const сумма = Math.round(it.price * it.qty) - (it.discount || 0);
-    out.push(padLR(`  ${кол} × ${num(it.price)}`, num(сумма), width));
+    const сумма = Math.round(l.price * l.qty) - (l.discount || 0);
+    out.push(pair(`  ${qtyText(l)} x ${money(l.price)}`, money(сумма)));
 
-    if (it.discount) out.push(padLR('  скидка', '-' + num(it.discount), width));
+    if (l.discount) out.push(pair('  скидка', `-${money(l.discount)}`));
 
-    /* МАРКИ НЕ ПЕЧАТАЕМ. Код Data Matrix — это 30-40 знаков мусора на
-       ленте, покупателю он не нужен, а ленты уходит вдвое больше.
-       В налоговую марки едут в самом чеке, а не на бумаге. */
+    /* МАРКИ НА ЧЕКЕ. Покупатель может проверить подлинность товара по
+       коду — это его право, и на маркированный товар код обязателен. */
+    for (const m of l.marks || []) {
+      out.push(`  [${String(m).slice(0, width - 4)}]`);
+    }
   }
 
-  // ── Итог ────────────────────────────────────────────────────────
-  out.push(heavy);
+  out.push(черта);
+
+  // ── ИТОГ ─────────────────────────────────────────────────────────
   if (r.discount) {
-    out.push(padLR('Скидка на чек', '-' + num(r.discount), width));
+    const до = (r.items || []).reduce((a, l) =>
+      a + Math.round(l.price * l.qty) - (l.discount || 0), 0);
+    out.push(pair('Сумма', money(до)));
+    out.push(pair('Скидка на чек', `-${money(r.discount)}`));
   }
-  out.push(padLR('ИТОГО', num(r.total), width));
-  // Валюта названа ОДИН раз, как принято на хороших чеках.
-  out.push(center('ТЕНГЕ', width));
-  out.push('');
+  out.push({ text: pair('ИТОГО', money(r.total)), bold: true });
 
-  // ── Оплата ──────────────────────────────────────────────────────
-  if (r.card) out.push(padLR('Картой', num(r.card), width));
-  if (r.cash) out.push(padLR('Наличными', num(r.cash), width));
-  if (r.change) out.push(padLR('Сдача', num(r.change), width));
+  // ── ОПЛАТА ───────────────────────────────────────────────────────
+  out.push(черта);
+  if (r.cash) out.push(pair('Наличными', money(r.cash)));
+  if (r.card) out.push(pair('Картой', money(r.card)));
+  if (r.change) out.push({ text: pair('Сдача', money(r.change)), bold: true });
 
-  // ── Подвал ──────────────────────────────────────────────────────
+  // ── ПОДВАЛ ───────────────────────────────────────────────────────
   out.push('');
-  out.push(center('Спасибо за покупку!', width));
-  if (r.offline) {
-    /* Чек пробит без связи. Покупатель должен знать: в налоговую он
-       уйдёт позже. Иначе при проверке чека в приложении его там не
-       окажется, и человек решит, что его обманули. */
-    out.push(center('Чек уйдёт в налоговую при связи', width));
-  }
-  out.push('');
-  out.push('');
+  out.push({ text: 'Спасибо за покупку!', type: 'center' });
+  if (r.returnNote) out.push({ text: r.returnNote, type: 'center' });
 
   return out;
 }
 
-/** Ширина ленты из настроек. 80 мм — самый частый случай. */
-function paperWidth(settings) {
-  const w = Number(settings && settings.printWidth);
-  return w === 32 ? 32 : 48;
+/**
+ * ЛЕНТА ВОЗВРАТА.
+ *
+ * Отличается словом и знаком: возврат нельзя спутать с продажей, иначе
+ * при разборе решат, что деньги приняли, а их отдали.
+ */
+function refundLines(r, opts = {}) {
+  const lines = receiptLines(r, opts);
+  // Заголовок вместо «Чек №»: видно с первого взгляда.
+  lines.splice(0, 0, { text: 'ВОЗВРАТ', type: 'center', bold: true, big: true });
+  return lines;
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { receiptLines, paperWidth, padLR, center, num, wrap };
+  module.exports = { receiptLines, refundLines, money, qtyText };
 }
