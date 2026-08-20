@@ -261,5 +261,11 @@
 \echo '--- 095 журнал называет устройство ---'
 \i db/migrations/095_journal_device.sql
 
+\echo '--- 096 одобрение заводит устройство ---'
+\i db/migrations/096_request_device.sql
+
+\echo '--- 097 журнал называет итог заявки ---'
+\i db/migrations/097_journal_request.sql
+
 \echo '=== ГОТОВО ==='
 SELECT count(*) AS "таблиц создано" FROM information_schema.tables WHERE table_schema='public';

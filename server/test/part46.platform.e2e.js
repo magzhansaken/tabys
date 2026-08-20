@@ -507,7 +507,7 @@ const shop = async (name, owner) => {
     // ПРЕДПРОСМОТР — чего у донора нет. Кнопка «Одобрить» просто
     // делала, и увидеть последствие можно было только после.
     v = await j('GET', `/platform/requests/${devReq}/preview`, null, SUPER);
-    ok(/строка счёта/i.test(v.d?.effect ?? ''),
+    ok(/подключена|строка счёта/i.test(v.d?.effect ?? ''),
        `★ Предпросмотр объясняет последствие: «${v.d?.effect}»`);
     ok(typeof v.d?.proRata === 'number',
        `И называет доплату за остаток периода: ${v.d?.proRata} ₸`);
@@ -519,7 +519,8 @@ const shop = async (name, owner) => {
     // сделано» — самое неприятное, потому что все считают, что сделано.
     const before = (await j('GET', `/platform/clients/${id1}/lines`, null, SUPER)).d.length;
     v = await j('POST', `/platform/requests/${devReq}/decide`, { approve: true }, SUPER);
-    ok(/Строка счёта добавлена/.test(v.d?.effect ?? ''), `★ ${v.d?.note}`);
+    ok(/подключен|Строка счёта добавлена/i.test(v.d?.effect ?? ''),
+       `★ Одобрение называет, что подключено: ${v.d?.effect}`);
 
     const after = (await j('GET', `/platform/clients/${id1}/lines`, null, SUPER)).d;
     ok(after.length === before + 1 && after.some((x) => x.kind === 'pos'),
