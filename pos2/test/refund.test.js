@@ -184,5 +184,48 @@ console.log('\n═══ ВНЕСЕНИЕ И ИЗЪЯТИЕ ═══\n');
      '★ Вернули всё — второй раз денег нет');
 }
 
+// ── ДЕНЬГИ ВОЗВРАЩАЮТСЯ ТЕМ ЖЕ ПУТЁМ ──────────────────────────────
+{
+  /* НАЙДЕНО ВЛАДЕЛЬЦЕМ: возврат шёл ВСЕГДА наличными, чем бы ни
+     платили.
+
+     Покупатель платил картой 5 000 и получал живые деньги из ящика:
+     ящик пустел, по карте деньги оставались у магазина, и кассир не
+     сдавал смену. А для покупателя это способ обналичить карту. */
+  const { wayBy, wayName } = require('../renderer/pay.js');
+
+  const чек = (way) => ({ id: 'r1', number: 7, way,
+    items: [{ productId: 'g1', name: 'Сыр', qty: 1, price: 5000, discount: 0 }] });
+  const план = { ok: true, total: 5000,
+    items: [{ name: 'Сыр', refundQty: 1, sum: 5000 }] };
+  const сост = { lastNumber: 7, cashInDrawer: 40000,
+    employee: { id: 'e1', name: 'А' }, shift: { id: 's1' } };
+
+  const нал = buildRefund({ receipt: чек('cash'), plan: план, reason: 'Брак',
+    way: 'cash', approval: { ok: true }, state: сост, newId: () => 'x1' });
+  ok(нал.cashDelta === -5000,
+     '★ Наличными — из ящика ушло 5 000');
+
+  const карта = buildRefund({ receipt: чек('card'), plan: план, reason: 'Брак',
+    way: 'card', approval: { ok: true }, state: сост, newId: () => 'x2' });
+  ok(карта.cashDelta === 0,
+     '★ На карту — ЯЩИК НЕ ТРОНУТ: деньги идут через терминал');
+
+  const qr = buildRefund({ receipt: чек('qr'), plan: план, reason: 'Брак',
+    way: 'qr', approval: { ok: true }, state: сост, newId: () => 'x3' });
+  ok(qr.cashDelta === 0, 'Через QR — тоже мимо ящика');
+
+  /* СПОСОБ ЗАПИСАН В ВОЗВРАТЕ: владелец видит в отчёте, куда ушли
+     деньги, а не гадает. */
+  ok(карта.way === 'card', 'Способ записан в возврате');
+  ok(карта.reason === 'Брак', 'И причина: владелец читает её в отчёте');
+
+  /* РЕЧЬ ПО-РУССКИ. Кассир читает это покупателю вслух: «оплачен
+     картой», а не «оплачен карта». */
+  ok(wayBy('card') === 'картой' && wayBy('cash') === 'наличными',
+     `★ Способ в форме «чем»: ${wayBy('card')}, ${wayBy('cash')}, ${wayBy('qr')}`);
+  ok(wayName('card') === 'Карта', 'И в именительном — для кнопок');
+}
+
 console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
 process.exit(failed ? 1 : 0);

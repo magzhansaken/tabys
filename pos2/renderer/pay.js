@@ -164,7 +164,35 @@ function lastWay(settings) {
   return WAYS.some((w) => w.id === id) ? id : 'cash';
 }
 
+/**
+ * ИМЯ СПОСОБА ПО-РУССКИ.
+ *
+ * Нужно и оплате, и возврату: кассир диктует покупателю «вернули на
+ * карту», а не «way=card».
+ */
+function wayName(id) {
+  const w = WAYS.find((x) => x.id === id);
+  return w ? w.name : String(id || '');
+}
+
+/**
+ * СПОСОБ В ФОРМЕ «ЧЕМ»: «оплачен картой», а не «оплачен карта».
+ *
+ * Кассир читает это покупателю вслух, и кривая речь режет слух.
+ */
+const WAY_BY = {
+  cash: 'наличными',
+  card: 'картой',
+  qr: 'через QR',
+  mixed: 'смешанно',
+  credit: 'в долг',
+};
+
+function wayBy(id) {
+  return WAY_BY[id] || wayName(id).toLowerCase();
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { WAYS, NOTES, tenderOptions, change, enough, planMixed,
+  module.exports = { WAYS, wayName, wayBy, WAY_BY, NOTES, tenderOptions, change, enough, planMixed,
     buildReceipt, rememberWay, lastWay };
 }

@@ -593,3 +593,18 @@ button.dim:active { color: var(--mut); }
   .pay-due b { font-size: 38px; }
   .top-clock { display: none; }
 }
+
+/* ═══ ВОЗВРАТ: КУДА И ПОЧЕМУ ═══════════════════════════════════════
+   Деньги возвращаются тем же путём, каким пришли. Способ подставлен
+   по чеку, но кассир может сменить — бывает, терминал не отвечает. */
+.rf-block { margin-top: 14px; }
+.rf-title { font-size: 13px; color: #999; margin-bottom: 6px; }
+.rf-ways, .rf-reasons { display: flex; gap: 6px; flex-wrap: wrap; }
+.rf-ways button, .rf-reasons button { min-height: 48px; padding: 0 14px; font-size: 15px; }
+.rf-ways button.on, .rf-reasons button.on {
+  background: #2d4a2d; border-color: #c9a227; color: #fff;
+}
+.rf-note { margin-top: 6px; font-size: 13px; color: #9ec49e; line-height: 1.4; }
+/* Способ сменили вручную — предупреждаем: по карте деньги остались у
+   магазина, а из ящика ушли живые. */
+.rf-note.warn { color: #e0a86c; }

@@ -764,12 +764,88 @@
 
     const выбор = (чек.items || []).map(() => 0);
 
+    /* ДЕНЬГИ ВОЗВРАЩАЮТСЯ ТЕМ ЖЕ ПУТЁМ, КАКИМ ПРИШЛИ.
+     *
+     * Было: возврат ВСЕГДА наличными, чем бы ни платили. Покупатель
+     * платил картой 5 000 и получал живые деньги из ящика.
+     *
+     * Ящик пустел, а по карте деньги оставались у магазина — кассир не
+     * сдавал смену. И это подарок покупателю: так обналичивают карты.
+     *
+     * Подставляем ТОТ способ, чем платили. Но кассир может сменить:
+     * бывает, терминал не отвечает и владелец велит отдать наличными. */
+    const чемПлатили = чек.way === 'mixed'
+      ? (чек.card > 0 ? 'card' : 'cash')
+      : (чек.way || 'cash');
+
+    let способ = чемПлатили;
+    let причина = REASONS[0];
+
     const card = openSheet($('modal'), {
       title: `Возврат по чеку №${чек.number}`,
       html: `${html}
+
+        <div class="rf-block">
+          <div class="rf-title">Куда вернуть</div>
+          <div class="rf-ways" id="rfWays"></div>
+          <div class="rf-note" id="rfWayNote"></div>
+        </div>
+
+        <div class="rf-block">
+          <div class="rf-title">Причина</div>
+          <div class="rf-reasons" id="rfReasons"></div>
+        </div>
+
         <div class="gate-err" id="rfErr"></div>
         <div class="row-actions"><button id="rfGo" class="bad">Вернуть деньги</button></div>`,
     });
+
+    /* СПОСОБЫ ВОЗВРАТА. «В долг» и «смешанно» не показываем: долг
+       прощают правкой в кабинете, а смешанный возврат — это два
+       возврата, и кассир запутается при очереди. */
+    const рядСпособов = card.querySelector('#rfWays');
+    const заметка = card.querySelector('#rfWayNote');
+
+    const покажиЗаметку = () => {
+      заметка.textContent = способ === чемПлатили
+        ? `Чек оплачен ${wayBy(чемПлатили)} — возвращаем туда же`
+        : `ВНИМАНИЕ: платили ${wayBy(чемПлатили)}, `
+          + `а вернуть хотите ${wayBy(способ)}`;
+      заметка.className = 'rf-note' + (способ === чемПлатили ? '' : ' warn');
+    };
+
+    for (const w of ['cash', 'card', 'qr']) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = wayName(w);
+      b.className = w === способ ? 'on' : '';
+      b.onclick = () => {
+        способ = w;
+        [...рядСпособов.children].forEach((x) => {
+          x.className = x.textContent === wayName(w) ? 'on' : '';
+        });
+        покажиЗаметку();
+      };
+      рядСпособов.appendChild(b);
+    }
+    покажиЗаметку();
+
+    /* ПРИЧИНА — КНОПКАМИ, а не вписана намертво. Владелец читает её в
+       отчёте: «брак» и «покупатель передумал» значат для него разное. */
+    const рядПричин = card.querySelector('#rfReasons');
+    for (const r of REASONS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = r;
+      b.className = r === причина ? 'on' : '';
+      b.onclick = () => {
+        причина = r;
+        [...рядПричин.children].forEach((x) => {
+          x.className = x.textContent === r ? 'on' : '';
+        });
+      };
+      рядПричин.appendChild(b);
+    }
 
     const draw = () => выбор.forEach((v, i) => {
       card.querySelector(`[data-q="${i}"]`).textContent = String(v);
@@ -800,11 +876,15 @@
       });
       if (!a.ok) { if (a.said) err.textContent = a.said; return; }
 
-      const хватит = cashEnough(S.cashInDrawer || 0, план.total);
-      if (!хватит.ok) { err.textContent = хватит.said; return; }
+      /* ХВАТАЕТ ЛИ ДЕНЕГ — спрашиваем ТОЛЬКО для наличных: на карту
+         возвращают через терминал, ящик при этом не трогают. */
+      if (способ === 'cash') {
+        const хватит = cashEnough(S.cashInDrawer || 0, план.total);
+        if (!хватит.ok) { err.textContent = хватит.said; return; }
+      }
 
-      const r = buildRefund({ receipt: чек, plan: план, reason: 'Не подошёл товар',
-        way: 'cash', approval: a, state: S, newId });
+      const r = buildRefund({ receipt: чек, plan: план, reason: причина,
+        way: способ, approval: a, state: S, newId });
 
       await K.receiptAdd(r);
       await K.outboxAdd({ id: r.id, entity: 'refund', entityId: r.id,
@@ -816,7 +896,12 @@
       catch { toast($('toasts'), 'Возврат прошёл, но чек не напечатался', 'warn'); }
 
       closeModal($('modal'));
-      toast($('toasts'), `Возврат ${money(план.total)} · в ящике ${money(S.cashInDrawer)}`);
+      /* Говорим, КУДА вернули: кассир диктует это покупателю, а «на
+         карту» значит «ждите два-три дня». */
+      toast($('toasts'), способ === 'cash'
+        ? `Возврат ${money(план.total)} наличными · в ящике ${money(S.cashInDrawer)}`
+        : `Возврат ${money(план.total)} ${wayBy(способ)} — `
+          + 'деньги придут в течение двух-трёх дней');
       sync.once();
       go('sale');
     };
