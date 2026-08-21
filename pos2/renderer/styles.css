@@ -216,3 +216,38 @@ button.big { width: min(420px, 90vw); min-height: 64px; font-size: 19px; }
 .sale-marks.ok { background: #2d4a2d; border: 1px solid #3a5f3a; }
 .sale-marks b { display: block; font-size: 14px; }
 .sale-marks small { color: #bbb; }
+
+/* ═══ ВЕРХНЯЯ СТРОКА ═══════════════════════════════════════════════
+   Где мы, кто за кассой, жива ли связь. Кассир видит это, не отрывая
+   рук от товара. */
+.top { display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+       background: #1a1a1a; border-bottom: 1px solid #2a2a2a; }
+.top-where b { font-size: 15px; }
+.top-where small { display: block; color: #888; font-size: 12px; }
+.top-who { color: #c9a227; font-size: 15px; }
+.top-net { margin-left: auto; font-size: 13px; padding: 5px 10px; border-radius: 8px; }
+.top-net.up { color: #7ec97e; background: #1e2a1e; }
+/* Связь пропала — видно издалека: кассир бьёт чеки, а они копятся. */
+.top-net.down { color: #e0a86c; background: #2a231e; }
+.top button { min-height: 40px; }
+
+/* ═══ МЕНЮ ═════════════════════════════════════════════════════════
+   Разделами, а не кучей: кассир ищет глазами. Каждая строка объясняет
+   себя — иначе он не решится нажать. */
+.menu { display: flex; flex-direction: column; gap: 16px; }
+.menu-group { display: flex; flex-direction: column; gap: 4px; }
+.menu-title { color: #c9a227; font-size: 13px; letter-spacing: .04em; padding-left: 2px; }
+.menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+             text-align: left; min-height: 58px; padding: 8px 14px; }
+.menu-name { font-size: 16px; }
+.menu-hint { font-size: 12px; color: #888; line-height: 1.35; }
+.menu-item:disabled .menu-hint { color: #666; }
+
+/* Кнопки при покупателе: скидка, отложить, очистить. */
+.sale-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sale-acts button { min-height: 48px; font-size: 14px; padding: 0 6px; }
+
+/* Верхняя строка живёт над экраном и не пересобирается вместе с ним. */
+#topbar { flex: 0 0 auto; }
+#app { flex: 1; min-height: 0; }
+body { display: flex; flex-direction: column; }

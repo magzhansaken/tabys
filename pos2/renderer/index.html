@@ -8,6 +8,10 @@
 <body>
   <!-- Разметка экранов появится на следующих этапах. Сейчас проверяем,
        что оболочка вообще поднимает страницу с диска. -->
+  <!-- Верхняя строка ОТДЕЛЬНО от экранов: где мы, кто за кассой,
+       жива ли связь. Не пересобирается вместе с экраном. -->
+  <div id="topbar"></div>
+
   <div id="app">Касса загружается…</div>
 
   <!-- Окна и сообщения. Пустые до нужды: экран собирает себя сам. -->
@@ -49,6 +53,7 @@
   <script src="screen-pin.js"></script>
   <script src="screen-shift.js"></script>
   <script src="screen-sale.js"></script>
+  <script src="screen-menu.js"></script>
   <script src="screen-pay.js"></script>
   <script src="screen-paid.js"></script>
   <script src="core.js"></script>

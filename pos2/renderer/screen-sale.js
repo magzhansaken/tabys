@@ -33,6 +33,12 @@ function buildSale(root, state, ctx) {
           <span>ИТОГО</span>
           <b id="saleTotal">${money(Math.max(0, итог))}</b>
         </div>
+        <div class="sale-acts">
+          <button id="saleDisc" ${cart && cart.length ? '' : 'disabled'}>Скидка</button>
+          <button id="salePark" ${cart && cart.length ? '' : 'disabled'}>Отложить</button>
+          <button id="saleClear" class="bad" ${cart && cart.length ? '' : 'disabled'}>Очистить</button>
+        </div>
+
         <button id="salePay" class="primary big" ${cart && cart.length ? '' : 'disabled'}
           ${cart && cart.length ? '' : 'title="Чек пуст — сканируйте товар"'}>ОПЛАТА</button>
       </div>
@@ -125,6 +131,12 @@ function buildSale(root, state, ctx) {
   };
 
   root.querySelector('#salePay').onclick = () => onPay && onPay();
+
+  /* КНОПКИ ПРИ ПОКУПАТЕЛЕ. Скидка, отложить, очистить — их жмут, пока
+     человек стоит у кассы, и прятать их в меню значит держать очередь. */
+  root.querySelector('#saleDisc').onclick = () => ctx.onDiscount && ctx.onDiscount();
+  root.querySelector('#salePark').onclick = () => ctx.onPark && ctx.onPark();
+  root.querySelector('#saleClear').onclick = () => ctx.onClear && ctx.onClear();
 
   /* КУРСОР В ПОЛЕ: сканер начнёт печатать в ту же секунду, и кассиру
      не придётся сначала целиться пальцем. */

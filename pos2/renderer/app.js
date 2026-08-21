@@ -100,7 +100,15 @@
      связка слала catalog — и экран продажи выходил ПУСТЫМ.
      Проверки этого не видели: экран проверялся своим набором, а связка
      не проверялась вовсе. */
-  screen('sale', (state) => buildSale(app(), state, {
+  screen('sale', (state) => {
+    /* ВЕРХНЯЯ СТРОКА: где мы, кто за кассой, жива ли связь. Кассир
+       видит это, не отрывая рук от товара. */
+    buildTopBar($('topbar'), state, {
+      netDown: watch.isDown, pending: pendingCount, rejected: rejectedCount, money,
+      onMenu: () => openMenu(),
+      onLock: () => { $('lock').classList.remove('hidden'); go('locked'); },
+    });
+    return buildSale(app(), state, {
     // То, что видно сейчас: вкладка или найденное.
     goods: pickGoods(CATALOG, { tab, query }),
     cart, cartDiscount, tab, query, money,
@@ -151,7 +159,23 @@
       if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
       go('pay');
     },
-  }));
+
+    /* ── КНОПКИ ПРИ ПОКУПАТЕЛЕ ──────────────────────────────────── */
+    onDiscount: () => askDiscount(),
+    onPark: () => parkNow(),
+    onClear: async () => {
+      const да = await askSure($('modal'), {
+        title: 'Очистить чек?',
+        text: `В чеке ${cart.length} ${plural(cart.length, 'позиция', 'позиции', 'позиций')}. `
+          + 'Они пропадут — отложите чек, если он ещё нужен',
+        yes: 'Очистить', danger: true,
+      });
+      if (!да) return;
+      cart = []; cartDiscount = 0;
+      go('sale');
+    },
+    });
+  });
 
   screen('pay', () => buildPay(app(), S, {
     due: cartTotal(cart, cartDiscount),
@@ -222,6 +246,430 @@
     });
   }
 
+  /* ═══ МЕНЮ КАССЫ ══════════════════════════════════════════════
+   *
+   * НАЙДЕНО ВАМИ: касса умела всё — отложенные чеки, возвраты, отчёты,
+   * инкассацию, перепечатку — и НЕ ПОКАЗЫВАЛА НИЧЕГО. Девятнадцать дел
+   * без единой кнопки, которая к ним ведёт.
+   *
+   * Проверки этого не видели: они зовут свёртки напрямую, минуя экран.
+   */
+  let pendingCount = 0;
+  let rejectedCount = 0;
+
+  function openMenu() {
+    buildMenu($('modal'), { ...S, lang: SET.lang }, {
+      openSheet, closeModal, money,
+      hasCart: cart.length, parked: (S.parked || []).length, rejected: rejectedCount,
+      on: (дело) => делай(дело),
+    });
+  }
+
+  async function делай(дело) {
+    switch (дело) {
+      case 'park': return parkNow();
+      case 'unpark': return openParked();
+      case 'discount': return askDiscount();
+      case 'reprint': return reprintLast();
+
+      case 'refund': return openRefund();
+      case 'cash_in': case 'cash_out': case 'collection': return askCashMove(дело);
+      case 'drawer': return openDrawerNow();
+
+      case 'xreport': return printReport('x');
+      case 'shift_close': return go('shift');
+      case 'rejected': return openRejected();
+
+      case 'printer': return openPrinterSheet();
+      case 'log': return K.openLog().catch(() => toast($('toasts'), 'Журнал не открылся', 'warn'));
+      case 'lang': return switchLang();
+      case 'keys': return openKeysHelp();
+      case 'logout': return logoutNow();
+      default: return null;
+    }
+  }
+
+  /* ── ОТЛОЖЕННЫЕ ЧЕКИ ──────────────────────────────────────────── */
+  async function parkNow() {
+    /* Свёртка сама пишет в хранилище: чек должен лечь на диск ДО того,
+       как исчезнет с экрана. Иначе касса перезапустится, пока
+       покупатель ходит за деньгами, и чек пропадёт. */
+    const r = await parkCart(K, cart, { newId, who: S.employee && S.employee.name });
+    if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
+    S = (await K.getState()).data;
+    cart = []; cartDiscount = 0;
+    toast($('toasts'), 'Чек отложен — касса свободна');
+    go('sale');
+  }
+
+  function openParked() {
+    const список = S.parked || [];
+    if (!список.length) { toast($('toasts'), 'Отложенных чеков нет', 'warn'); return; }
+
+    /* СТАРЫЕ НАЗЫВАЕМ, но не удаляем сами: вдруг это заказ, который
+       ждут. Решает кассир. */
+    const старые = staleParked(список);
+
+    const html = список.map((p) => `
+      <button class="menu-item" data-take="${p.id}">
+        <span class="menu-name">${p.label} · ${p.items} поз. · ${money(p.total)}</span>
+        <span class="menu-hint">${старые.some((x) => x.id === p.id)
+          ? 'Отложен давно — покупатель мог не вернуться' : 'Забрать обратно'}</span>
+      </button>`).join('');
+
+    const card = openSheet($('modal'), { title: 'Отложенные чеки', html: `<div class="menu">${html}</div>` });
+    card.querySelectorAll('[data-take]').forEach((b) => {
+      b.onclick = async () => {
+        if (cart.length) {
+          const да = await askSure($('modal'), {
+            title: 'В кассе уже есть чек',
+            text: 'Он пропадёт. Сперва отложите его или закройте',
+            yes: 'Заменить', danger: true,
+          });
+          if (!да) return;
+        }
+        const r = unparkCart(S.parked || [], b.dataset.take);
+        if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
+        cart = r.cart; cartDiscount = r.cartDiscount;
+        S = (await K.saveState({ parked: r.parked })).data;
+        closeModal($('modal'));
+        go('sale');
+      };
+    });
+  }
+
+  /* ── СКИДКА НА ЧЕК ────────────────────────────────────────────── */
+  function askDiscount() {
+    const база = cartTotal(cart, 0);
+    if (!база) { toast($('toasts'), 'Чек пуст — скидывать не с чего', 'warn'); return; }
+
+    const cap = capFor({ shopMaxPct: SET.discountMaxPct, employee: S.employee });
+    const подсказка = capHint({ base: база, capPct: cap,
+      employee: S.employee, shopMaxPct: SET.discountMaxPct });
+
+    const card = openSheet($('modal'), {
+      title: 'Скидка на чек',
+      html: `
+        <p class="muted">В чеке ${money(база)}${подсказка ? `<br>${подсказка}` : ''}</p>
+        <div class="pay-notes" id="dcPre"></div>
+        <input id="dcSum" class="field" inputmode="numeric" placeholder="сумма скидки">
+        <div class="gate-err" id="dcErr"></div>
+        <div class="row-actions">
+          <button id="dcOff">Убрать скидку</button>
+          <button id="dcGo" class="primary">Применить</button>
+        </div>`,
+    });
+
+    const поле = card.querySelector('#dcSum');
+    const ряд = card.querySelector('#dcPre');
+    const err = card.querySelector('#dcErr');
+
+    /* ОБЫЧНЫЕ СКИДКИ КНОПКАМИ: кассир жмёт одну вместо набора цифр.
+       Процент переводим в СУММУ сразу — их правило: иначе она поплывёт,
+       когда в чек добавят товар. */
+    for (const p of PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = p + '%';
+      b.onclick = () => { поле.value = String(pctToAmount(база, p)); err.textContent = ''; };
+      ряд.appendChild(b);
+    }
+
+    card.querySelector('#dcOff').onclick = async () => {
+      cartDiscount = 0; closeModal($('modal')); go('sale');
+    };
+
+    card.querySelector('#dcGo').onclick = async () => {
+      const r = checkDiscount(Number(поле.value) || 0, { base: база, capPct: cap });
+      if (!r.ok) {
+        if (!r.needSenior) { err.textContent = r.said; return; }
+        /* СВЕРХ ПОТОЛКА — не отказ, а «нужен старший». Разница важна:
+           отказ кассир воспримет как поломку. */
+        const pin = await askPinFor('Скидка сверх вашего предела');
+        if (!pin) return;
+        const a = await approveByPin(pin, { ask, store: K,
+          deviceToken: S.deviceToken, settings: SET, action: 'discount' });
+        if (!a.ok) { err.textContent = a.said; return; }
+        if (a.offlineNote) toast($('toasts'), a.offlineNote, 'warn');
+      }
+      cartDiscount = Math.round(Number(поле.value) || 0);
+      closeModal($('modal'));
+      go('sale');
+    };
+
+    setTimeout(() => поле.focus(), 0);
+  }
+
+  /* ── ДЕНЬГИ МИМО ЧЕКОВ ────────────────────────────────────────── */
+  function askCashMove(вид) {
+    const имя = MOVE_NAME[вид] || вид;
+    const card = openSheet($('modal'), {
+      title: имя,
+      html: `
+        <p class="muted">В ящике сейчас ${money(S.cashInDrawer || 0)}</p>
+        <input id="cmSum" class="field" inputmode="numeric" placeholder="сумма">
+        ${вид === 'cash_out'
+          ? '<input id="cmNote" class="field" placeholder="на что взяли — обязательно">'
+          : ''}
+        <div class="gate-err" id="cmErr"></div>
+        <div class="row-actions"><button id="cmGo" class="primary">Записать</button></div>`,
+    });
+
+    const поле = card.querySelector('#cmSum');
+    const примечание = card.querySelector('#cmNote');
+    const err = card.querySelector('#cmErr');
+
+    card.querySelector('#cmGo').onclick = async () => {
+      /* ПРИЧИНА ОБЯЗАТЕЛЬНА ДЛЯ ИЗЪЯТИЯ. «Взяли 5 000» без слов — дыра
+         в отчёте, и виноватым окажется кассир. */
+      if (вид === 'cash_out' && !(примечание.value || '').trim()) {
+        err.textContent = 'Напишите, на что взяли — иначе в отчёте будет дыра';
+        return;
+      }
+
+      const r = buildCashMove({ type: вид, amount: Number(поле.value) || 0,
+        note: примечание ? примечание.value : '', state: S, newId });
+      if (!r.ok) { err.textContent = r.said; return; }
+
+      await K.outboxAdd({ id: r.move.id, entity: 'cash_move', entityId: r.move.id,
+        op: 'insert', payload: r.move, clientTs: r.move.at });
+      S = (await K.saveState({
+        cashInDrawer: (S.cashInDrawer || 0) + r.move.delta })).data;
+
+      closeModal($('modal'));
+      toast($('toasts'), `${имя}: ${money(r.move.amount)} · в ящике ${money(S.cashInDrawer)}`);
+      sync.once();
+      go('sale');
+    };
+    setTimeout(() => поле.focus(), 0);
+  }
+
+  async function openDrawerNow() {
+    const r = await K.openDrawer();
+    toast($('toasts'), r && r.ok ? 'Ящик открыт'
+      : (r && r.error) || 'Ящик не открылся — проверьте принтер', r && r.ok ? 'ok' : 'warn');
+  }
+
+  /* ── ОТЧЁТЫ ───────────────────────────────────────────────────── */
+  async function printReport(вид) {
+    const чеки = ((await K.receiptsRecent(500)).data) || [];
+    const свод = reportSummary({ receipts: чеки, moves: [], shift: S.shift, state: S });
+    const lines = reportLines(вид, { summary: свод, shift: S.shift, state: S,
+      width: SET.printWidth === 32 ? 32 : 48 });
+    try {
+      await K.print(lines, { title: вид === 'z' ? 'Z-отчёт' : 'X-отчёт' });
+      toast($('toasts'), вид === 'z' ? 'Z-отчёт напечатан' : 'X-отчёт напечатан · смена продолжается');
+    } catch (e) {
+      toast($('toasts'), (e && e.message) || 'Не вышло напечатать', 'warn');
+    }
+  }
+
+  /* ── ЧЕКИ, КОТОРЫХ НЕТ В ОТЧЁТЕ ───────────────────────────────── */
+  async function openRejected() {
+    const список = ((await K.rejectedAll()).data) || [];
+    if (!список.length) { toast($('toasts'), 'Все чеки приняты сервером'); return; }
+
+    const html = список.map((r) => `
+      <div class="menu-item" style="cursor:default">
+        <span class="menu-name">Чек №${r.number ?? '—'} · ${money(r.total || 0)}</span>
+        <span class="menu-hint">${esc(r.reason || 'сервер не принял')}</span>
+      </div>`).join('');
+
+    openSheet($('modal'), {
+      title: `Сервер не принял: ${список.length}`,
+      html: `<p class="muted">Деньги за эти чеки в ящике, а в отчёте владельца их нет. `
+        + `Покажите ему этот список.</p><div class="menu">${html}</div>`,
+    });
+  }
+
+  /* ── ПЕЧАТЬ ───────────────────────────────────────────────────── */
+  async function reprintLast() {
+    const чеки = ((await K.receiptsRecent(1)).data) || [];
+    if (!чеки.length) { toast($('toasts'), 'Печатать нечего — чеков ещё не было', 'warn'); return; }
+    try {
+      await K.print(receiptLines(чеки[0], { width: SET.printWidth === 32 ? 32 : 48 }),
+        { title: `повтор чека №${чеки[0].number}` });
+      toast($('toasts'), `Чек №${чеки[0].number} напечатан заново`);
+    } catch (e) {
+      toast($('toasts'), (e && e.message) || 'Не вышло напечатать', 'warn');
+    }
+  }
+
+  async function openPrinterSheet() {
+    const r = await K.printers();
+    const список = (r && r.data) || [];
+
+    const html = список.length ? список.map((p) => `
+      <button class="menu-item" data-pr="${esc(p.name)}">
+        <span class="menu-name">${esc(p.name)}${p.name === SET.printer ? ' ✓' : ''}</span>
+        <span class="menu-hint">${p.virtual
+          ? 'ПЕЧАТЬ В ФАЙЛ — чеки на бумагу НЕ выйдут'
+          : 'чековый принтер'}</span>
+      </button>`).join('')
+      : '<p class="muted">Принтеров не найдено. Проверьте, что он включён и установлен в Windows</p>';
+
+    const card = openSheet($('modal'), { title: 'Настройки печати',
+      html: `<div class="menu">${html}</div>
+        <div class="row-actions"><button id="prTest">Пробная печать</button></div>` });
+
+    card.querySelectorAll('[data-pr]').forEach((b) => {
+      b.onclick = async () => {
+        SET = (await K.saveSettings({ printer: b.dataset.pr })).data;
+        closeModal($('modal'));
+        toast($('toasts'), `Принтер: ${SET.printer}`);
+      };
+    });
+
+    card.querySelector('#prTest').onclick = async () => {
+      try {
+        await K.print([{ text: 'ПРОБНАЯ ПЕЧАТЬ', type: 'center', bold: true },
+          { text: new Date().toLocaleString('ru-RU'), type: 'center' },
+          { text: '' }, { text: '' }], { title: 'проба' });
+        toast($('toasts'), 'Если бумага вышла — принтер настроен');
+      } catch (e) {
+        toast($('toasts'), (e && e.message) || 'Не вышло напечатать', 'warn');
+      }
+    };
+  }
+
+  /* ── ЯЗЫК И КЛАВИШИ ───────────────────────────────────────────── */
+  async function switchLang() {
+    const был = SET.lang === 'kz' ? 'kz' : 'ru';
+    SET = (await K.saveSettings({ lang: был === 'kz' ? 'ru' : 'kz' })).data;
+    toast($('toasts'), SET.lang === 'kz'
+      ? 'Тіл: қазақша. Чек әрқашан орысша басылады'
+      : 'Язык: русский. Чек всегда печатается по-русски');
+    go('sale');
+  }
+
+  function openKeysHelp() {
+    const html = hotkeyHelp().map((k) => `
+      <div class="menu-item" style="cursor:default">
+        <span class="menu-name">${esc(k.key)}</span>
+        <span class="menu-hint">${esc(k.name)}</span>
+      </div>`).join('');
+    openSheet($('modal'), { title: 'Горячие клавиши',
+      html: `<p class="muted">Работают, когда курсор не в поле ввода</p>
+        <div class="menu">${html}</div>` });
+  }
+
+  /* ── ВЫХОД ────────────────────────────────────────────────────── */
+  async function logoutNow() {
+    const план = planLogout({ cart, state: S });
+    if (план.warnings.length) {
+      const да = await askSure($('modal'), {
+        title: 'Выйти из кассы?',
+        text: план.warnings.map((w) => w.said).join('\n\n'),
+        yes: 'Выйти', danger: true,
+      });
+      if (!да) return;
+    }
+    cart = []; cartDiscount = 0;
+    S = (await K.saveState({ employee: null })).data;
+    go('pin');
+  }
+
+  /* ── ВОЗВРАТ ──────────────────────────────────────────────────── */
+  async function openRefund() {
+    const чеки = ((await K.receiptsRecent(30)).data) || [];
+    const продажи = чеки.filter((r) => r.kind !== 'refund');
+    if (!продажи.length) { toast($('toasts'), 'Чеков этой кассы ещё нет', 'warn'); return; }
+
+    const html = продажи.map((r) => `
+      <button class="menu-item" data-rec="${r.id}">
+        <span class="menu-name">Чек №${r.number} · ${money(r.total)}</span>
+        <span class="menu-hint">${new Date(r.at).toLocaleString('ru-RU',
+          { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+          · ${(r.items || []).length} поз.</span>
+      </button>`).join('');
+
+    const card = openSheet($('modal'), { title: 'Возврат — выберите чек',
+      html: `<div class="menu">${html}</div>` });
+
+    card.querySelectorAll('[data-rec]').forEach((b) => {
+      b.onclick = () => {
+        const чек = продажи.find((r) => r.id === b.dataset.rec);
+        closeModal($('modal'));
+        refundLines2(чек);
+      };
+    });
+  }
+
+  /** Что именно возвращаем из чека. */
+  function refundLines2(чек) {
+    const html = (чек.items || []).map((it, i) => `
+      <div class="cart-row">
+        <div class="cart-name">${esc(it.name)}</div>
+        <div class="cart-qty">
+          <button data-m="${i}">−</button>
+          <span data-q="${i}">0</span>
+          <button data-p="${i}">+</button>
+        </div>
+        <div class="cart-sum">${money(Math.round(it.price * it.qty))}</div>
+      </div>`).join('');
+
+    const выбор = (чек.items || []).map(() => 0);
+
+    const card = openSheet($('modal'), {
+      title: `Возврат по чеку №${чек.number}`,
+      html: `${html}
+        <div class="gate-err" id="rfErr"></div>
+        <div class="row-actions"><button id="rfGo" class="bad">Вернуть деньги</button></div>`,
+    });
+
+    const draw = () => выбор.forEach((v, i) => {
+      card.querySelector(`[data-q="${i}"]`).textContent = String(v);
+    });
+
+    card.querySelectorAll('[data-p]').forEach((b) => {
+      b.onclick = () => {
+        const i = Number(b.dataset.p);
+        const мах = чек.items[i].qty - (чек.items[i].returned || 0);
+        выбор[i] = Math.min(мах, выбор[i] + 1);
+        draw();
+      };
+    });
+    card.querySelectorAll('[data-m]').forEach((b) => {
+      b.onclick = () => { const i = Number(b.dataset.m); выбор[i] = Math.max(0, выбор[i] - 1); draw(); };
+    });
+
+    card.querySelector('#rfGo').onclick = async () => {
+      const план = planRefund(чек, выбор);
+      const err = card.querySelector('#rfErr');
+      if (!план.ok) { err.textContent = план.said; return; }
+
+      /* ВОЗВРАТ — ДЕНЬГИ ИЗ КАССЫ. Спрашиваем разрешение по правилу
+         магазина: это самое опасное действие за смену. */
+      const a = await allow('refund', {
+        settings: SET, employee: S.employee,
+        askPin: (t) => askPinFor(t), ask, store: K, deviceToken: S.deviceToken,
+      });
+      if (!a.ok) { if (a.said) err.textContent = a.said; return; }
+
+      const хватит = cashEnough(S.cashInDrawer || 0, план.total);
+      if (!хватит.ok) { err.textContent = хватит.said; return; }
+
+      const r = buildRefund({ receipt: чек, plan: план, reason: 'Не подошёл товар',
+        way: 'cash', approval: a, state: S, newId });
+
+      await K.receiptAdd(r);
+      await K.outboxAdd({ id: r.id, entity: 'refund', entityId: r.id,
+        op: 'insert', payload: r, clientTs: r.at });
+      S = (await K.saveState({ lastNumber: r.number,
+        cashInDrawer: (S.cashInDrawer || 0) + (r.cashDelta || 0) })).data;
+
+      try { await K.print(receiptLines(r, { width: SET.printWidth === 32 ? 32 : 48 }), { title: 'возврат' }); }
+      catch { toast($('toasts'), 'Возврат прошёл, но чек не напечатался', 'warn'); }
+
+      closeModal($('modal'));
+      toast($('toasts'), `Возврат ${money(план.total)} · в ящике ${money(S.cashInDrawer)}`);
+      sync.once();
+      go('sale');
+    };
+
+    draw();
+  }
+
   // ── Продажа доводится до конца ─────────────────────────────────
   async function finishSale({ way, cash, card }) {
     const due = cartTotal(cart, cartDiscount);
@@ -243,7 +691,7 @@
     // Печать может не выйти — оплата уже прошла, и это надо сказать.
     let печать = true;
     try {
-      await K.print(receiptLines(receipt, { width: paperWidth(SET) }), { title: `чек №${receipt.number}` });
+      await K.print(receiptLines(receipt, { width: SET.printWidth === 32 ? 32 : 48 }), { title: `чек №${receipt.number}` });
     } catch { печать = false; }
 
     cart = []; cartDiscount = 0;
