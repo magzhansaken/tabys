@@ -1,307 +1,595 @@
 /*
- * ОФОРМЛЕНИЕ КАССЫ.
+ * ОФОРМЛЕНИЕ КАССЫ «ТАБЫС» — облик v3.
  *
- * Тёмное нарочно: касса светит в лицо кассиру всю смену, и белый экран
- * к вечеру утомляет глаза. В тёмном магазине белый экран ещё и слепит
- * покупателя.
+ * Тёмное нарочно: касса светит в лицо восемь часов, белый экран к
+ * вечеру утомляет и слепит покупателя в тёмном магазине. Контраст
+ * поднят выше прежнего: днём в окно бьёт солнце, и бледно-серое на
+ * сером выгорает первым.
  *
- * КНОПКИ КРУПНЫЕ. Кассир бьёт пальцем при очереди, а не целится мышью.
- * Меньше 56 точек — промахивается, и промах на кассе стоит денег.
+ * ЦВЕТА НЕСУТ СМЫСЛ, а не украшают:
+ *   золото  — деньги: цены, итог, сдача. Одно и то же везде.
+ *   зелёный — «взять оплату», путь вперёд;
+ *   красный — необратимое: очистить, вернуть, закрыть;
+ *   янтарь  — «посмотри сюда»: марки, связь, предупреждения.
+ *
+ * КНОПКИ КРУПНЫЕ: меньше 56 точек палец промахивается, а промах на
+ * кассе стоит денег. Здесь 56 — нижняя граница, рабочие кнопки крупнее.
+ *
+ * ШРИФТ СИСТЕМНЫЙ (Segoe UI на кассовых Windows): касса обязана
+ * подниматься без интернета, а веб-шрифт без сети — это секунды пустого
+ * экрана и подмена начертания. Цифры — табличные: столбики сумм не
+ * пляшут.
  */
+
+:root {
+  /* Поверхности: от глубины к свету. Холодный графит, без чистого серого. */
+  --bg:      oklch(0.16 0.012 255);
+  --panel:   oklch(0.205 0.014 255);
+  --raised:  oklch(0.26 0.016 255);
+  --raised2: oklch(0.30 0.017 255);
+  --line:    oklch(0.32 0.016 255);
+  --hair:    oklch(0.27 0.014 255);
+
+  /* Текст */
+  --ink:  oklch(0.95 0.006 95);
+  --mut:  oklch(0.70 0.012 255);
+  --dim:  oklch(0.54 0.012 255);
+
+  /* Деньги — золото */
+  --gold:      oklch(0.84 0.125 88);
+  --gold-dim:  oklch(0.72 0.11 87);
+  --gold-soft: oklch(0.84 0.125 88 / .13);
+
+  /* Действие — зелёный */
+  --green:      oklch(0.74 0.155 152);
+  --green-hi:   oklch(0.80 0.16 152);
+  --green-ink:  oklch(0.22 0.06 152);
+  --green-soft: oklch(0.74 0.155 152 / .14);
+
+  /* Опасное — красный */
+  --red:      oklch(0.68 0.18 26);
+  --red-deep: oklch(0.34 0.10 26);
+  --red-soft: oklch(0.68 0.18 26 / .14);
+
+  /* Внимание — янтарь */
+  --warn:      oklch(0.80 0.13 75);
+  --warn-soft: oklch(0.80 0.13 75 / .14);
+
+  --r-lg: 18px; --r-md: 12px; --r-sm: 9px;
+  --shadow-lg: 0 24px 60px oklch(0 0 0 / .5), 0 4px 14px oklch(0 0 0 / .35);
+  --shadow-md: 0 10px 26px oklch(0 0 0 / .35);
+  --edge: inset 0 1px 0 oklch(1 0 0 / .05);
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100%;
-  background: #141414;
-  color: #e8e8e8;
-  font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
-  overflow: hidden;                 /* касса не листается */
-  user-select: none;                /* палец не выделяет текст случайно */
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
+  font-variant-numeric: tabular-nums;   /* столбики сумм не пляшут */
+  overflow: hidden;                     /* касса не листается */
+  user-select: none;                    /* палец не выделяет текст */
   -webkit-user-select: none;
 }
 
-#app { height: 100vh; display: flex; flex-direction: column; }
+/* Ссылок на кассе нет, но если появятся — не браузерная синь. */
+a { color: var(--gold); text-decoration: none; }
+a:hover { color: var(--gold-dim); }
+
+body { display: flex; flex-direction: column; }
+#topbar { flex: 0 0 auto; }
+#app { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .hidden { display: none !important; }
 
-/* ── ВОРОТА: привязка, код ─────────────────────────────────────── */
-.gate {
-  height: 100%; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 14px; padding: 24px;
-}
-.gate-eyebrow { font-size: 14px; color: #c9a227; letter-spacing: .04em; }
-.gate h1 { font-size: 26px; font-weight: 600; }
-.gate-hint { max-width: 420px; text-align: center; color: #999; font-size: 14px; }
-.gate-err { min-height: 20px; color: #e06c6c; font-size: 14px; text-align: center; }
-.gate-foot {
-  margin-top: 18px; display: flex; gap: 16px; align-items: center;
-  color: #666; font-size: 13px;
-}
-
-.field {
-  width: min(420px, 90vw); padding: 16px 18px; font-size: 20px;
-  background: #1e1e1e; border: 1px solid #333; border-radius: 10px;
-  color: #e8e8e8; text-align: center; letter-spacing: .06em;
-}
-.field:focus { outline: none; border-color: #c9a227; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb { background: var(--raised); border-radius: 8px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-track { background: transparent; }
 
 /* ── КНОПКИ ────────────────────────────────────────────────────── */
 button {
-  min-height: 56px;                 /* палец, а не мышь */
-  padding: 0 20px; font: inherit; font-size: 17px;
-  background: #262626; color: #e8e8e8;
-  border: 1px solid #333; border-radius: 10px; cursor: pointer;
+  min-height: 56px;                     /* палец, а не мышь */
+  padding: 0 20px;
+  font: inherit; font-size: 17px; font-weight: 600;
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--raised) 0%, oklch(0.235 0.015 255) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--edge);
+  cursor: pointer;
+  touch-action: manipulation;           /* без задержки двойного тапа */
 }
-button:active { background: #303030; }
-button:disabled { opacity: .45; cursor: default; }
+button:active { background: oklch(0.215 0.015 255); transform: translateY(1px); box-shadow: none; }
+button:disabled { opacity: .38; cursor: default; transform: none; }
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
-button.primary { background: #2d4a2d; border-color: #3a5f3a; }
-button.primary:active { background: #365636; }
-button.bad { background: #4a2d2d; border-color: #5f3a3a; }
-button.ghost { background: transparent; border-color: transparent; color: #999; min-height: 40px; }
-button.big { width: min(420px, 90vw); min-height: 64px; font-size: 19px; }
-
-/* ── ЦИФРОВАЯ КЛАВИАТУРА ───────────────────────────────────────── */
-.keypad {
-  display: grid; grid-template-columns: repeat(3, 92px); gap: 12px;
-  margin-top: 8px;
+button.primary {
+  background: linear-gradient(180deg, var(--green-hi) 0%, var(--green) 100%);
+  border-color: oklch(0.62 0.14 152);
+  color: var(--green-ink);
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: 0 6px 22px oklch(0.74 0.155 152 / .22), var(--edge);
 }
-.keypad button { min-height: 72px; font-size: 26px; }
-.keypad .kb-aux { background: #1e1e1e; color: #999; font-size: 20px; }
+button.primary:active { background: var(--green); }
 
-.dots { display: flex; gap: 14px; height: 20px; align-items: center; }
-.dots i {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid #555; display: inline-block;
+button.bad {
+  background: linear-gradient(180deg, oklch(0.37 0.10 26) 0%, var(--red-deep) 100%);
+  border-color: oklch(0.45 0.11 26);
+  color: oklch(0.92 0.04 26);
 }
-.dots i.on { background: #c9a227; border-color: #c9a227; }
+button.bad:active { background: var(--red-deep); }
+
+button.ghost {
+  background: transparent; border-color: transparent; box-shadow: none;
+  color: var(--mut); min-height: 44px;
+}
+button.ghost:active { background: var(--raised); transform: none; }
+
+button.big { width: min(460px, 92vw); min-height: 68px; font-size: 20px; border-radius: 14px; }
+
+/* Редкое и опасное — неяркое, но живое. */
+button.dim { color: var(--dim); font-size: 13px; font-weight: 400; min-height: 36px;
+             background: transparent; border-color: transparent; box-shadow: none; }
+button.dim:active { color: var(--mut); }
+
+/* ── ПОЛЯ ──────────────────────────────────────────────────────── */
+.field {
+  width: min(460px, 92vw);
+  min-height: 64px;
+  padding: 14px 18px;
+  font: inherit; font-size: 22px;
+  background: oklch(0.145 0.012 255);
+  border: 2px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  text-align: center; letter-spacing: .04em;
+  caret-color: var(--gold);
+}
+.field::placeholder { color: var(--dim); font-size: 18px; letter-spacing: 0; }
+.field:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
+
+/* ── ВОРОТА: привязка, код, смена ──────────────────────────────── */
+.gate {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: safe center; gap: 16px; padding: 28px 24px;
+}
+.gate-brand {
+  font-size: 15px; font-weight: 700; letter-spacing: .34em; text-transform: uppercase;
+  color: var(--gold);
+}
+.gate-eyebrow { font-size: 14px; color: var(--gold); letter-spacing: .08em; }
+.gate h1 { font-size: 30px; font-weight: 700; letter-spacing: -.01em; text-align: center; }
+.gate-hint { max-width: 460px; text-align: center; color: var(--mut); font-size: 15px; line-height: 1.55; }
+.gate-err { min-height: 24px; color: var(--red); font-size: 16px; font-weight: 600; text-align: center; }
+.gate-err.shake { animation: shake .3s; }
+@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.gate-foot { margin-top: 14px; display: flex; gap: 18px; align-items: center;
+             color: var(--dim); font-size: 13px; }
+
+/* Карточка внутри ворот: смена, закрытие. */
+.gate-card {
+  width: min(520px, 94vw);
+  background: var(--panel); border: 1px solid var(--hair); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md), var(--edge);
+  padding: 22px; display: flex; flex-direction: column; gap: 14px; align-items: center;
+}
+.gate-card h2 { font-size: 15px; font-weight: 600; color: var(--mut); letter-spacing: .05em; }
+.gate-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* ── ЦИФРОВАЯ КЛАВИАТУРА (код, старший, замок) ─────────────────── */
+.keypad { display: grid; grid-template-columns: repeat(3, 100px); gap: 12px; margin-top: 8px;
+          justify-content: center; }
+.keypad button { min-height: 84px; font-size: 30px; font-weight: 600; border-radius: 14px; }
+.keypad .kb-aux { background: var(--panel); color: var(--mut); font-size: 22px; }
+
+.dots { display: flex; gap: 18px; height: 24px; align-items: center; justify-content: center; }
+.dots i { width: 17px; height: 17px; border-radius: 50%;
+          border: 2.5px solid var(--dim); display: inline-block; }
+.dots i.on { background: var(--gold); border-color: var(--gold);
+             box-shadow: 0 0 12px var(--gold-soft); }
 
 /* ── ЭКРАННАЯ КЛАВИАТУРА ───────────────────────────────────────── */
 .kbd {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
-  background: #1a1a1a; border-top: 1px solid #333; padding: 10px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 470;
+  background: oklch(0.185 0.014 255 / .97);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -18px 50px oklch(0 0 0 / .45);
+  padding: 12px 12px 14px;
 }
-.kbd-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
-.kbd-key { min-height: 56px; min-width: 56px; padding: 0 8px; font-size: 20px; }
-.kbd-space { min-width: 220px; }
-.kbd-close { background: #333; }
+.kbd-row { display: flex; gap: 7px; justify-content: center; margin-bottom: 7px; }
+.kbd-row:last-child { margin-bottom: 0; }
+.kbd-key { min-height: 58px; min-width: 58px; padding: 0 10px; font-size: 22px;
+           border-radius: var(--r-sm); flex: 0 1 74px; }
+.kbd-space { flex: 0 1 340px; color: var(--mut); }
+.kbd-close { background: var(--panel); color: var(--mut); font-size: 16px; flex: 0 1 130px; }
+.kbd-lang { background: var(--panel); color: var(--gold); font-size: 16px; flex: 0 1 110px; }
+
+/* Та же клавиатура, но врезанная в экран (оплата, смена) */
+.kbd.kbd-inline { position: static; z-index: auto; border: 1px solid var(--hair);
+                  border-radius: var(--r-lg); box-shadow: none; background: var(--panel); }
+.kbd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kbd-grid .kbd-key { min-height: 68px; font-size: 26px; flex: none; }
 
 /* ── ОКНА ──────────────────────────────────────────────────────── */
 .backdrop {
   position: fixed; inset: 0; z-index: 400;
-  background: rgba(0, 0, 0, .72);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: oklch(0.07 0.01 255 / .68);
+  backdrop-filter: blur(5px);
+  display: flex; align-items: center; justify-content: center; padding: 22px;
 }
 .dialog {
-  background: #1e1e1e; border: 1px solid #333; border-radius: 14px;
-  padding: 22px; max-width: min(520px, 92vw); width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg), var(--edge);
+  padding: 26px;
+  max-width: min(560px, 94vw); width: 100%;
+  animation: pop .18s cubic-bezier(.2, .9, .3, 1.2);
+  display: flex; flex-direction: column; gap: 12px;
 }
-.dialog h2 { font-size: 20px; margin-bottom: 10px; }
-.dialog .muted { color: #999; font-size: 15px; line-height: 1.5; }
-.row-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+@keyframes pop { from { transform: translateY(14px) scale(.98); opacity: 0; } }
+.dialog h2 { font-size: 22px; font-weight: 700; }
+.dialog .muted { color: var(--mut); font-size: 15px; line-height: 1.55; }
+.dialog .field { width: 100%; }
+.row-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+.row-actions button { min-width: 130px; }
 
-.sheet { display: flex; flex-direction: column; max-height: 80vh; }
-.sheet-head { display: flex; justify-content: space-between; align-items: center; }
-.sheet-body { overflow-y: auto; margin-top: 12px; }
+/* Широкие листы: меню, возврат — почти во весь экран. */
+.dialog:has(.menu-full), .dialog:has(.sheet-wide) { max-width: min(1180px, 96vw); }
+
+.sheet { display: flex; flex-direction: column; max-height: 84vh; min-height: 0; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.sheet-head h2 { font-size: 22px; }
+.sheet-head [data-close] { min-width: 56px; font-size: 20px; color: var(--mut); }
+.sheet-body { overflow-y: auto; overflow-x: hidden; margin-top: 14px; padding-right: 4px;
+              display: flex; flex-direction: column; gap: 10px; }
 
 /* ── СООБЩЕНИЯ ─────────────────────────────────────────────────── */
+/* Справа сверху: не заслоняют ни поиск, ни строки чека. */
 #toasts {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-  z-index: 500; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  position: fixed; right: 18px; top: 72px;
+  z-index: 500; display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  pointer-events: none;
 }
 .toast {
-  padding: 12px 20px; border-radius: 10px; font-size: 15px;
-  background: #2d4a2d; border: 1px solid #3a5f3a; max-width: 90vw;
+  padding: 13px 22px; border-radius: 14px; font-size: 16px; font-weight: 600;
+  max-width: min(440px, 42vw); text-align: left;
+  background: oklch(0.24 0.03 152); border: 1px solid oklch(0.42 0.08 152);
+  color: oklch(0.9 0.06 152);
+  box-shadow: var(--shadow-md);
+  animation: toastin .22s cubic-bezier(.2, .9, .3, 1.15);
 }
-.toast.warn { background: #4a3d2d; border-color: #5f4f3a; }
+.toast.warn { background: oklch(0.26 0.045 70); border-color: oklch(0.5 0.09 75);
+              color: oklch(0.9 0.09 80); }
+@keyframes toastin { from { transform: translateY(-12px); opacity: 0; } }
 
-/* ── ОПЛАТА ────────────────────────────────────────────────────── */
-.pay { height: 100%; display: flex; flex-direction: column; padding: 16px; gap: 14px; }
-.pay-head { display: flex; align-items: center; gap: 16px; }
-.pay-due { margin-left: auto; font-size: 20px; }
-.pay-due b { font-size: 26px; color: #c9a227; }
-.pay-ways { display: flex; gap: 8px; flex-wrap: wrap; }
-.pay-ways button.on { background: #2d4a2d; border-color: #c9a227; }
-.pay-in { display: flex; flex-direction: column; gap: 6px; }
-.pay-in label { color: #999; font-size: 14px; }
-.pay-in input {
-  width: min(320px, 90vw); padding: 14px 18px; font-size: 30px;
-  background: #1e1e1e; border: 1px solid #333; border-radius: 10px; color: #e8e8e8;
-  font-variant-numeric: tabular-nums;
+/* ═══ ВЕРХНЯЯ СТРОКА ══════════════════════════════════════════════ */
+.top {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 60px; padding: 8px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--hair);
 }
-.pay-notes { display: flex; gap: 8px; flex-wrap: wrap; }
-.pay-notes .exact { background: #2d4a2d; }
-.pay-change { font-size: 22px; }
-.pay-change .lbl { color: #999; margin-right: 10px; font-size: 16px; }
-.pay-change b { font-size: 34px; color: #7ec97e; font-variant-numeric: tabular-nums; }
-.pay-err { min-height: 22px; color: #e06c6c; font-size: 16px; }
+.top-where { min-width: 0; }
+.top-where b { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.top-where small { display: block; color: var(--dim); font-size: 12px; letter-spacing: .04em; }
+.top-who { display: flex; align-items: center; gap: 8px;
+           font-size: 15px; font-weight: 600; color: var(--ink);
+           background: var(--raised); border: 1px solid var(--hair);
+           padding: 7px 14px; border-radius: 999px; }
+.top-who::before { content: ''; width: 8px; height: 8px; border-radius: 50%;
+                   background: var(--gold); }
+.top-who:empty { display: none; }
+.top-clock { margin-left: auto; font-size: 18px; font-weight: 600; color: var(--mut); }
+.top-net { font-size: 13.5px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
+           display: flex; align-items: center; gap: 8px; }
+.top-net::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.top-net.up { color: oklch(0.8 0.13 152); background: var(--green-soft); }
+.top-net.down { color: var(--warn); background: var(--warn-soft); }
+.top button { min-height: 44px; background: var(--raised); border: 1px solid var(--hair);
+              box-shadow: none; color: var(--mut); font-size: 15px; border-radius: 10px; }
 
-/* ── ПОСЛЕ ОПЛАТЫ ──────────────────────────────────────────────── */
-#paid, #lock {
-  position: fixed; inset: 0; z-index: 450;
-  background: rgba(12, 14, 12, .97);
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
+/* ═══ ЭКРАН ПРОДАЖИ ═══════════════════════════════════════════════
+   Слева товары, справа чек: правая рука кассира — сканер и деньги,
+   правый край экрана — то, за что платит покупатель. */
+.sale { flex: 1; min-height: 0;
+        display: grid; grid-template-columns: 1fr clamp(380px, 34vw, 470px);
+        gap: 14px; padding: 14px; }
+.sale-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+
+.sale-find { display: flex; gap: 8px; }
+.sale-search {
+  flex: 1; width: auto; min-height: 58px; text-align: left; letter-spacing: normal;
+  font-size: 19px; padding-right: 56px;
 }
-.paid-card, .lock-card { text-align: center; max-width: 420px; padding: 20px; }
-.paid-num { font-size: 15px; color: #999; }
-.paid-sum { margin-top: 4px; font-size: 30px; color: #ccc; font-variant-numeric: tabular-nums; }
-.paid-label { margin-top: 22px; font-size: 17px; color: #9ec49e; }
-/* СДАЧА КРУПНЕЕ ВСЕГО: её называют вслух, и ошибка тут дороже всего. */
-.paid-hero {
-  font-size: 76px; font-weight: 700; color: #7ec97e; line-height: 1.05;
-  font-variant-numeric: tabular-nums;
+.sale-search::placeholder { font-size: 17px; }
+.sale-findwrap { position: relative; flex: 1; display: flex; }
+.sale-clear {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  min-height: 44px; min-width: 44px; padding: 0; font-size: 20px;
+  background: var(--raised); border-color: transparent; color: var(--mut);
+  border-radius: 8px;
 }
-.paid-words { margin-top: 6px; font-size: 15px; color: #9ec49e; }
-.paid-warn {
-  margin-top: 18px; padding: 12px; border-radius: 10px;
-  background: #4a3d2d; border: 1px solid #5f4f3a; font-size: 15px; line-height: 1.5;
+.sale-kbd { min-width: 62px; font-size: 15px; color: var(--mut); background: var(--panel); }
+.sale-kbd.on { color: var(--gold); border-color: var(--gold); }
+
+.sale-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.sale-tabs button {
+  min-height: 46px; padding: 0 18px; font-size: 15.5px;
+  border-radius: 999px; background: var(--panel); box-shadow: none;
 }
-.paid-hint { margin-top: 26px; font-size: 13px; color: #666; }
+.sale-tabs button.on {
+  background: var(--gold-soft); border-color: var(--gold);
+  color: var(--gold); font-weight: 700;
+}
 
-/* ── ЗАМОК ─────────────────────────────────────────────────────── */
-#lock { cursor: default; }
-.lock-title { font-size: 24px; font-weight: 600; }
-.lock-who { margin-top: 6px; font-size: 17px; color: #c9a227; }
-.lock-hint { margin-top: 10px; font-size: 14px; color: #999; line-height: 1.5; }
-.lock-card .dots { justify-content: center; margin: 18px 0 8px; }
-.lock-card .keypad { margin: 10px auto 0; }
-
-/* ═══ ЭКРАН ПРОДАЖИ ════════════════════════════════════════════════
-   Слева товары, справа чек. Кассир смотрит вправо: там то, за что
-   платит покупатель. Чек занимает треть — меньше нельзя, названия
-   длинные. */
-.sale { display: grid; grid-template-columns: 1fr 380px; gap: 12px;
-        height: 100%; padding: 12px; }
-.sale-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.sale-search { width: 100%; text-align: left; letter-spacing: normal; font-size: 17px; }
-.sale-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-.sale-tabs button { min-height: 44px; padding: 0 14px; font-size: 15px; }
-.sale-tabs button.on { background: #2d4a2d; border-color: #c9a227; }
-
-/* ТОВАРЫ СТРОКАМИ ВО ВСЮ ШИРИНУ, а не плитками.
- *
- * Было: плитки по 150 точек в три-четыре столбца, название 15 точек.
- * Длинное название обрезалось — «Хлеб «Тандыр» бездрожжевой с
- * семенами» превращался в «Хлеб «Тандыр» безд…», и кассир не отличал
- * его от соседнего сорта.
- *
- * А кассиру с плохим зрением 15 точек мелко: он наклоняется к экрану,
- * и очередь ждёт.
- *
- * Строка во всю ширину: название ЦЕЛИКОМ и крупно, цена справа
- * столбиком — глаз идёт по одной линии. */
-.sale-goods { display: flex; flex-direction: column; gap: 6px;
-              overflow-y: auto; align-content: start; flex: 1; }
-
+/* ТОВАРЫ СТРОКАМИ ВО ВСЮ ШИРИНУ — выстраданное решение прежнего
+   облика, оставлено: название читается ЦЕЛИКОМ, два сорта хлеба
+   различимы, 22 точки видно через стол не наклоняясь. */
+.sale-goods { display: flex; flex-direction: column; gap: 7px;
+              overflow-y: auto; overflow-x: hidden; flex: 1; padding-right: 2px; }
 .good {
   display: grid; grid-template-columns: 1fr auto; align-items: center;
-  gap: 4px 14px; width: 100%;
-  /* Палец, а не мышь: 72 точки — кассир бьёт не глядя. */
-  min-height: 72px; padding: 10px 16px; text-align: left;
+  gap: 4px 16px; width: 100%;
+  min-height: 76px; padding: 12px 18px; text-align: left;
+  background: var(--panel); box-shadow: none; border-color: var(--hair);
+  border-radius: var(--r-md);
 }
-.good-name {
-  /* 21 точка: читается через стол, не наклоняясь. */
-  font-size: 21px; line-height: 1.25;
-  /* Длинное имя ПЕРЕНОСИТСЯ, а не режется: два сорта хлеба должны
-     отличаться. */
-  white-space: normal; overflow-wrap: anywhere;
-}
-.good-price {
-  font-size: 24px; color: #c9a227; font-variant-numeric: tabular-nums;
-  white-space: nowrap; justify-self: end;
-}
-.good-mark {
-  grid-column: 1 / -1; font-size: 13px; color: #e0a86c; margin-top: -2px;
-}
-.sale-empty { grid-column: 1/-1; padding: 30px; text-align: center;
-              color: #888; font-size: 15px; line-height: 1.6; }
+.good:active { background: var(--raised); }
+.good-name { font-size: 22px; font-weight: 400; line-height: 1.28;
+             white-space: normal; overflow-wrap: anywhere; }
+.good-price { font-size: 24px; font-weight: 700; color: var(--gold);
+              white-space: nowrap; justify-self: end; }
+.good-price small { font-size: 14px; font-weight: 600; color: var(--gold-dim); }
+.good-tags { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 2px; }
+.good-tags:empty { display: none; }
+.tag { font-size: 12px; font-weight: 700; letter-spacing: .05em;
+       padding: 3px 9px; border-radius: 999px; }
+.tag-mark { color: var(--warn); background: var(--warn-soft); }
+.tag-kg { color: var(--mut); background: var(--raised); }
+/* старый значок из прежней разметки — тот же вид */
+.good-mark { grid-column: 1 / -1; font-size: 12px; font-weight: 700; letter-spacing: .05em;
+             color: var(--warn); }
 
-/* ── ЧЕК ─────────────────────────────────────────────────────────── */
+.sale-empty { padding: 48px 24px; text-align: center;
+              color: var(--mut); font-size: 16px; line-height: 1.7; }
+.sale-empty::before { content: '⌕'; display: block; font-size: 44px; color: var(--dim);
+                      margin-bottom: 8px; }
+
+/* ── ЧЕК ───────────────────────────────────────────────────────── */
 .sale-right { display: flex; flex-direction: column; gap: 10px; min-height: 0;
-              background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 12px; }
-.sale-cart { flex: 1; overflow-y: auto; }
-.cart-empty { padding: 40px 12px; text-align: center; color: #666; line-height: 1.7; }
-.cart-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
-            padding: 10px 0; border-bottom: 1px solid #262626; }
-.cart-name { font-size: 15px; line-height: 1.3; }
-.cart-mark { font-style: normal; font-size: 11px; color: #e0a86c; margin-left: 6px; }
-.cart-qty { display: flex; align-items: center; gap: 6px; }
-.cart-qty button { min-height: 40px; min-width: 40px; padding: 0; font-size: 20px; }
-.cart-qty span { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
-.cart-sum { text-align: right; font-size: 17px; font-variant-numeric: tabular-nums;
-            align-self: center; }
-.cart-disc { display: block; font-style: normal; font-size: 12px; color: #e0a86c; }
+              background: var(--panel); border: 1px solid var(--hair);
+              border-radius: var(--r-lg); padding: 14px;
+              box-shadow: var(--shadow-md), var(--edge); }
+.cart-head { display: flex; justify-content: space-between; align-items: baseline;
+             color: var(--dim); font-size: 13px; letter-spacing: .08em; font-weight: 700; }
+.sale-cart { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.cart-empty { padding: 46px 12px; text-align: center; color: var(--dim);
+              line-height: 1.7; font-size: 15px; }
+.cart-empty::before { content: ''; display: block; width: 44px; height: 30px; margin: 0 auto 14px;
+                      border: 2.5px solid var(--dim); border-radius: 6px 6px 10px 10px;
+                      border-top-width: 8px; opacity: .6; }
 
-.sale-total { display: flex; justify-content: space-between; align-items: baseline;
-              padding-top: 10px; border-top: 2px solid #333; }
-.sale-total span { color: #999; font-size: 15px; }
-.sale-total b { font-size: 30px; color: #c9a227; font-variant-numeric: tabular-nums; }
-.sale-right .big { width: 100%; }
+.cart-row { display: grid; grid-template-columns: 1fr auto; align-items: center;
+            gap: 6px 12px; padding: 12px 2px; border-bottom: 1px solid var(--hair); }
+.cart-name { grid-column: 1 / -1; font-size: 16.5px; line-height: 1.35;
+             overflow-wrap: anywhere; }
+.cart-mark { font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+             color: var(--warn); background: var(--warn-soft);
+             padding: 2px 8px; border-radius: 999px; margin-left: 8px; white-space: nowrap; }
+.cart-qty { display: flex; align-items: center; gap: 8px; }
+.cart-qty button { min-height: 50px; min-width: 50px; padding: 0; font-size: 24px;
+                   border-radius: 10px; background: var(--raised); box-shadow: none; }
+.cart-qty span { min-width: 54px; text-align: center; font-size: 18px; font-weight: 600; }
+.cart-sum { text-align: right; font-size: 19px; font-weight: 700; align-self: center; }
+.cart-disc { display: block; font-style: normal; font-size: 12.5px; font-weight: 600;
+             color: var(--warn); }
 
-/* Полоса марок: кассир видит состояние, не считая строки глазами. */
-.sale-marks { padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; }
-.sale-marks.need { background: #4a3d2d; border: 1px solid #5f4f3a; }
-.sale-marks.ok { background: #2d4a2d; border: 1px solid #3a5f3a; }
-.sale-marks b { display: block; font-size: 14px; }
-.sale-marks small { color: #bbb; }
+.sale-sums { display: flex; flex-direction: column; gap: 4px;
+             padding-top: 12px; border-top: 2px solid var(--line); }
+.sale-disc { display: flex; justify-content: space-between; color: var(--warn);
+             font-size: 15px; font-weight: 600; }
+.sale-total { display: flex; justify-content: space-between; align-items: baseline; }
+.sale-total span { color: var(--mut); font-size: 15px; letter-spacing: .08em; font-weight: 700; }
+.sale-total b { font-size: 40px; font-weight: 700; color: var(--gold); line-height: 1.1; }
 
-/* ═══ ВЕРХНЯЯ СТРОКА ═══════════════════════════════════════════════
-   Где мы, кто за кассой, жива ли связь. Кассир видит это, не отрывая
-   рук от товара. */
-.top { display: flex; align-items: center; gap: 12px; padding: 8px 12px;
-       background: #1a1a1a; border-bottom: 1px solid #2a2a2a; }
-.top-where b { font-size: 15px; }
-.top-where small { display: block; color: #888; font-size: 12px; }
-.top-who { color: #c9a227; font-size: 15px; }
-.top-net { margin-left: auto; font-size: 13px; padding: 5px 10px; border-radius: 8px; }
-.top-net.up { color: #7ec97e; background: #1e2a1e; }
-/* Связь пропала — видно издалека: кассир бьёт чеки, а они копятся. */
-.top-net.down { color: #e0a86c; background: #2a231e; }
-.top button { min-height: 40px; }
+.sale-acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sale-acts button { min-height: 58px; font-size: 15px; padding: 0 6px; box-shadow: none;
+                    background: var(--raised); }
+.sale-acts button.bad { background: linear-gradient(180deg, oklch(0.33 0.08 26), var(--red-deep)); }
 
-/* ═══ МЕНЮ ═════════════════════════════════════════════════════════
-   Разделами, а не кучей: кассир ищет глазами. Каждая строка объясняет
-   себя — иначе он не решится нажать. */
-.menu { display: flex; flex-direction: column; gap: 16px; }
-.menu-group { display: flex; flex-direction: column; gap: 4px; }
-.menu-title { color: #c9a227; font-size: 13px; letter-spacing: .04em; padding-left: 2px; }
-.menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-             text-align: left; min-height: 58px; padding: 8px 14px; }
-.menu-name { font-size: 16px; }
-.menu-hint { font-size: 12px; color: #888; line-height: 1.35; }
-.menu-item:disabled .menu-hint { color: #666; }
+/* ОПЛАТА НЕСЁТ ИТОГ НА СЕБЕ: один взгляд — сумма, одно движение —
+   оплата. Самая большая кнопка кассы. */
+.paybtn { width: 100%; min-height: 92px; border-radius: 16px;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 0 26px; }
+.paybtn .paybtn-word { font-size: 23px; font-weight: 800; letter-spacing: .1em; }
+.paybtn .paybtn-sum { font-size: 32px; font-weight: 800; }
+.paybtn:disabled { background: var(--raised); color: var(--dim); border-color: var(--hair);
+                   box-shadow: none; }
 
-/* Кнопки при покупателе: скидка, отложить, очистить. */
-.sale-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.sale-acts button { min-height: 48px; font-size: 14px; padding: 0 6px; }
+/* Полоса марок: состояние видно, не считая строк глазами. */
+.sale-marks { padding: 12px 14px; border-radius: var(--r-md);
+              font-size: 13.5px; line-height: 1.45; }
+.sale-marks b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.sale-marks b::before { content: ''; width: 9px; height: 9px; border-radius: 50%;
+                        background: currentColor; }
+.sale-marks small { color: var(--mut); }
+.sale-marks.need { background: var(--warn-soft); border: 1px solid oklch(0.5 0.09 75);
+                   color: var(--warn); }
+.sale-marks.ok { background: var(--green-soft); border: 1px solid oklch(0.45 0.1 152);
+                 color: oklch(0.8 0.13 152); }
 
-/* Верхняя строка живёт над экраном и не пересобирается вместе с ним. */
-#topbar { flex: 0 0 auto; }
-#app { flex: 1; min-height: 0; }
-body { display: flex; flex-direction: column; }
+/* ═══ МЕНЮ ════════════════════════════════════════════════════════ */
+.menu { display: flex; flex-direction: column; gap: 18px; }
+.menu-full { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+             gap: 20px; align-items: start; }
+.menu-group { display: flex; flex-direction: column; gap: 6px; }
+.menu-title { color: var(--gold); font-size: 13px; font-weight: 700;
+              letter-spacing: .12em; text-transform: uppercase; padding-left: 4px; }
+/* Кнопка-строка размечена блоками, а не флексом: имя в две строки не
+   наезжает на подпись ни в одном движке отрисовки. */
+.menu-item { display: block; text-align: left; min-height: 64px; padding: 11px 16px;
+             background: var(--raised); box-shadow: none; border-color: var(--hair);
+             line-height: 1.3; }
+.menu-item:active { background: var(--raised2); }
+.menu-name { display: block; font-size: 16.5px; font-weight: 600; }
+.menu-hint { display: block; font-size: 12.5px; font-weight: 400; color: var(--mut);
+             line-height: 1.35; margin-top: 3px; }
+/* Гашёная кнопка честнее пропавшей: видно, что дело есть. */
+.menu-item:disabled { opacity: .45; }
+.menu-item:disabled .menu-hint { color: var(--dim); }
 
-/* Отвязать кассу — дело редкое и опасное: кнопка неяркая, но она
-   есть. Без неё касса, вставшая на вводе кода, лечилась только
-   поиском файлов в системе. */
-button.dim { color: #666; font-size: 13px; min-height: 34px; }
-button.dim:active { color: #999; }
+/* ═══ ОПЛАТА ══════════════════════════════════════════════════════ */
+.pay { flex: 1; min-height: 0; display: flex; flex-direction: column;
+       padding: 16px 18px; gap: 14px; max-width: 1500px; width: 100%; margin: 0 auto; }
+.pay-head { display: flex; align-items: center; gap: 16px; }
+.pay-head .ghost { font-size: 17px; min-height: 52px; background: var(--raised);
+                   border-radius: 10px; padding: 0 18px; }
+.pay-due { margin-left: auto; display: flex; align-items: baseline; gap: 14px; }
+.pay-due span { color: var(--mut); font-size: 17px; }
+.pay-due b { font-size: 46px; font-weight: 800; color: var(--gold); line-height: 1; }
 
-/* ═══ СКОЛЬКО СТОИТ ════════════════════════════════════════════════
-   Цену спрашивают при покупателе, и он ждёт у прилавка. Крупно:
-   кассир читает её через стол, не наклоняясь. */
-.pc-empty { padding: 30px; text-align: center; color: #666; font-size: 15px; }
-.pc-bad { padding: 20px; text-align: center; color: #e0a86c; font-size: 15px; line-height: 1.5; }
-.pc-good { padding: 20px; text-align: center; }
-.pc-name { font-size: 18px; color: #ccc; line-height: 1.3; }
-.pc-price { font-size: 52px; font-weight: 700; color: #c9a227;
-            font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 6px; }
-.pc-note { margin-top: 8px; font-size: 14px; color: #9ec49e; }
+.pay-grid { flex: 1; min-height: 0; display: grid;
+            grid-template-columns: clamp(240px, 24vw, 320px) 1fr; gap: 16px;
+            align-content: start; overflow-y: auto; }
+.pay-ways { display: flex; flex-direction: column; gap: 10px; }
+.pay-ways button {
+  min-height: 80px; text-align: left; padding: 12px 20px; font-size: 19px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 3px; background: var(--panel); box-shadow: none; border-color: var(--hair);
+}
+.pay-ways button small { font-size: 13px; font-weight: 400; color: var(--dim); }
+.pay-ways button.on { border-color: var(--gold); border-width: 2px;
+                      background: var(--gold-soft); color: var(--ink); font-weight: 700; }
+.pay-ways button.on small { color: var(--gold); }
 
-/* ═══ ВОЗРАСТ ══════════════════════════════════════════════════════
-   Год рождения крупно: кассир читает его через стол и сверяет с
-   документом, не вычитая в уме при очереди. */
-.age-what { text-align: center; font-size: 17px; color: #e0a86c; }
-.age-year {
-  text-align: center; font-size: 64px; font-weight: 700; color: #c9a227;
-  font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0;
+.pay-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* Купюры: одно касание — принято и посчитано. Сдача написана ЗАРАНЕЕ,
+   до нажатия: кассир видит последствие, а не угадывает.
+   ОТСТУП МЕЖДУ НИМИ БОЛЬШЕ ОБЫЧНОГО (18): касание платит сразу, и
+   промах по соседней купюре — это неверная сумма в чеке. Разводим
+   руками, а не подтверждением: подтверждение съело бы весь выигрыш. */
+.tender { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+.tender button { min-height: 96px; border-radius: 14px;
+                 display: flex; flex-direction: column; align-items: center;
+                 justify-content: center; gap: 3px; }
+.tender .t-sum { font-size: 28px; font-weight: 800; }
+.tender .t-sub { font-size: 14px; font-weight: 500; color: var(--mut); }
+.tender button.exact { background: linear-gradient(180deg, var(--green-hi), var(--green));
+                       border-color: oklch(0.62 0.14 152); color: var(--green-ink); }
+.tender button.exact .t-sub { color: oklch(0.32 0.07 152); }
+
+.pay-row { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
+.pay-in { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pay-in label { color: var(--mut); font-size: 14px; letter-spacing: .04em; }
+.pay-in input {
+  width: 100%; min-height: 78px; padding: 10px 18px;
+  font: inherit; font-size: 40px; font-weight: 700; text-align: center;
+  background: oklch(0.145 0.012 255); border: 2px solid var(--line);
+  border-radius: var(--r-md); color: var(--ink); caret-color: var(--gold);
+}
+.pay-in input:focus { outline: none; border-color: var(--gold);
+                      box-shadow: 0 0 0 4px var(--gold-soft); }
+.pay-pad { width: clamp(240px, 26vw, 330px); }
+
+.pay-change { min-height: 56px; display: flex; align-items: baseline; gap: 14px; }
+.pay-change .lbl { color: var(--mut); font-size: 17px; }
+.pay-change b { font-size: 46px; font-weight: 800; color: oklch(0.8 0.14 152); }
+.pay-err { min-height: 26px; color: var(--red); font-size: 18px; font-weight: 700; }
+.pay-note { color: var(--mut); font-size: 15px; line-height: 1.5; }
+
+.pay-go { width: 100%; min-height: 88px; border-radius: 16px; font-size: 24px; }
+
+/* Кнопки-подсказки в окнах (скидка 5/10/15, размены) */
+.pay-notes { display: flex; gap: 8px; flex-wrap: wrap; }
+.pay-notes button { min-height: 56px; font-size: 17px; background: var(--raised);
+                    box-shadow: none; border-radius: 10px; }
+.pay-notes .exact { background: var(--green-soft); border-color: oklch(0.45 0.1 152);
+                    color: oklch(0.82 0.13 152); }
+
+/* ═══ ПОСЛЕ ОПЛАТЫ И ЗАМОК ════════════════════════════════════════ */
+#paid, #lock {
+  position: fixed; inset: 0; z-index: 480;
+  display: flex; align-items: center; justify-content: center;
+}
+#paid { background: oklch(0.13 0.02 152 / .985); cursor: pointer; }
+#lock { background: oklch(0.11 0.014 255 / .97); backdrop-filter: blur(14px); z-index: 490; }
+
+.paid-card { text-align: center; max-width: min(900px, 96vw); padding: 24px;
+             position: relative; }
+.paid-num { font-size: 16px; color: var(--mut); letter-spacing: .04em; }
+/* ДАЛИ / ИТОГ — на виду: промах по соседней купюре виден в ту же
+   секунду, пока деньги ещё в руке, а не при сверке ящика вечером. */
+.paid-sum { margin-top: 8px; font-size: 30px; font-weight: 600; color: var(--ink); }
+.paid-sum i { font-style: normal; color: var(--dim); margin: 0 10px; }
+.paid-label { margin-top: 26px; font-size: 21px; font-weight: 700; letter-spacing: .22em;
+              text-transform: uppercase; color: oklch(0.78 0.12 152); }
+/* СДАЧА — САМОЕ КРУПНОЕ НА КАССЕ: её называют вслух через прилавок,
+   и ошибка в ней дороже всего. */
+.paid-hero { font-size: clamp(84px, 13vw, 176px); font-weight: 800; color: var(--gold);
+             line-height: 1.04; letter-spacing: -.01em; white-space: nowrap;
+             text-shadow: 0 10px 60px oklch(0.84 0.125 88 / .18); }
+.paid-words { margin-top: 10px; font-size: 21px; color: var(--gold-dim); }
+.paid-warn { margin-top: 24px; padding: 16px 20px; border-radius: var(--r-md);
+             background: var(--warn-soft); border: 1px solid oklch(0.5 0.09 75);
+             color: var(--warn); font-size: 17px; font-weight: 600; line-height: 1.5; }
+.paid-hint { margin-top: 30px; font-size: 14px; color: var(--dim); }
+/* Полоса-отсчёт: видно, что экран уйдёт сам. */
+.paid-hold { position: fixed; left: 0; bottom: 0; height: 5px; width: 100%;
+             background: var(--gold); opacity: .75;
+             animation: paidhold linear forwards; }
+@keyframes paidhold { to { width: 0; } }
+
+.lock-card { text-align: center; max-width: 460px; padding: 24px; }
+.lock-title { font-size: 30px; font-weight: 700; }
+.lock-who { margin-top: 8px; font-size: 18px; color: var(--gold); font-weight: 600; }
+.lock-hint { margin-top: 10px; font-size: 15px; color: var(--mut); line-height: 1.5; }
+.lock-card .dots { justify-content: center; margin: 20px 0 10px; }
+.lock-card .keypad { margin: 12px auto 0; }
+
+/* ═══ СКОЛЬКО СТОИТ ═══════════════════════════════════════════════ */
+.pc-empty { padding: 36px; text-align: center; color: var(--dim); font-size: 16px; }
+.pc-bad { padding: 24px; text-align: center; color: var(--warn); font-size: 16px;
+          line-height: 1.55; background: var(--warn-soft); border-radius: var(--r-md); }
+.pc-good { padding: 24px 20px; text-align: center; }
+.pc-name { font-size: 20px; color: var(--ink); line-height: 1.35; }
+.pc-price { font-size: 64px; font-weight: 800; color: var(--gold);
+            line-height: 1.1; margin-top: 8px; }
+.pc-note { margin-top: 10px; font-size: 17px; color: oklch(0.8 0.13 152); }
+
+/* ═══ ВОЗРАСТ ═════════════════════════════════════════════════════ */
+.age-what { text-align: center; font-size: 18px; font-weight: 600; color: var(--warn); }
+.age-year { text-align: center; font-size: 84px; font-weight: 800; color: var(--gold);
+            line-height: 1.05; margin: 6px 0; }
+
+/* ═══ МЫШЬ И УЗКИЕ ЭКРАНЫ ═════════════════════════════════════════
+   Один облик на планшет и монитор. Мышь точнее пальца — плотность
+   выше; касание — цели крупнее. */
+@media (pointer: fine) {
+  button { min-height: 48px; }
+  .good { min-height: 64px; }
+  .good-name { font-size: 20px; }
+  .cart-qty button { min-height: 42px; min-width: 42px; }
+  .sale-tabs button { min-height: 40px; }
+  .sale-acts button { min-height: 50px; }
+  .paybtn { min-height: 82px; }
+  .keypad button { min-height: 72px; }
+  button:hover:not(:disabled) { border-color: var(--line); filter: brightness(1.12); }
+  button.ghost:hover { filter: none; background: var(--raised); }
+  .good:hover { border-color: var(--gold-dim); }
+  .menu-item:hover:not(:disabled) { border-color: var(--gold-dim); }
+}
+
+@media (max-width: 1180px) {
+  .sale { grid-template-columns: 1fr clamp(340px, 38vw, 400px); gap: 10px; padding: 10px; }
+  .good-name { font-size: 20px; }
+  .pay-grid { grid-template-columns: 1fr; }
+  .pay-ways { flex-direction: row; flex-wrap: wrap; }
+  .pay-ways button { flex: 1 1 200px; min-height: 64px; }
+  .pay-due b { font-size: 38px; }
+  .top-clock { display: none; }
 }
