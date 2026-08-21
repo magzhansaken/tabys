@@ -1156,6 +1156,11 @@ const RULES = [
   { file: 'server/src/platform/platform.module.ts', must: 'RETURNING id`,',
     why: 'Правка кода кассира молчала при защите строк: выдавался код, которым не войти' },
 
+  { file: 'db/migrations/112_demo_goods_marked.sql', must: 'УЧЕБНЫЙ ТОВАР ПОМЕЧЕН',
+    why: 'Без пометки кассир пробьёт учебный «Хлеб» с выдуманной ценой, и покупатель заплатит не ту сумму' },
+  { file: 'admin/app/platform/ui/NewTenant.tsx', must: 'ГАЛКА СНЯТА ПО УМОЛЧАНИЮ',
+    why: 'Учебные товары уходили в КАЖДЫЙ магазин: владелец думал, что система нашла их сама' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

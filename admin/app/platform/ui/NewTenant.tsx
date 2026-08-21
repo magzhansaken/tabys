@@ -29,7 +29,12 @@ export function NewTenant({ isSuper, partners, onDone }: {
   const card = useSheet(() => onDone(false));
   const [f, setF] = useState<any>({
     // Цена не по прайсу и учебные товары — как у Дастархана.
-    ownPrice: false, planPrice: '', withDemo: true,
+    /* ГАЛКА СНЯТА ПО УМОЛЧАНИЮ. Стояла заранее — и учебные товары
+       уходили В КАЖДЫЙ магазин. Владелец открывал кабинет, видел
+       двенадцать товаров, которых у него нет, и думал, что система
+       нашла их сама. А кассир пробивал «Хлеб» с выдуманной ценой.
+       Учебные товары нужны для ПОКАЗА, а не для каждого клиента. */
+    ownPrice: false, planPrice: '', withDemo: false,
     name: '', ownerName: '', ownerPhone: '', city: '',
     tier: 'base', partnerId: '', trialDays: '14', ownerEmail: '',
   });
