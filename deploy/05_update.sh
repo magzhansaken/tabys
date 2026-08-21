@@ -37,6 +37,13 @@ cp -r "$SRC"/shared "$DST"/ 2>/dev/null || true
 # Раньше не копировались вовсе — папка была в проекте, но на сервер
 # не доезжала, и запустить их было нечем.
 cp -r "$SRC"/scripts "$DST"/ 2>/dev/null || true
+
+# ИСХОДНИК КАССЫ. Сам установщик собирается на Windows, а сюда кладём
+# код: при разборе беды видно, что вправду стоит у клиента, и сторожа
+# могут проверить его прямо на сервере.
+rm -rf "$DST"/pos2
+cp -r "$SRC"/pos2 "$DST"/ 2>/dev/null || true
+rm -rf "$DST"/pos2/node_modules "$DST"/pos2/dist 2>/dev/null || true
 # скрипты и compose обновляем, .env оставляем как есть
 for f in "$SRC"/deploy/*.sh "$SRC"/deploy/docker-compose*.yml; do cp "$f" "$DST"/deploy/; done
 echo "· код обновлён, .env сохранён"
