@@ -47,8 +47,14 @@ export default function Requests({ me }: { me: Me }) {
 
   /** Решение по заявке. Одобрение САМО выполняет действие. */
   const decide = async (r: any, yes: boolean) => {
+    /* ЗАЯВКА НА НОВОГО КЛИЕНТА — предпросмотра НЕТ и быть не может: он
+       считает, как правка изменит счёт магазина, а магазина ещё нет.
+       Без этой оговорки владелец платформы нажал бы «одобрить» и
+       получил ошибку — а решить не смог бы вовсе. */
+    const isNewTenant = r.kind === 'new_tenant';
+
     let pv: any = null;
-    if (yes) {
+    if (yes && !isNewTenant) {
       try { pv = await api(`/requests/${r.id}/preview`); }
       catch (e: any) { toast({ text: humanError(e), kind: 'err' }); return; }
     }
@@ -58,11 +64,14 @@ export default function Requests({ me }: { me: Me }) {
 
     const answer = await ask(yes ? {
       title: 'Одобрить заявку',
-      sub: isDevice
-        ? 'Предел вырастет, и цена уйдёт в ежемесячный счёт клиента.'
-        : 'Решение вступит в силу сразу после подтверждения.',
+      sub: isNewTenant
+        ? 'Магазин будет заведён и записан на партнёра. '
+          + 'Пароль владельцу покажется один раз — запишите его.'
+        : isDevice
+          ? 'Предел вырастет, и цена уйдёт в ежемесячный счёт клиента.'
+          : 'Решение вступит в силу сразу после подтверждения.',
       effects: [
-        ['Магазин', r.client],
+        [isNewTenant ? 'Просят завести' : 'Магазин', r.client],
         ['Просят', describeRequest(r.kind, r.payload)],
         ['Просил', r.author ?? '—'],
         ['Что произойдёт', pv?.effect ?? '—'],

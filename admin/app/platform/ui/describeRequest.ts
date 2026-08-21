@@ -21,6 +21,23 @@ export function describeRequest(kind: string, payload: any): string {
     return `Сменить тариф на ${name}`;
   }
 
+  if (kind === 'new_tenant') {
+    /* ЗАЯВКА НА НОВОГО КЛИЕНТА. Без этой строки владелец платформы
+       видел бы «Прочее» и не понимал, что от него хотят.
+
+       Название и телефон прямо здесь: решать надо по ним, а магазина
+       ещё нет — открыть карточку и посмотреть негде. */
+    const имя = String(p.name ?? '').trim() || 'без названия';
+    const тел = String(p.ownerPhone ?? '').trim();
+    const хозяин = String(p.ownerName ?? '').trim();
+    const срок = Number(p.trialDays) || 14;
+
+    return `Завести магазин «${имя}»`
+      + (хозяин ? ` · владелец ${хозяин}` : '')
+      + (тел ? ` · ${тел}` : '')
+      + ` · пробный период ${срок} дн.`;
+  }
+
   if (kind === 'grace') {
     const d = Number(p.days) || 7;
     return `Продлить срок на ${d} дн. без оплаты`;

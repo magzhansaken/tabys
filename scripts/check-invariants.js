@@ -1110,6 +1110,17 @@ const RULES = [
   { file: 'pos2/renderer/app.js', must: 'ПРОВЕРКА ЦЕНЫ ОТКРЫТА',
     why: 'Без неё товар падает в чек, и убирать его надо через старшего — десять раз за смену' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'ПАРТНЁР НЕ ЗАВОДИТ МАГАЗИН САМ',
+    why: 'Иначе никто не видит, сколько магазинов он завёл: можно завести десять пустых' },
+  { file: 'server/src/platform/platform.module.ts', must: 'ДУБЛЬ ЗАЯВКИ',
+    why: 'Две одинаковые заявки — магазин заведётся дважды, а телефон у него один' },
+  { file: 'server/src/platform/platform.module.ts', must: 'ОТОЗВАТЬ СВОЮ ЗАЯВКУ',
+    why: 'Партнёр передумал — без отзыва заявка висит вечно, и владелец разбирает мусор' },
+  { file: 'admin/app/platform/ui/NewTenant.tsx', must: 'У ПАРТНЁРА ЭТО ЗАЯВКА',
+    why: 'Показать пустой пароль значит обмануть: он продиктует клиенту пустоту' },
+  { file: 'admin/app/platform/ui/describeRequest.ts', must: 'new_tenant',
+    why: 'Без этого владелец платформы видит «Прочее» и не понимает, что от него хотят' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

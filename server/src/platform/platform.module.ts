@@ -999,6 +999,44 @@ export class PlatformService {
     if (!approve && !note?.trim())
       throw new BadRequestException('Напишите причину отказа — партнёр должен понять, что не так');
 
+    /* ЗАЯВКА НА НОВЫЙ МАГАЗИН — особый случай: одобрение его ЗАВОДИТ.
+     * Остальные заявки правят уже существующий магазин, а эта создаёт:
+     * свёртка базы такого не умеет. */
+    const заявка = (await this.q(
+      `SELECT kind, payload, created_by, status FROM tenant_request WHERE id=$1`,
+      [id])).rows[0];
+
+    if (заявка && заявка.kind === 'new_tenant') {
+      if (заявка.status !== 'pending') {
+        throw new BadRequestException('Эта заявка уже решена');
+      }
+
+      if (!approve) {
+        await this.q(
+          `UPDATE tenant_request SET status='rejected', decided_by=$2,
+                  decided_at=now(), decision_note=$3 WHERE id=$1`,
+          [id, ctx.userId, note?.trim() ?? null]);
+        await this.audit(ctx, 'request_rejected', null, { kind: 'new_tenant' });
+        return { ok: true, status: 'rejected' };
+      }
+
+      const p = заявка.payload || {};
+      /* Магазин заводим ОТ ИМЕНИ ПАРТНЁРА, который просил: доля с него
+         идёт ему, и в карточке должно стоять его имя. */
+      const made: any = await this.createTenant(
+        { ...ctx, userId: заявка.created_by, role: 'partner' } as any,
+        { name: p.name, ownerName: p.ownerName, ownerPhone: p.ownerPhone,
+          trialDays: p.trialDays });
+
+      await this.q(
+        `UPDATE tenant_request SET status='approved', decided_by=$2,
+                decided_at=now(), decision_note=$3, account_id=$4 WHERE id=$1`,
+        [id, ctx.userId, note?.trim() ?? null, made.id]);
+
+      await this.audit(ctx, 'request_approved', made.id, { kind: 'new_tenant' });
+      return { ok: true, status: 'approved', tenant: made };
+    }
+
     let r: any;
     try {
       // Цена строки задаётся при одобрении: партнёр мог договориться
@@ -1616,6 +1654,108 @@ export class PlatformService {
    * Дубли ловим по последним десяти цифрам телефона: люди пишут номер
    * то с +7, то с 8. Урок донора, стоил им разбирательств.
    */
+  /**
+   * ЗАЯВКА НА НОВОГО КЛИЕНТА — от партнёра.
+   *
+   * Было: партнёр заводил магазин СРАЗУ, без спроса. Никто не видел,
+   * сколько их и настоящие ли они — можно было завести десять пустых
+   * и показывать как свою работу. Или подключить клиента, который уже
+   * есть у другого партнёра.
+   *
+   * И наоборот: партнёр не мог ПОКАЗАТЬ работу — он завёл клиента, а
+   * сказать об этом некому.
+   *
+   * Теперь заявка ложится в тот же ящик, что и остальные: владелец
+   * платформы видит её и решает.
+   */
+  async requestTenant(ctx: PlatformCtx, d: {
+    name?: string; ownerName?: string; ownerPhone?: string;
+    trialDays?: number; comment?: string;
+  }) {
+    const name = String(d.name ?? '').trim();
+    const phone = String(d.ownerPhone ?? '').trim();
+
+    if (!name) throw new BadRequestException('Укажите название магазина');
+    if (!phone) throw new BadRequestException('Укажите телефон владельца');
+
+    /* ТЕЛЕФОН ПРОВЕРЯЕМ СРАЗУ. Иначе партнёр отправит заявку, будет
+       ждать день, а владелец платформы откажет из-за занятого
+       телефона — и время потеряно у обоих. */
+    /* ЗАЩИТА СТРОК ПРЯЧЕТ МАГАЗИНЫ, пока ни один не выбран: запрос не
+       падает, а МОЛЧИТ — и занятый телефон проходил насквозь.
+       Четвёртый раз эта ловушка за проект. Берём ту же свёртку, что и
+       заведение: она видит все магазины. */
+    /* ДУБЛЬ ЗАЯВКИ. Партнёр отправил дважды — две одинаковые висят, и
+       владелец платформы одобрит обе. Магазин заведётся дважды, а
+       телефон у него один: второе заведение упадёт непонятной
+       ошибкой, и виноватым будет выглядеть владелец. */
+    const уже = (await this.q(
+      `SELECT id, created_at FROM tenant_request
+        WHERE kind = 'new_tenant' AND status = 'pending'
+          AND payload->>'ownerPhone' = $1
+        LIMIT 1`, [phone])).rows[0];
+    if (уже) {
+      throw new BadRequestException(
+        'Заявка на этот телефон уже отправлена и ждёт решения');
+    }
+
+    const занят = (await this.q(
+      `SELECT name FROM platform_find_by_phone($1)`, [phone])).rows[0];
+    if (занят) {
+      throw new BadRequestException(
+        `Такой телефон уже у магазина «${занят.name}» — проверьте, не он ли это`);
+    }
+
+    const r = (await this.q(
+      `INSERT INTO tenant_request (account_id, kind, payload, comment, created_by)
+       VALUES (NULL, 'new_tenant', $1, $2, $3) RETURNING id, kind, status`,
+      [JSON.stringify({
+        name,
+        ownerName: String(d.ownerName ?? '').trim() || null,
+        ownerPhone: phone,
+        trialDays: Number(d.trialDays) || 14,
+      }), d.comment ?? null, ctx.userId])).rows[0];
+
+    await this.audit(ctx, 'tenant_requested', null, { name, phone });
+
+    return {
+      ...r,
+      note: 'Заявка отправлена владельцу платформы. '
+        + 'Магазин появится, когда её одобрят',
+    };
+  }
+
+  /**
+   * ОТОЗВАТЬ СВОЮ ЗАЯВКУ.
+   *
+   * Партнёр передумал: клиент отказался, телефон записал неверно,
+   * магазин оказался чужим. Без отзыва заявка висит вечно, и владелец
+   * платформы разбирает мусор.
+   *
+   * Отзывает только САМ ПОДАВШИЙ и только нерешённую: чужую трогать
+   * нельзя, а решённую отзывать поздно.
+   */
+  async withdrawRequest(ctx: PlatformCtx, id: string) {
+    const r = (await this.q(
+      `SELECT created_by, status, kind FROM tenant_request WHERE id = $1`,
+      [id])).rows[0];
+
+    if (!r) throw new BadRequestException('Заявка не найдена');
+    if (r.status !== 'pending') {
+      throw new BadRequestException('Эта заявка уже решена — отзывать поздно');
+    }
+    if (ctx.role !== 'super' && r.created_by !== ctx.userId) {
+      throw new ForbiddenException('Это не ваша заявка');
+    }
+
+    await this.q(
+      `UPDATE tenant_request SET status = 'withdrawn', decided_at = now(),
+              decided_by = $2 WHERE id = $1`, [id, ctx.userId]);
+
+    await this.audit(ctx, 'request_withdrawn', null, { kind: r.kind });
+    return { ok: true, status: 'withdrawn' };
+  }
+
   async createTenant(ctx: PlatformCtx, d: {
     name: string; ownerName: string; ownerPhone: string; city?: string; trialDays?: number;
     /** Учебный магазин: ему срок не нужен, он не продаётся. */
@@ -2347,6 +2487,12 @@ export class PlatformController {
     return this.svc.createRequest(Pl(r), d);
   }
 
+  @Public() @Post('requests/:id/withdraw')
+  async withdraw(@Req() r: any, @Param('id') id: string) {
+    await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
+    return this.svc.withdrawRequest(Pl(r), id);
+  }
+
   @Public() @Get('requests/:id/preview')
   async requestPreview(@Req() r: any, @Param('id') id: string) {
     await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
@@ -2445,7 +2591,18 @@ export class PlatformController {
   @Public() @Post('tenants')
   async createTenant(@Req() r: any, @Body() d: any) {
     await new PlatformGuard().canActivateAsync({ switchToHttp: () => ({ getRequest: () => r }) } as any);
-    return this.svc.createTenant(Pl(r), d ?? {});
+    const ctx = Pl(r);
+
+    /* ПАРТНЁР НЕ ЗАВОДИТ МАГАЗИН САМ — он шлёт заявку.
+     *
+     * Иначе никто не видит, сколько магазинов он завёл и настоящие ли
+     * они: можно завести десять пустых и показывать как свою работу.
+     *
+     * Адрес один и тот же нарочно: кабинет партнёра и кабинет
+     * владельца платформы жмут одну кнопку, а решает сервер. */
+    if (ctx.role === 'partner') return this.svc.requestTenant(ctx, d ?? {});
+
+    return this.svc.createTenant(ctx, d ?? {});
   }
 
   @Public() @Post('demo')

@@ -82,15 +82,23 @@ const shop = async (name, owner) => {
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: null }, SUPER);
   const partners = (await j('GET', '/platform/partners', null, SUPER))
     .d.rows.filter((p) => !p.isSuperUser);
-  const pid = partners[0].id;
+  /* БЕРЁМ ТОГО ПАРТНЁРА, КЕМ ВОШЛИ.
+     Было partners[0] — первый в списке. Пока партнёр один, это
+     работало. Появился второй — назначение уходит ЧУЖОМУ, и партнёр
+     входит, но своих клиентов не видит. Проверка была хрупкой
+     изначально, просто это не проявлялось. */
+  const мойПартнёр = partners.find((p) => p.email === pmail) || partners[0];
+  const pid = мойПартнёр.id;
   await j('POST', `/platform/clients/${id1}/partner`, { partnerId: pid }, SUPER);
 
   r = await j('GET', '/platform/clients', null, SUPER);
   ok((r.d?.rows ?? []).length >= 2, `★ Владелец платформы видит всех: ${r.d?.rows?.length}`);
 
   r = await j('GET', '/platform/clients', null, PARTNER);
+  if (!(r.d?.rows ?? []).length) console.log('     сервер: ' + JSON.stringify(r.d).slice(0,140));
   ok((r.d?.rows ?? []).length === 1 && r.d.rows[0].id === id1,
-     '★ Партнёр видит ТОЛЬКО своих — чужие обороты и телефоны не его дело');
+     `★ Партнёр видит ТОЛЬКО своих — чужие обороты и телефоны не его дело`
+     + ` (видит ${(r.d?.rows ?? []).length}: ${(r.d?.rows ?? []).map((x) => x.name).join(', ')})`);
 
   // ---------- ОПЛАТА ----------
   r = await j('POST', '/platform/payments',
@@ -160,9 +168,13 @@ const shop = async (name, owner) => {
 
   // ---------- ЗАРАБОТОК ПАРТНЁРА ----------
   r = await j('GET', '/platform/partners', null, SUPER);
+  /* ТА ЖЕ ХРУПКОСТЬ, что и с назначением: onlyP[0] — первый в списке.
+     Пока партнёр был один, работало. Появился второй — и проверка
+     смотрит на ЧУЖОЙ заработок. Ищем по почте: она у каждого своя. */
   const onlyP = r.d.rows.filter((p) => !p.isSuperUser);
-  ok(onlyP[0].earned === 1035, `★ Заработок партнёра за 30 дней: ${onlyP[0].earned} ₸`);
-  ok(onlyP[0].clients === 1, 'Число клиентов партнёра');
+  const я = onlyP.find((p) => p.email === pmail) || onlyP[0];
+  ok(я.earned === 1035, `★ Заработок партнёра за 30 дней: ${я.earned} ₸`);
+  ok(я.clients === 1, `Число клиентов партнёра: ${я.clients}`);
 
   r = await j('GET', '/platform/partners', null, PARTNER);
   ok(r.status === 403, 'Партнёр не видит список партнёров');
@@ -628,7 +640,10 @@ const shop = async (name, owner) => {
     ok(Array.isArray(v.d?.rows) && v.d?.totals,
        `★ Партнёры: ${v.d?.totals?.partners}, привели ${v.d?.totals?.brought} ₸`);
 
-    const p = v.d.rows.filter((x) => !x.isSuperUser)[0];
+    /* Ищем СВОЕГО партнёра по почте. Было [0] — первый в списке: пока
+     партнёр один, работало, а со вторым проверка смотрит на чужого. */
+  const p = v.d.rows.filter((x) => !x.isSuperUser)
+    .find((x) => x.email === pmail) || v.d.rows.filter((x) => !x.isSuperUser)[0];
     // ПРИВЁЛ и ЗАРАБОТАЛ — разные числа, и первое важнее: партнёр с
     // малой комиссией может приносить платформе больше.
     ok(typeof p.brought === 'number' && typeof p.earned === 'number' && p.brought >= p.earned,
@@ -778,12 +793,79 @@ const shop = async (name, owner) => {
   {
     // ЗАВЕДЕНИЕ КЛИЕНТА. Партнёр приезжает, ставит систему и отдаёт
     // вход хозяину. Пароль показан один раз — его диктуют голосом.
+    /* ПРАВИЛО ИЗМЕНИЛОСЬ: партнёр больше НЕ заводит магазин сам — он
+       шлёт заявку, а владелец платформы её одобряет.
+
+       Раньше партнёр заводил магазины без спроса: никто не видел,
+       сколько их и настоящие ли они, а сам он не мог показать
+       работу. */
     let v = await j('POST', '/platform/tenants',
       { name: 'Новый магазин', ownerName: 'Асхат', ownerPhone: '+77013334455',
         city: 'Астана' }, PARTNER);
-    ok(!!v.d?.id && typeof v.d?.password === 'string',
-       `★ Партнёр завёл клиента, пароль владельцу: ${v.d?.password}`);
-    const newId = v.d.id, newPass = v.d.password;
+    ok(v.d?.kind === 'new_tenant' && v.d?.status === 'pending',
+       '★ Партнёр отправил ЗАЯВКУ, а не завёл магазин молча');
+    ok(/одобр/i.test(v.d?.note || ''),
+       `★ И сказано, что дальше: «${v.d?.note}»`);
+
+    const заявкаId = v.d.id;
+
+    // Магазина ещё нет — он появится только после одобрения.
+    v = await j('GET', '/platform/clients', null, SUPER);
+    ok(!(v.d?.rows ?? []).some((x) => x.name === 'Новый магазин'),
+       '★ Магазин НЕ появился: ждёт решения владельца платформы');
+
+    // Владелец платформы одобряет.
+    v = await j('POST', `/platform/requests/${заявкаId}/decide`,
+      { approve: true }, SUPER);
+    ok(v.d?.status === 'approved' && !!v.d?.tenant?.id,
+       '★ Одобрил — магазин заведён');
+    ok(typeof v.d?.tenant?.password === 'string',
+       `★ Пароль владельцу магазина: ${v.d?.tenant?.password}`);
+
+    const newId = v.d.tenant.id, newPass = v.d.tenant.password;
+
+    // Заведён ОТ ИМЕНИ ПАРТНЁРА: доля пойдёт ему.
+    v = await j('GET', '/platform/clients', null, PARTNER);
+    ok((v.d?.rows ?? []).some((x) => x.id === newId),
+       '★ Магазин записан на партнёра — доля пойдёт ему');
+
+    /* ДУБЛЬ ЗАЯВКИ. Партнёр отправил дважды — две одинаковые висят, и
+       владелец одобрит обе: магазин заведётся дважды, а телефон у него
+       один. */
+    {
+      const тел = '+77014445566';
+      v = await j('POST', '/platform/tenants',
+        { name: 'Дважды', ownerName: 'Кто', ownerPhone: тел }, PARTNER);
+      ok(v.d?.status === 'pending', 'Первая заявка принята');
+
+      v = await j('POST', '/platform/tenants',
+        { name: 'Он же', ownerName: 'Кто', ownerPhone: тел }, PARTNER);
+      ok(v.status >= 400 && /уже отправлена/.test(v.d?.message ?? ''),
+         `★ Дубль заявки отбит: «${v.d?.message}»`);
+
+      // ОТЗЫВ: партнёр передумал — клиент отказался, телефон неверный.
+      v = await j('GET', '/platform/requests', null, PARTNER);
+      const мои = Array.isArray(v.d) ? v.d : (v.d?.rows ?? []);
+      const моя = мои.find((x) => x.status === 'pending'
+        && (x.payload?.ownerPhone === тел));
+      ok(!!моя, 'Партнёр видит свою заявку');
+
+      v = await j('POST', `/platform/requests/${моя.id}/withdraw`, {}, PARTNER);
+      ok(v.d?.status === 'withdrawn', '★ Партнёр отозвал свою заявку');
+
+      v = await j('POST', `/platform/requests/${моя.id}/decide`,
+        { approve: true }, SUPER);
+      ok(v.status >= 400, '★ Отозванную решить нельзя — магазин не заведётся');
+    }
+
+    /* ЗАНЯТЫЙ ТЕЛЕФОН ловится СРАЗУ, при отправке: иначе партнёр ждал
+       бы день, а отказ пришёл бы из-за занятого номера. */
+    {
+      v = await j('POST', '/platform/tenants',
+        { name: 'Ещё раз', ownerName: 'Кто', ownerPhone: '+77013334455' }, PARTNER);
+      ok(v.status >= 400 && /уже у магазина/.test(v.d?.message ?? ''),
+         `★ Занятый телефон ловится при отправке: «${v.d?.message}»`);
+    }
 
     v = await j('POST', '/auth/login', { phone: '+77013334455', password: newPass });
     ok(!!v.d?.access,
@@ -973,7 +1055,8 @@ const shop = async (name, owner) => {
   // неверно: месяц мог быть пустым по любой причине.
   {
     const v = await j('GET', '/platform/partners', null, SUPER);
-    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser);
+    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser && x.email === pmail)
+      || (v.d?.rows ?? []).find((x) => !x.isSuperUser);
     ok(p && typeof p.earnedTotal === 'number',
        '★ Заработок за всё время отдаётся, а не только за 30 дней');
     ok(p && typeof p.createdAt === 'string',
@@ -987,7 +1070,8 @@ const shop = async (name, owner) => {
   // По такой цифре решают, стоит ли с ним работать дальше.
   {
     const v = await j('GET', '/platform/partners', null, SUPER);
-    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser);
+    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser && x.email === pmail)
+      || (v.d?.rows ?? []).find((x) => !x.isSuperUser);
     ok(p?.earnedTotal !== undefined,
        '★ Заработок партнёра за всё время доходит до кабинета');
     ok(p?.earnedTotal >= p?.earned,
@@ -1663,7 +1747,8 @@ const shop = async (name, owner) => {
   // Клиент повисал: он есть, он платит, но его никто не ведёт.
   {
     let v = await j('GET', '/platform/partners', null, SUPER);
-    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser);
+    const p = (v.d?.rows ?? []).find((x) => !x.isSuperUser && x.email === pmail)
+      || (v.d?.rows ?? []).find((x) => !x.isSuperUser);
     // Партнёра могли отключить проверки выше — включаем, иначе мы
     // меряем не привязку, а отключение.
     if (p) await j('PATCH', `/platform/partners/${p.id}`, { isActive: true }, SUPER);

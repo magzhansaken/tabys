@@ -51,6 +51,20 @@ export function NewTenant({ isSuper, partners, onDone }: {
         trialDays: Number(f.trialDays) || 14,
       }});
       // Доступы показываются один раз — отдельным окном с копированием.
+      /* У ПАРТНЁРА ЭТО ЗАЯВКА, А НЕ ЗАВЕДЕНИЕ.
+       *
+       * Сервер отвечает по-разному: владельцу платформы — доступы
+       * нового магазина, партнёру — «заявка отправлена».
+       *
+       * Показать партнёру пустые поля пароля значит обмануть его: он
+       * решит, что магазин заведён, продиктует клиенту пустоту и
+       * узнает правду от рассерженного человека. */
+      if (r.status === 'pending' && r.kind === 'new_tenant') {
+        toast({ text: r.note || 'Заявка отправлена владельцу платформы' });
+        onDone(true);
+        return;
+      }
+
       setCreds([
         { label: 'Телефон для входа', value: r.ownerPhone ?? f.ownerPhone },
         { label: 'Пароль', value: r.password ?? '' },
@@ -70,7 +84,9 @@ export function NewTenant({ isSuper, partners, onDone }: {
       <div className="modal-card" ref={card}
         role="dialog" aria-modal="true">
         <div className="sheet-head">
-          <h2>Новый клиент</h2>
+          {/* Заголовок разный: партнёр ПРОСИТ, владелец платформы
+              ЗАВОДИТ. Человек должен понимать это до нажатия. */}
+          <h2>{isSuper ? 'Новый клиент' : 'Заявка на нового клиента'}</h2>
           <button className="btn small ghost sheet-x" aria-label="Закрыть"
             onClick={() => onDone(false)}>×</button>
         </div>
