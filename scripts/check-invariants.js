@@ -1136,6 +1136,13 @@ const RULES = [
   { file: 'admin/app/platform/sections/Requests.tsx', must: 'МАГАЗИНА ЕЩЁ НЕТ',
     why: 'Имя вело на несуществующий магазин: владелец видел «Internal server error» на живой заявке' },
 
+  { file: 'server/src/platform/platform.module.ts', must: 'PIN КАССИРА',
+    why: 'Владелец привязывал кассу и вставал перед вводом кода, которого у него нет' },
+  { file: 'db/migrations/112_demo_goods.sql', must: 'seed_demo_goods',
+    why: 'Магазин заведён, товаров ноль: партнёру нечего показать клиенту' },
+  { file: 'db/migrations/113_own_price.sql', must: 'agreed_price',
+    why: 'Партнёр договорился о цене, а вписать негде — счёт приходил по прайсу' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

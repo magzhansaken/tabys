@@ -1760,6 +1760,10 @@ export class PlatformService {
     name: string; ownerName: string; ownerPhone: string; city?: string; trialDays?: number;
     /** Учебный магазин: ему срок не нужен, он не продаётся. */
     isDemo?: boolean;
+    /** Цена не по прайсу: партнёр договорился со скидкой. */
+    planPrice?: number;
+    /** Наполнить учебными товарами — чтобы клиенту было что показать. */
+    withDemo?: boolean;
   }) {
     const name = String(d.name ?? '').trim();
     if (!name) throw new BadRequestException('Укажите название магазина');
@@ -1816,9 +1820,47 @@ export class PlatformService {
     const code = (await this.q(`SELECT * FROM platform_pairing_code($1,NULL)`, [acc.id]))
       .rows[0]?.code ?? null;
 
+    /* PIN КАССИРА. Без него владелец не войдёт на кассу: он получал
+       пароль от кабинета и код привязки, привязывал кассу — и вставал
+       перед вводом кода, которого у него нет.
+       Четыре цифры, СВОИ у каждого магазина: одинаковый «1234» у всех
+       клиентов — это ключ от всех касс разом. */
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    await this.q(
+      `UPDATE employee SET pos_pin_hash = $2, can_login_pos = true
+        WHERE account_id = $1 AND is_owner`,
+      [acc.id, await bcrypt.hash(pin, 10)]);
+
+    /* ЦЕНА НЕ ПО ПРАЙСУ. Партнёр договорился со скидкой — записываем
+       сейчас, а не узнаём через месяц из счёта. */
+    if (d.planPrice != null && Number(d.planPrice) > 0) {
+      /* ЦЕНУ ХРАНИМ В КАРТОЧКЕ, а не в строке счёта.
+         Строки счёта заводятся только при ПЕРВОЙ ОПЛАТЕ, а
+         договорённость есть уже сейчас. Писал в plan_line — там было
+         пусто, и запрос молча ничего не менял. */
+      await this.q(
+        `UPDATE tenant_card SET agreed_price = $2 WHERE account_id = $1`,
+        [acc.id, Math.round(Number(d.planPrice))]);
+      await this.audit(ctx, 'price_set_on_create', acc.id,
+        { price: Number(d.planPrice) });
+    }
+
+    /* УЧЕБНЫЕ ДАННЫЕ В САМ МАГАЗИН. Магазин заведён, а товаров ноль —
+       показать клиенту нечего, и он говорит «приходите, когда
+       заработает».
+       Не отдельный магазин, а ЭТОТ ЖЕ: владелец удалит их за минуту,
+       когда заведёт своё. */
+    let demo = false;
+    if (d.withDemo) {
+      try {
+        await this.q(`SELECT seed_demo_goods($1)`, [acc.id]);
+        demo = true;
+      } catch { /* нет свёртки — магазин всё равно заведён */ }
+    }
+
     return { id: acc.id, phone: d.ownerPhone, password: pass,
-      ownerPhone: d.ownerPhone, activationCode: code,
-      note: 'Пароль показан один раз — продиктуйте владельцу сейчас. Пробный период открыт.' };
+      ownerPhone: d.ownerPhone, activationCode: code, posPin: pin, demo,
+      note: 'Доступы показаны один раз — продиктуйте владельцу сейчас. Пробный период открыт.' };
   }
 
   // ── САМОЗАПИСЬ С САЙТА ──────────────────────────────────────────────

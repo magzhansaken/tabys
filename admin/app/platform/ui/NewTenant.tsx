@@ -27,7 +27,9 @@ export function NewTenant({ isSuper, partners, onDone }: {
   onDone: (created: boolean) => void;
 }) {
   const card = useSheet(() => onDone(false));
-  const [f, setF] = useState({
+  const [f, setF] = useState<any>({
+    // Цена не по прайсу и учебные товары — как у Дастархана.
+    ownPrice: false, planPrice: '', withDemo: true,
     name: '', ownerName: '', ownerPhone: '', city: '',
     tier: 'base', partnerId: '', trialDays: '14',
   });
@@ -49,6 +51,9 @@ export function NewTenant({ isSuper, partners, onDone }: {
         tier: f.tier,
         partnerId: f.partnerId || undefined,
         trialDays: Number(f.trialDays) || 14,
+        // Своя цена — только если её вправду выбрали.
+        planPrice: f.ownPrice ? Number(f.planPrice) || undefined : undefined,
+        withDemo: !!f.withDemo,
       }});
       // Доступы показываются один раз — отдельным окном с копированием.
       /* У ПАРТНЁРА ЭТО ЗАЯВКА, А НЕ ЗАВЕДЕНИЕ.
@@ -69,6 +74,10 @@ export function NewTenant({ isSuper, partners, onDone }: {
         { label: 'Телефон для входа', value: r.ownerPhone ?? f.ownerPhone },
         { label: 'Пароль', value: r.password ?? '' },
         { label: 'Код привязки кассы', value: r.activationCode ?? '' },
+        /* PIN КАССИРА. Без него владелец привяжет кассу и встанет
+           перед вводом кода, которого у него нет. У Дастархана он в
+           этом же окне. */
+        { label: 'Код кассира для входа на кассу', value: r.posPin ?? '' },
       ]);
     } catch (e: any) {
       toast({ text: humanError(e), kind: 'err' });
@@ -133,6 +142,53 @@ export function NewTenant({ isSuper, partners, onDone }: {
               onChange={(e) => setF({ ...f, trialDays: e.target.value })} />
           </label>
         </div>
+
+        {/* ЦЕНА: ПО ПРАЙСУ ИЛИ СВОЯ — взято у Дастархана.
+            Партнёр договорился со скидкой, а вписать её было негде:
+            цена уходила по прайсу, и разбирались через месяц из
+            счёта. */}
+        <label>Цена в месяц
+          <div className="chips">
+            <button type="button"
+              className={`chip ${!f.ownPrice ? 'on' : ''}`}
+              onClick={() => setF({ ...f, ownPrice: false })}>
+              По прайсу
+            </button>
+            <button type="button"
+              className={`chip ${f.ownPrice ? 'on' : ''}`}
+              onClick={() => setF({ ...f, ownPrice: true })}>
+              Своя цена
+            </button>
+          </div>
+        </label>
+
+        {f.ownPrice && (
+          <label>Цена в месяц, ₸
+            <input value={f.planPrice} inputMode="numeric"
+              onChange={(e) => setF({ ...f, planPrice: e.target.value })} />
+            {/* Своя цена — не тайна: владелец платформы увидит её в
+                карточке и спросит, если она подозрительная. */}
+            <i className="split">
+              Цена отличается от прайса — владелец платформы увидит это в карточке клиента
+            </i>
+          </label>
+        )}
+
+        {/* УЧЕБНЫЕ ТОВАРЫ — тоже у Дастархана.
+            Магазин заведён, а товаров ноль: партнёр показывает клиенту
+            пустую кассу, и тот говорит «приходите, когда заработает». */}
+        <label className="check">
+          <input type="checkbox" checked={f.withDemo}
+            onChange={(e) => setF({ ...f, withDemo: e.target.checked })} />
+          <span>
+            <b>Наполнить учебными товарами</b>
+            <i className="split">
+              Двенадцать товаров с ценами и штрихкодами: хлеб, молоко,
+              весовой сыр, сигареты с маркой. Показать клиенту есть что
+              сразу, а владелец удалит их за минуту, когда заведёт своё.
+            </i>
+          </span>
+        </label>
 
         {isSuper && partners.length > 0 && (
           <label>Кто ведёт
