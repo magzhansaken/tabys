@@ -150,7 +150,7 @@ export default function Clients({ me }: { me: Me }) {
           )}
           <button className="btn primary"
             onClick={() => setCreating(true)}>
-            {isSuper ? '+ Новый клиент' : '+ Заявка на клиента'}</button>
+            + Новый клиент</button>
         </div>
       </div>
 
