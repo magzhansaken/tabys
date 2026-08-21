@@ -31,7 +31,7 @@ export function NewTenant({ isSuper, partners, onDone }: {
     // Цена не по прайсу и учебные товары — как у Дастархана.
     ownPrice: false, planPrice: '', withDemo: true,
     name: '', ownerName: '', ownerPhone: '', city: '',
-    tier: 'base', partnerId: '', trialDays: '14',
+    tier: 'base', partnerId: '', trialDays: '14', ownerEmail: '',
   });
   const [busy, setBusy] = useState(false);
   const [creds, setCreds] = useState<any[] | null>(null);
@@ -51,6 +51,7 @@ export function NewTenant({ isSuper, partners, onDone }: {
         tier: f.tier,
         partnerId: f.partnerId || undefined,
         trialDays: Number(f.trialDays) || 14,
+        ownerEmail: f.ownerEmail.trim() || undefined,
         // Своя цена — только если её вправду выбрали.
         planPrice: f.ownPrice ? Number(f.planPrice) || undefined : undefined,
         withDemo: !!f.withDemo,
@@ -120,6 +121,17 @@ export function NewTenant({ isSuper, partners, onDone }: {
               onChange={(e) => setF({ ...f, city: e.target.value })} />
           </label>
         </div>
+
+        {/* ПОЧТА ВЛАДЕЛЬЦА — находка Дастархана. У нас вход по
+            телефону, но почта тоже нужна: на неё уходят счета,
+            напоминания об оплате и восстановление доступа. Без неё
+            владельца не найти, если он сменил номер.
+            НЕ ОБЯЗАТЕЛЬНА: у многих владельцев магазинов почты нет
+            вовсе, и требовать её значит не завести клиента. */}
+        <label>Почта владельца <span className="muted">— не обязательно</span>
+          <input value={f.ownerEmail} type="email" placeholder="nurlan@mail.kz"
+            onChange={(e) => setF({ ...f, ownerEmail: e.target.value })} />
+        </label>
 
         <label>Телефон владельца
           <input value={f.ownerPhone} placeholder="+7 701 123-45-67" inputMode="tel"

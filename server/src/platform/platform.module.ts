@@ -1758,6 +1758,8 @@ export class PlatformService {
 
   async createTenant(ctx: PlatformCtx, d: {
     name: string; ownerName: string; ownerPhone: string; city?: string; trialDays?: number;
+    /** Почта владельца: на неё уходят счета и восстановление доступа. */
+    ownerEmail?: string;
     /** Учебный магазин: ему срок не нужен, он не продаётся. */
     isDemo?: boolean;
     /** Цена не по прайсу: партнёр договорился со скидкой. */
@@ -1808,6 +1810,27 @@ export class PlatformService {
        await bcrypt.hash(pass, 10), Math.floor(trial),
        ctx.role === 'partner' ? ctx.userId : null])).rows[0];
     const acc = { id: made.out_account };
+
+    /* ПОЧТА ВЛАДЕЛЬЦА — их находка. У нас вход по телефону, но почта
+       тоже нужна: на неё уходят счета, напоминания об оплате и
+       восстановление доступа. Без неё владельца не найти, если он
+       сменил номер.
+
+       НЕ ОБЯЗАТЕЛЬНА: у многих владельцев магазинов почты нет вовсе, и
+       требовать её значит не завести клиента. */
+    const почта = String(d.ownerEmail ?? '').trim().toLowerCase();
+    if (почта) {
+      /* ЗАЩИТА СТРОК ПРЯЧЕТ СОТРУДНИКА, пока магазин не выбран: правка
+         не находит ни строки, не падает, а МОЛЧИТ — почта просто не
+         записывалась. Пятый раз эта ловушка за проект. */
+      await this.db.withTenant(acc.id, async (c) => {
+        await c.query(`UPDATE employee SET email = $2 WHERE id = $1`,
+          [made.out_employee, почта]);
+      }).catch(() => {
+        /* Почта занята другим — не роняем заведение из-за неё: магазин
+           уже создан, а почту владелец поправит в кабинете. */
+      });
+    }
 
     if (d.city) await this.q(
       `UPDATE tenant_card SET city=$2 WHERE account_id=$1`, [acc.id, d.city]);
