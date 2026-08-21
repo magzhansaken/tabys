@@ -28,7 +28,9 @@ const BATCH = 50;
  * @returns { reached, sent, rejected, left } — связь, ушло, отклонено, осталось
  */
 async function flush({ ask, store, settings, deviceToken, employeeId }) {
-  const pending = await store.outboxPending();
+  /* Мост отвечает обёрткой { ok, data } — разворачиваем. Иначе
+     очередь всегда кажется пустой, и чеки не уходят. */
+  const pending = развернуть(await store.outboxPending());
   if (!pending.length) return { reached: null, sent: 0, rejected: 0, left: 0 };
 
   const пачка = pending.slice(0, BATCH);
@@ -91,7 +93,7 @@ async function flush({ ask, store, settings, deviceToken, employeeId }) {
 
   /* СЕРВЕР МОГ ОТВЕТИТЬ НЕ ПРО ВСЁ. Неотвеченное остаётся в очереди и
      уйдёт следующей попыткой — а не пропадёт вместе с ответом. */
-  const осталось = (await store.outboxPending()).length;
+  const осталось = развернуть(await store.outboxPending()).length;
 
   return {
     reached: true,
@@ -191,5 +193,7 @@ function queueNote({ left, rejected, lastSync, netDown }) {
 }
 
 if (typeof module !== 'undefined') {
+  // eslint-disable-next-line global-require
+  var { развернуть } = require('./common.js');
   module.exports = { BATCH, flush, makeSyncLoop, queueNote };
 }

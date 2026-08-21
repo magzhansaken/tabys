@@ -210,7 +210,10 @@ async function removeLine(cart, line, { allow }) {
 async function parkCart(store, cart, { newId, who }) {
   if (!cart.length) return { ok: false, said: 'Чек пуст — откладывать нечего' };
 
-  const st = await store.getState();
+  /* МОСТ ОТДАЁТ ОБЁРТКУ { ok, data }, а не данные напрямую.
+     Найдено живьём: откладывание клало чек в пустоту, а «Отложенные»
+     отвечали «Этот чек уже забрали» на живой чек. */
+  const st = разверни(await store.getState());
   const parked = [...(st.parked || [])];
 
   parked.push({
@@ -227,7 +230,7 @@ async function parkCart(store, cart, { newId, who }) {
 
 /** Вернуть отложенный чек. Он уходит из списка: чек один, не копия. */
 async function unparkCart(store, id) {
-  const st = await store.getState();
+  const st = разверни(await store.getState());
   const parked = st.parked || [];
   const found = parked.find((p) => p.id === id);
   if (!found) return { ok: false, said: 'Этот чек уже забрали' };
@@ -237,6 +240,10 @@ async function unparkCart(store, id) {
 }
 
 if (typeof module !== 'undefined') {
+  /* Развёртку берём из общего файла: все файлы кассы на одной
+     странице, и второе объявление ломает этот файл целиком. */
+  // eslint-disable-next-line global-require
+  var { разверни } = require('./common.js');
   module.exports = {
     lineSum, cartTotal, cartCount, canMerge, addToCart,
     QTY_MAX, qtyAllowed, setQty, removeLine, parkCart, unparkCart,

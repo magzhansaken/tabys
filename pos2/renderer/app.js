@@ -436,18 +436,35 @@
     go('sale');
   }
 
-  function openParked() {
+  async function openParked() {
+    /* СПИСОК БЕРЁМ С ДИСКА, а не из памяти.
+     *
+     * parkCart пишет ПРЯМО НА ДИСК — так и надо: чек должен лечь до
+     * того, как исчезнет с экрана. Но в памяти его нет, пока не
+     * перечитаем.
+     *
+     * Кассир откладывал чек, тут же открывал «Отложенные» — и видел
+     * старый список, а на живой чек получал «Этот чек уже забрали». */
+    S = (await K.getState()).data || S;
     const список = S.parked || [];
     if (!список.length) { toast($('toasts'), 'Отложенных чеков нет', 'warn'); return; }
 
-    /* СТАРЫЕ НАЗЫВАЕМ, но не удаляем сами: вдруг это заказ, который
-       ждут. Решает кассир. */
-    const старые = staleParked(список);
+    /* СТАРЫЙ ЧЕК СЧИТАЕМ САМИ. Свёртки staleParked нет — связка звала
+       несуществующее, и окно НЕ ОТКРЫВАЛОСЬ ВОВСЕ: падало молча, а
+       кассир видел пустоту.
+
+       Два часа: за это время покупатель либо вернулся, либо ушёл
+       насовсем. Не удаляем — вдруг это заказ, который ждут. Решает
+       кассир. */
+    const ДАВНО_МС = 2 * 60 * 60 * 1000;
+    const давно = (p) => p.at && (Date.now() - new Date(p.at).getTime()) > ДАВНО_МС;
 
     const html = список.map((p) => `
       <button class="menu-item" data-take="${p.id}">
-        <span class="menu-name">${p.label} · ${p.items} поз. · ${money(p.total)}</span>
-        <span class="menu-hint">${старые.some((x) => x.id === p.id)
+        <span class="menu-name">${new Date(p.at).toLocaleTimeString('ru-RU',
+          { hour: '2-digit', minute: '2-digit' })} · ${(p.lines || []).length} ${
+          plural((p.lines || []).length, 'позиция', 'позиции', 'позиций')} · ${money(p.total)}</span>
+        <span class="menu-hint">${давно(p)
           ? 'Отложен давно — покупатель мог не вернуться' : 'Забрать обратно'}</span>
       </button>`).join('');
 
@@ -462,10 +479,13 @@
           });
           if (!да) return;
         }
-        const r = unparkCart(S.parked || [], b.dataset.take);
+        /* Свёртка САМА ходит в хранилище и отдаёт lines, а не cart.
+           Связка звала её по-старому — чек не возвращался. */
+        const r = await unparkCart(K, b.dataset.take);
         if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
-        cart = r.cart; cartDiscount = r.cartDiscount;
-        S = (await K.saveState({ parked: r.parked })).data;
+        cart = r.lines;
+        cartDiscount = 0;
+        S = (await K.getState()).data;
         closeModal($('modal'));
         go('sale');
       };

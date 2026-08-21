@@ -31,15 +31,21 @@ async function loadCatalog({ ask, store, settings, deviceToken }) {
     }
     // Сервер ответил пустым — не затираем запас: у клиента могли
     // просто ещё не завести товары, а вчерашний список рабочий.
-    const kept = await store.getCatalog();
+    /* Мост отвечает обёрткой { ok, data } — разворачиваем.
+       Иначе запас с диска не виден, и касса слепнет без связи. */
+    const kept = разверни(await store.getCatalog());
     if (kept.items && kept.items.length) {
-      return { items: kept.items, from: 'диск', ageDays: await store.catalogAge() };
+      return { items: kept.items, from: 'диск',
+        ageDays: разверни(await store.catalogAge()) };
     }
     return { items: [], from: 'сеть', ageDays: 0 };
   } catch (e) {
-    const kept = await store.getCatalog();
+    /* Мост отвечает обёрткой { ok, data } — разворачиваем.
+       Иначе запас с диска не виден, и касса слепнет без связи. */
+    const kept = разверни(await store.getCatalog());
     if (kept.items && kept.items.length) {
-      return { items: kept.items, from: 'диск', ageDays: await store.catalogAge() };
+      return { items: kept.items, from: 'диск',
+        ageDays: разверни(await store.catalogAge()) };
     }
     /* НИ СЕТИ, НИ ЗАПАСА. Раньше ошибка глоталась молча: кассир видел
        пустой каталог и не понимал почему. Ни товаров, ни объяснения —
@@ -108,5 +114,7 @@ function catalogWarning(ageDays) {
 }
 
 if (typeof module !== 'undefined') {
+  // eslint-disable-next-line global-require
+  var { разверни } = require('./common.js');
   module.exports = { loadCatalog, mapGoods, catalogWarning };
 }

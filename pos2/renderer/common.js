@@ -26,4 +26,29 @@ function num(v) {
   return String(Math.round(Number(v) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
-if (typeof module !== 'undefined') module.exports = { plural, num };
+
+/**
+ * РАЗВЕРНУТЬ ОТВЕТ ХРАНИЛИЩА.
+ *
+ * Мост кассы отвечает обёрткой { ok, data }, а проверки зовут свёртки
+ * с простым складом, который отдаёт данные напрямую.
+ *
+ * Найдено живьём: отложенный чек ложился В ПУСТОТУ, а «Отложенные»
+ * говорили «Этот чек уже забрали» на живой чек. Та же беда была в
+ * каталоге и очереди — просто её не замечали.
+ *
+ * Понимаем оба вида ответа.
+ */
+function разверни(r) {
+  if (!r) return {};
+  return r.data !== undefined ? (r.data || {}) : r;
+}
+
+/** То же для списков: обёртка вокруг массива. */
+function развернуть(r) {
+  if (!r) return [];
+  const v = r.data !== undefined ? r.data : r;
+  return Array.isArray(v) ? v : [];
+}
+
+if (typeof module !== 'undefined') module.exports = { plural, num, разверни, развернуть };
