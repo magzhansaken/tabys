@@ -51,8 +51,21 @@ function show(name, state, ctx) {
   const def = SCREENS[name];
   if (!def) throw new Error(`Нет такого экрана: ${name}`);
 
+  /* ЧЕМ ПРОВЕРЯЕТСЯ КАЖДОЕ ТРЕБОВАНИЕ.
+   *
+   * Найдено ЗАПУСКОМ, а не проверками: они гоняли свои состояния с
+   * полем paired, и всё сходилось. А в настоящем состоянии кассы лежит
+   * deviceToken — привязка была, но ядро её не видело, и касса
+   * оставалась на экране привязки навсегда. */
+  const есть = {
+    paired: (st) => !!(st.paired || st.deviceToken),
+    employee: (st) => !!st.employee,
+    shift: (st) => !!st.shift,
+  };
+
   for (const need of def.needs) {
-    if (!state[need]) {
+    const проверка = есть[need] || ((st) => !!st[need]);
+    if (!проверка(state)) {
       // Не молчим и не показываем сломанный экран: говорим, куда идти.
       return { ok: false, reason: `Сначала: ${NEED_RU[need]}`, need };
     }
@@ -80,7 +93,8 @@ function currentScreen() { return current; }
  * касса включилась — сама встала туда, где кассир её оставил.
  */
 function startScreen(state) {
-  if (!state.paired) return 'setup';
+  // Привязка лежит как deviceToken — та же беда, что была в show().
+  if (!(state.paired || state.deviceToken)) return 'setup';
   if (!state.employee) return 'pin';
   if (!state.shift) return 'shift';
   return 'sale';

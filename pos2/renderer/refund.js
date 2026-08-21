@@ -57,12 +57,48 @@ function rememberReason(recent, reason) {
 function planRefund(receipt, picked) {
   if (!receipt) return { ok: false, said: 'Чек не найден' };
 
+  /* ДЕНЬГИ ДВАЖДЫ НЕ ОТДАЁМ.
+   *
+   * Чек могли принести ВТОРОЙ раз: одну пачку из двух уже возвращали.
+   * Без этой проверки кассир отдал бы деньги за неё снова — а товар
+   * покупатель унёс ещё в первый раз.
+   *
+   * Сколько уже вернули по строке, помечает сервер полем returned. */
   const строки = (receipt.items || []).map((it, i) => {
-    const взять = picked && picked[i] != null ? Number(picked[i]) : it.qty;
-    return { ...it, refundQty: Math.max(0, Math.min(взять, it.qty)) };
-  }).filter((it) => it.refundQty > 0);
+    const вернули = Math.max(0, Number(it.returned) || 0);
+    const осталось = Math.max(0, it.qty - вернули);
+    const взять = picked && picked[i] != null ? Number(picked[i]) : осталось;
+    return { ...it, вернули, осталось, refundQty: Math.max(0, Math.min(взять, осталось)) };
+  });
 
-  if (!строки.length) return { ok: false, said: 'Нечего возвращать — выберите позиции' };
+  /* ПРОСЯТ БОЛЬШЕ, ЧЕМ ОСТАЛОСЬ — говорим прямо, сколько можно.
+     Молча урезать нельзя: кассир отдаст меньше денег, чем обещал
+     покупателю, и разбираться будут у прилавка. */
+  for (let i = 0; i < строки.length; i += 1) {
+    const l = строки[i];
+    const просят = picked && picked[i] != null ? Number(picked[i]) : 0;
+    if (просят > l.осталось) {
+      return {
+        ok: false,
+        said: l.осталось > 0
+          ? `${l.name}: можно вернуть только ${l.осталось} — остальное уже возвращали`
+          : `${l.name}: по этой строке уже всё возвращено`,
+      };
+    }
+  }
+
+  const кБерём = строки.filter((it) => it.refundQty > 0);
+  if (!кБерём.length) {
+    const всёВернули = строки.length && строки.every((l) => l.осталось === 0);
+    return {
+      ok: false,
+      said: всёВернули
+        ? 'По этому чеку уже всё возвращено'
+        : 'Нечего возвращать — выберите позиции',
+    };
+  }
+  строки.length = 0;
+  строки.push(...кБерём);
 
   /* СКИДКА ВОЗВРАЩАЕТСЯ СОРАЗМЕРНО. Купил на 5 000 со скидкой 500,
      вернул половину — вернуть надо 2 250, а не 2 500. Иначе магазин

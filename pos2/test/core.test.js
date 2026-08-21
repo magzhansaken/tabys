@@ -69,6 +69,30 @@ const full = { paired: true, employee: { id: 'e1', name: 'Айгуль' }, shift
   ok(startScreen(full) === 'sale', '★ Смена открыта → сразу продажа');
 }
 
+// ── НАСТОЯЩЕЕ СОСТОЯНИЕ КАССЫ ──────────────────────────────────────
+{
+  /* Прежние проверки гоняли выдуманное { paired: true } — а на диске
+     лежит deviceToken. Касса привязывалась и оставалась на экране
+     привязки НАВСЕГДА: ядро её привязки не видело.
+     Нашлось только запуском. */
+  const наДиске = {
+    deviceToken: 'ТОКЕН-1', deviceId: 'd1', accountId: 'a1',
+    storeName: 'Мини-маркет', employee: null, shift: null,
+  };
+
+  const r = show('pin', наДиске);
+  ok(r.ok, '★ Привязка узнаётся по deviceToken — как она и лежит на диске');
+
+  ok(startScreen(наДиске) === 'pin',
+     '★ И при запуске касса встаёт на ввод кода, а не на привязку');
+
+  ok(startScreen({ ...наДиске, employee: { id: 'e1' } }) === 'shift',
+     'Вошёл — смена');
+  ok(startScreen({ ...наДиске, employee: { id: 'e1' }, shift: { id: 's1' } }) === 'sale',
+     'Смена открыта — продажа');
+  ok(startScreen({}) === 'setup', 'А без привязки — привязка');
+}
+
 // ── ВСЕ ЭКРАНЫ ИМЕЮТ СБОРЩИК ───────────────────────────────────────
 {
   const без = Object.keys(SCREENS).filter((n) => !require('../renderer/core.js').builders[n]);

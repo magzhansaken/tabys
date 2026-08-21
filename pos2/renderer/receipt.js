@@ -23,9 +23,14 @@ function money(n) {
 
 /** Количество: целое без хвоста, весовое — с граммами. */
 function qtyText(l) {
-  const q = Number(l.qty);
-  if (q % 1 === 0) return `${q} ${l.unit || 'шт'}`;
-  return `${q.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} ${l.unit || 'кг'}`;
+  const q = Number(l.qty) || 0;
+  const ед = l.unit || 'шт';
+  /* ВЕС ЧЕРЕЗ ЗАПЯТУЮ: по-русски дробное пишется так. «0.45» на чеке
+     выглядит чужим, а чек читает покупатель. */
+  const число = q % 1
+    ? String(Number(q.toFixed(3))).replace('.', ',')
+    : String(q);
+  return `${число} ${ед}`;
 }
 
 /**
