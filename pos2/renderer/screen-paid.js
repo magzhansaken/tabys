@@ -1,33 +1,47 @@
 /*
  * ЭКРАН ПОСЛЕ ОПЛАТЫ.
  *
- * Держится восемь секунд или до касания. Сдача — самое крупное: её
- * называют вслух.
+ * Сдача — САМОЕ КРУПНОЕ НА КАССЕ: её называют вслух через прилавок, и
+ * ошибка в ней дороже всего. Пропись под цифрой снимает спор «сорок
+ * пять или четыреста пятьдесят» до того, как он начался.
+ *
+ * Держится восемь секунд или до касания. ОБЛИК v3 добавил полосу
+ * отсчёта понизу: видно, что экран уйдёт сам, и никто не ждёт его зря.
+ *
+ * И «ДАЛИ / ИТОГ» над сдачей, когда сдача есть. Это ответ на ваш
+ * вопрос про промах по соседней купюре: касание платит сразу, значит
+ * ошибка должна быть видна В ТУ ЖЕ СЕКУНДУ — пока деньги ещё в руке и
+ * покупатель у прилавка. «Дали 2 000 · итог 1 368» — промах читается
+ * сразу, а не всплывает при сверке ящика вечером, когда возврат уже
+ * через старшего.
+ *
+ * Внесённое считаем на месте: итог + сдача. Свёртку не трогаем.
  */
 function buildPaid(root, view, ctx) {
   const { money, onDone } = ctx;
 
-  /* ПОЛЯ СВОДИМ ПОД СВЁРТКУ. Найдено ЗАПУСКОМ: экран ждал heroLabel и
-     heroAmount, а свёртка отдаёт title, change и changeWords — на
-     экране выходило «undefined» вместо сдачи.
-
-     СДАЧА ГЛАВНАЯ, когда она есть. Нет сдачи — главным становится
+  /* Сдача главная, когда она есть. Нет сдачи — главным становится
      итог: кассиру всё равно надо убедиться, что чек закрыт. */
   const сдача = Math.round(Number(view.change) || 0);
   const главное = сдача > 0
     ? { label: 'Сдача', amount: сдача, words: view.changeWords }
     : { label: 'Оплачено', amount: view.total, words: null };
 
+  const держать = view.holdMs || 8000;
+  const дали = сдача > 0 ? Math.round(Number(view.total) || 0) + сдача : 0;
+
   root.innerHTML = `
     <div class="paid-card">
-      <div class="paid-num">Чек №${view.number ?? ''} · ${view.positions} поз.</div>
-      ${сдача > 0 ? `<div class="paid-sum">${money(view.total)}</div>` : ''}
+      <div class="paid-num">Чек №${view.number ?? ''} · ${view.positions} поз.${
+        сдача > 0 ? '' : ' · оплачен'}</div>
+      ${сдача > 0 ? `<div class="paid-sum">Дали ${money(дали)}<i>·</i>итог ${money(view.total)}</div>` : ''}
       <div class="paid-label">${главное.label}</div>
       <div class="paid-hero">${money(главное.amount)}</div>
       ${главное.words ? `<div class="paid-words">${главное.words}</div>` : ''}
       ${view.printNote ? `<div class="paid-warn">${view.printNote}</div>` : ''}
       <div class="paid-hint">Коснитесь, чтобы продолжить</div>
-    </div>`;
+    </div>
+    <div class="paid-hold" style="animation-duration: ${держать}ms"></div>`;
 
   let ушли = false;
   const done = () => {
@@ -40,7 +54,7 @@ function buildPaid(root, view, ctx) {
   };
 
   // Само через восемь секунд: очередь не ждёт, пока кассир дочитает.
-  const таймер = setTimeout(done, view.holdMs || 8000);
+  const таймер = setTimeout(done, держать);
   root.onclick = done;
 
   // Любая клавиша тоже закрывает: кассир уже потянулся к клавиатуре.
