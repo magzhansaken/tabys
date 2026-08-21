@@ -810,6 +810,28 @@ const shop = async (name, owner) => {
 
     ok(!!v.d?.id && typeof v.d?.password === 'string',
        `★ Партнёр завёл клиента и получил доступы: пароль ${v.d?.password}`);
+
+    /* КОД КАССИРА ДОЛЖЕН РАБОТАТЬ, а не просто печататься.
+       Найдено владельцем: программа выдавала код, а в базу он не
+       ложился — защита строк прятала сотрудника, и правка молчала.
+       Кассир вводил выданный код и получал «Неверный PIN». */
+    ok(/^\d{4}$/.test(String(v.d?.posPin ?? '')),
+       `★ Код кассира выдан: ${v.d?.posPin}`);
+    {
+      const выданный = v.d.posPin;
+      const дев = await j('POST', '/pos/pair',
+        { code: v.d.activationCode, platform: 'windows', appVersion: '3.0.0' });
+      const ток = дев.d?.deviceToken;
+      ok(!!ток, 'Касса привязалась выданным кодом');
+
+      if (ток) {
+        const r = await fetch(API + '/pos/login', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-device-token': ток },
+          body: JSON.stringify({ pin: выданный }) });
+        ok(r.status < 300,
+           `★ ВЫДАННЫЙ КОД ВПРАВДУ ПУСКАЕТ НА КАССУ: ${выданный}`);
+      }
+    }
     ok(!!v.d?.activationCode,
        '★ И код привязки кассы: партнёр ставит её при владельце');
 

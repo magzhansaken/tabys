@@ -1851,10 +1851,30 @@ export class PlatformService {
        Четыре цифры, СВОИ у каждого магазина: одинаковый «1234» у всех
        клиентов — это ключ от всех касс разом. */
     const pin = String(Math.floor(1000 + Math.random() * 9000));
-    await this.q(
-      `UPDATE employee SET pos_pin_hash = $2, can_login_pos = true
-        WHERE account_id = $1 AND is_owner`,
-      [acc.id, await bcrypt.hash(pin, 10)]);
+
+    /* КОД КАССИРА НЕ ЛОЖИЛСЯ В БАЗУ.
+     *
+     * Правка шла БЕЗ выбранного магазина: защита строк прятала
+     * сотрудника, UPDATE не находил ни строки, НЕ ПАДАЛ, а молчал.
+     *
+     * Программа печатала код, которого в базе нет. Кассир вводил его и
+     * получал «Неверный PIN» — и понять не мог.
+     *
+     * Шестой раз эта ловушка за проект. Теперь выбираем магазин И
+     * ПРОВЕРЯЕМ, что строка вправду поправлена: молчаливая неудача
+     * хуже громкой. */
+    const хешКода = await bcrypt.hash(pin, 10);
+    await this.db.withTenant(acc.id, async (cc) => {
+      const пр = await cc.query(
+        `UPDATE employee SET pos_pin_hash = $2, can_login_pos = true
+          WHERE account_id = $1 AND is_owner RETURNING id`,
+        [acc.id, хешКода]);
+
+      if (!пр.rowCount) {
+        throw new BadRequestException(
+          'Не вышло поставить код кассира — магазин не заведён');
+      }
+    });
 
     /* ЦЕНА НЕ ПО ПРАЙСУ. Партнёр договорился со скидкой — записываем
        сейчас, а не узнаём через месяц из счёта. */
