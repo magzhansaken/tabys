@@ -2,25 +2,29 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>Табыс · Касса</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Разметка экранов появится на следующих этапах. Сейчас проверяем,
-       что оболочка вообще поднимает страницу с диска. -->
   <!-- Верхняя строка ОТДЕЛЬНО от экранов: где мы, кто за кассой,
        жива ли связь. Не пересобирается вместе с экраном. -->
   <div id="topbar"></div>
 
   <div id="app">Касса загружается…</div>
 
-  <!-- Окна и сообщения. Пустые до нужды: экран собирает себя сам. -->
   <!-- Слои поверх кассы: сдача после оплаты и замок при простое.
        Пустые до нужды — каждый собирает себя сам при показе. -->
   <div id="paid" class="hidden"></div>
   <div id="lock" class="hidden"></div>
 
   <div id="modal" class="hidden"></div>
+
+  <!-- Экранная клавиатура. Пустая до нужды: её зовут экраны (поиск,
+       привязка) и поля в окнах — на планшете печатать больше нечем. -->
+  <div id="kbd" class="hidden"></div>
+
   <div id="toasts"></div>
 
   <script src="common.js"></script>
