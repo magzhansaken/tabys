@@ -71,6 +71,33 @@
       go(S.shift ? 'sale' : 'shift');
       return { ok: true };
     },
+    /* ОТВЯЗАТЬ КАССУ. Найдено вами: касса стояла на «Введите свой
+       код», а кодов нет — и выхода не было, кроме поиска файлов.
+
+       Стираем ТОЛЬКО привязку: чеки и очередь не трогаем — в них
+       лежат деньги, и они уйдут, когда кассу привяжут снова. */
+    onReset: async () => {
+      const сколько = ((await K.outboxPending()).data || []).length;
+
+      const да = await askSure($('modal'), {
+        title: 'Отвязать кассу от магазина?',
+        text: (сколько
+          ? `Не отправлено чеков: ${сколько}. Они СОХРАНЯТСЯ и уйдут, когда `
+            + 'кассу привяжут снова.\n\n'
+          : '')
+          + 'Кассу придётся привязывать заново — кодом из кабинета.',
+        yes: 'Отвязать', danger: true,
+      });
+      if (!да) return;
+
+      await forgetPairing(K);
+      S = (await K.getState()).data;
+      CATALOG = [];
+      cart = []; cartDiscount = 0;
+      toast($('toasts'), 'Касса отвязана — введите код из кабинета');
+      go('setup');
+    },
+
     onClockOut: async (pin) => {
       const r = await clockOut({ ask, settings: SET, deviceToken: S.deviceToken, pin });
       toast($('toasts'), r.ok

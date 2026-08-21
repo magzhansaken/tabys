@@ -139,9 +139,11 @@ function buildPin(root, state, ctx) {
    *
    * Кассир ушёл домой, а явка висит — владелец думает, что человек на
    * работе, и считает ему часы. */
-  foot.innerHTML = ctx.canClockOut === false ? '' : `
-    <button id="pinOut" class="ghost">Я ухожу домой</button>
-    <button id="pinIn" class="ghost hidden">Назад ко входу</button>`;
+  foot.innerHTML = `
+    ${ctx.canClockOut === false ? '' : `
+      <button id="pinOut" class="ghost">Я ухожу домой</button>
+      <button id="pinIn" class="ghost hidden">Назад ко входу</button>`}
+    <button id="pinReset" class="ghost dim">Отвязать кассу</button>`;
 
   const bOut = root.querySelector('#pinOut');
   const bIn = root.querySelector('#pinIn');
@@ -149,6 +151,14 @@ function buildPin(root, state, ctx) {
     bOut.onclick = () => { reset(true); bOut.classList.add('hidden'); bIn.classList.remove('hidden'); };
     bIn.onclick = () => { reset(false); bIn.classList.add('hidden'); bOut.classList.remove('hidden'); };
   }
+
+  /* ОТВЯЗАТЬ КАССУ. Найдено вами: касса стояла на «Введите свой код»,
+     а кодов нет — и выхода из этого не было вовсе, кроме поиска файлов
+     в системе.
+     Спрашиваем, потому что дело редкое: чеки в очереди при этом
+     остаются, но кассу придётся привязывать заново. */
+  const bReset = root.querySelector('#pinReset');
+  if (bReset) bReset.onclick = () => ctx.onReset && ctx.onReset();
 
   reset(false);
 

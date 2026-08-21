@@ -251,3 +251,9 @@ button.big { width: min(420px, 90vw); min-height: 64px; font-size: 19px; }
 #topbar { flex: 0 0 auto; }
 #app { flex: 1; min-height: 0; }
 body { display: flex; flex-direction: column; }
+
+/* Отвязать кассу — дело редкое и опасное: кнопка неяркая, но она
+   есть. Без неё касса, вставшая на вводе кода, лечилась только
+   поиском файлов в системе. */
+button.dim { color: #666; font-size: 13px; min-height: 34px; }
+button.dim:active { color: #999; }
