@@ -82,7 +82,41 @@ export default function GoodsPage() {
               <Select value={form.categoryId ?? ''} onChange={(e: any) => setForm({ ...form, categoryId: e.target.value || undefined })}
                 options={[{ value: '', label: '—' }, ...cats.map((c: any) => ({ value: c.id, label: c.name }))]} />
             </Field>
-            <Field label="Штрихкод"><Input value={form.barcode ?? ''} onChange={(e: any) => setForm({ ...form, barcode: e.target.value })} w={176} /></Field>
+            {/* КНОПКА «+» У ШТРИХКОДА.
+                Товар завели без кода — ввезли из таблицы, перенесли из
+                старой системы, заполнили наспех. Сканером его не
+                пробить, и кассир ищет руками при очереди.
+                Вписывать выдуманный код нельзя: он столкнётся с чужим
+                товаром. Кнопка просит код у системы — тот начинается с
+                двойки, эта область отведена под внутренние коды. */}
+            <Field label="Штрихкод">
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Input value={form.barcode ?? ''}
+                  onChange={(e: any) => setForm({ ...form, barcode: e.target.value })} w={176} />
+                <button type="button" className="btn small"
+                  title={form.id
+                    ? 'Выдать штрихкод — система придумает его сама'
+                    : 'Штрихкод выдастся сам при сохранении'}
+                  disabled={!!form.barcode}
+                  onClick={async () => {
+                    if (!form.id) {
+                      /* Товара ещё нет — код выдаст сервер при
+                         сохранении. Говорим об этом, а не молчим. */
+                      setMsg('Штрихкод выдастся сам, когда сохраните товар');
+                      return;
+                    }
+                    try {
+                      const r: any = await api(`/goods/${form.id}/barcode`, { method: 'POST' });
+                      setForm((f: any) => ({ ...f, barcode: r.code }));
+                      setMsg(r.created
+                        ? `Штрихкод ${r.code} выдан — напечатайте наклейку`
+                        : `У товара уже был штрихкод ${r.code}`);
+                    } catch (e: any) {
+                      setErr(e?.message || 'Не вышло выдать штрихкод');
+                    }
+                  }}>+</button>
+              </div>
+            </Field>
             <Field label="Закуп, ₸"><Input type="number" value={form.purchasePrice ?? ''} onChange={(e: any) => setForm({ ...form, purchasePrice: e.target.value })} w={110} style={{ textAlign: 'right' }} /></Field>
             <Field label="Продажа, ₸"><Input type="number" value={form.salePrice ?? ''} onChange={(e: any) => setForm({ ...form, salePrice: e.target.value })} w={110} style={{ textAlign: 'right' }} /></Field>
             <Btn onClick={create} disabled={!form.name}>Создать</Btn>

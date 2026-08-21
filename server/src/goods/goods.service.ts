@@ -120,6 +120,53 @@ export class GoodsService {
        ON CONFLICT (account_id, code) DO NOTHING`, [accountId, productId, code.trim(), t, primary]);
   }
 
+  /**
+   * ВЫДАТЬ ШТРИХКОД УЖЕ ЗАВЕДЁННОМУ ТОВАРУ.
+   *
+   * При создании код выдаётся сам. А у товара, который завели раньше —
+   * ввезли из таблицы, перенесли из старой системы, завели наспех —
+   * кода может не быть вовсе. Сканером его не пробить, и кассир ищет
+   * руками при очереди.
+   *
+   * Вписывать выдуманный код нельзя: он столкнётся с чужим товаром.
+   * Свой код магазина начинается с двойки — эта область отведена под
+   * внутренние коды и не пересекается с заводскими.
+   */
+  async issueBarcode(accountId: string, productId: string) {
+    return this.db.withTenant(accountId, async (c) => {
+      const p = (await c.query(
+        `SELECT id, name, code FROM product
+          WHERE id = $1 AND account_id = $2 AND deleted_at IS NULL`,
+        [productId, accountId])).rows[0];
+
+      if (!p) throw new BadRequestException('Товар не найден');
+
+      /* УЖЕ ЕСТЬ — НЕ ВЫДАЁМ ВТОРОЙ. Иначе на товаре окажутся два
+         кода: наклеили один, а в базе главный другой, и при возврате
+         товар не опознается. */
+      const есть = (await c.query(
+        `SELECT code FROM barcode WHERE product_id = $1 ORDER BY is_primary DESC LIMIT 1`,
+        [productId])).rows[0];
+
+      if (есть) {
+        return { code: есть.code, created: false,
+          note: 'У товара уже есть штрихкод' };
+      }
+
+      const gen = (await c.query(
+        `SELECT gen_internal_barcode($1,$2) AS bc`, [accountId, p.code])).rows[0].bc;
+
+      await this.addBarcode(c, accountId, productId, gen, 'internal', true);
+
+      /* Кассы узнают о коде через обмен: без этого товар не пробьётся
+         сканером, пока касса не перезапустится. */
+      await this.emitToDevices(c, accountId, 'barcode', productId, 'insert',
+        { productId, code: gen });
+
+      return { code: gen, created: true, productName: p.name };
+    });
+  }
+
   private async setPrice(c: PoolClient, accountId: string, productId: string, typeCode: string, value: number, storeId?: string) {
     const pt = (await c.query(`SELECT id FROM price_type WHERE code=$1 LIMIT 1`, [typeCode])).rows[0];
     if (!pt) throw new BadRequestException(`Нет типа цены ${typeCode}`);

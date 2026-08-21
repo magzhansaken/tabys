@@ -76,6 +76,15 @@ export class GoodsController {
   @Get('plu') @RequirePermission('goods', 'view')
   plu(@Ctx() ctx: EmployeeContext) { return this.goods.pluExport(ctx.accountId); }
 
+  /* ВЫДАТЬ ШТРИХКОД — кнопка «+» в карточке товара.
+     У товара без кода сканер бесполезен, и кассир ищет его руками при
+     очереди. Код выдаёт система: вписанный от руки столкнётся с
+     чужим товаром. */
+  @Post(':id/barcode') @RequirePermission('goods', 'edit')
+  issueBarcode(@Ctx() ctx: any, @Param('id') id: string) {
+    return this.goods.issueBarcode(ctx.accountId, id);
+  }
+
   @Post('plu/assign') @RequirePermission('goods', 'edit')
   assignPlu(@Ctx() ctx: EmployeeContext) { return this.goods.assignPlu(ctx.accountId); }
 

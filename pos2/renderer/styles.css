@@ -178,13 +178,41 @@ button.big { width: min(420px, 90vw); min-height: 64px; font-size: 19px; }
 .sale-tabs button { min-height: 44px; padding: 0 14px; font-size: 15px; }
 .sale-tabs button.on { background: #2d4a2d; border-color: #c9a227; }
 
-.sale-goods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-              gap: 8px; overflow-y: auto; align-content: start; flex: 1; }
-.good { min-height: 84px; display: flex; flex-direction: column; justify-content: center;
-        gap: 4px; text-align: left; padding: 10px 12px; }
-.good-name { font-size: 15px; line-height: 1.25; }
-.good-price { font-size: 18px; color: #c9a227; font-variant-numeric: tabular-nums; }
-.good-mark { font-size: 11px; color: #e0a86c; }
+/* ТОВАРЫ СТРОКАМИ ВО ВСЮ ШИРИНУ, а не плитками.
+ *
+ * Было: плитки по 150 точек в три-четыре столбца, название 15 точек.
+ * Длинное название обрезалось — «Хлеб «Тандыр» бездрожжевой с
+ * семенами» превращался в «Хлеб «Тандыр» безд…», и кассир не отличал
+ * его от соседнего сорта.
+ *
+ * А кассиру с плохим зрением 15 точек мелко: он наклоняется к экрану,
+ * и очередь ждёт.
+ *
+ * Строка во всю ширину: название ЦЕЛИКОМ и крупно, цена справа
+ * столбиком — глаз идёт по одной линии. */
+.sale-goods { display: flex; flex-direction: column; gap: 6px;
+              overflow-y: auto; align-content: start; flex: 1; }
+
+.good {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 4px 14px; width: 100%;
+  /* Палец, а не мышь: 72 точки — кассир бьёт не глядя. */
+  min-height: 72px; padding: 10px 16px; text-align: left;
+}
+.good-name {
+  /* 21 точка: читается через стол, не наклоняясь. */
+  font-size: 21px; line-height: 1.25;
+  /* Длинное имя ПЕРЕНОСИТСЯ, а не режется: два сорта хлеба должны
+     отличаться. */
+  white-space: normal; overflow-wrap: anywhere;
+}
+.good-price {
+  font-size: 24px; color: #c9a227; font-variant-numeric: tabular-nums;
+  white-space: nowrap; justify-self: end;
+}
+.good-mark {
+  grid-column: 1 / -1; font-size: 13px; color: #e0a86c; margin-top: -2px;
+}
 .sale-empty { grid-column: 1/-1; padding: 30px; text-align: center;
               color: #888; font-size: 15px; line-height: 1.6; }
 
