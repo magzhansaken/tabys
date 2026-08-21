@@ -56,18 +56,39 @@ async function loadCatalog({ ask, store, settings, deviceToken }) {
    касса не должна знать о них в десяти местах. */
 function mapGoods(d) {
   const rows = (d && d.products) || [];
+
+  /* НАЗВАНИЯ КАТЕГОРИЙ ПРИХОДЯТ ОТДЕЛЬНЫМ СПИСКОМ, а в товаре лежит
+     только ключ. Без этой сшивки вкладок не было вовсе. */
+  const катИмя = new Map();
+  for (const c of (d && d.categories) || []) катИмя.set(c.id, c.name);
+
   return rows.map((g) => ({
     id: g.id,
     name: g.name,
     price: Number(g.price ?? 0),
+
     // Штрихкодов может быть несколько: сканер найдёт товар по любому.
     barcodes: Array.isArray(g.barcodes) ? g.barcodes.map((b) => String(b.code ?? b)) : [],
-    // Код весов: по нему разбирается штрихкод, напечатанный весами.
-    plu: g.plu != null ? String(g.plu) : null,
-    marked: !!g.marked,          // нужна ли марка
-    category: g.category || g.categoryName || null,
-    quick: !!(g.quick || g.is_quick),   // ходовое
-    unit: g.unit || 'шт',
+
+    /* КОД ВЕСОВ. Сервер шлёт plu_code — по нему разбирается штрихкод,
+       напечатанный весами. Со старым именем весовые товары не
+       находились вовсе. */
+    plu: (g.plu_code ?? g.plu) != null ? String(g.plu_code ?? g.plu) : null,
+
+    /* НУЖНА ЛИ МАРКА. Сервер шлёт marking: none, tobacco, alcohol,
+       beer, shoes, pharma. Со старым именем сигареты шли БЕЗ
+       требования марки, и товар уходил бы мимо налоговой. */
+    marked: !!(g.marked || (g.marking && g.marking !== 'none')),
+    marking: g.marking || null,
+
+    // Название вкладки, а не ключ: кассир читает буквы.
+    category: катИмя.get(g.category_id) || g.category || g.categoryName || null,
+
+    quick: !!(g.is_quick || g.quick),
+    unit: g.unit || (g.kind === 'weight' ? 'кг' : 'шт'),
+
+    // Весовой товар считается дробно — это видно по виду товара.
+    weight: g.kind === 'weight',
   })).filter((g) => g.id && g.name);
 }
 

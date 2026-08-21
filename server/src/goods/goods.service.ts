@@ -535,6 +535,10 @@ export class GoodsService {
         `SELECT p.id, p.code, p.name, p.name_kk, p.full_name, p.kind, p.category_id,
                 p.ntin, p.plu_code, p.article, p.vat_rate, p.min_price, p.track_stock,
                 p.is_quick, p.quick_group, p.purchase_price,
+                /* МАРКИРОВКА. Без неё касса не знает, что на товар нужна
+                   марка: сигареты и водка прошли бы БЕЗ КОДА, и товар
+                   ушёл бы мимо налоговой. Найдено на живом магазине. */
+                p.marking,
                 u.short_name AS unit,
                 coalesce(
                   (SELECT value FROM product_price pp JOIN price_type pt ON pt.id=pp.price_type_id

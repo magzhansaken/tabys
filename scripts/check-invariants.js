@@ -1071,6 +1071,13 @@ const RULES = [
   { file: 'pos2/renderer/index.html', must: 'id="topbar"',
     why: 'Без верхней строки кассир не видит ни магазина, ни связи, ни как открыть меню' },
 
+  { file: 'server/src/goods/goods.service.ts', must: 'p.marking,',
+    why: 'Без маркировки касса не требует марку: сигареты и водка уйдут мимо налоговой' },
+  { file: 'pos2/renderer/catalog.js', must: 'plu_code',
+    why: 'Весовые товары не находились по штрихкоду весов: имя поля расходилось с сервером' },
+  { file: 'scripts/seed-shop.js', must: 'ЗАЩИТА СТРОК ПРЯЧЕТ МАГАЗИН',
+    why: 'Наполнение заводило второй магазин: запрос молчал, а не падал' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
