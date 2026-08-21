@@ -137,11 +137,31 @@ export class AuthService {
   // ВХОД В КАБИНЕТ: телефон + пароль (модель UMAG/Wipon, не почта как МС)
   // ==================================================================
   async login(phone: string, password: string, meta: { ip?: string; ua?: string } = {}) {
-    const locked = await this.db.raw(`SELECT auth_is_locked_out($1,'admin_password') AS l`, [phone]);
-    if (locked.rows[0].l) throw new ForbiddenException('Слишком много попыток. Подождите 5 минут.');
+    const locked = await this.db.raw(
+      `SELECT auth_is_locked_out($1,'admin_password') AS l`, [phone]);
+
+    if (locked.rows[0].l) {
+      /* СКОЛЬКО ЖДАТЬ — СЧИТАЕМ, а не говорим «пять минут».
+         Окно отсчитывается от ПЕРВОЙ неудачи: если она была четыре
+         минуты назад, ждать осталось минуту. Сказать «пять» значит
+         заставить человека ждать впустую или решить, что сломано. */
+      const ост = await this.db.raw(
+        `SELECT greatest(1, ceil(extract(epoch FROM (
+            min(ts) + interval '5 minutes' - now())) / 60))::int AS m
+           FROM login_attempt
+          WHERE identifier = $1 AND kind = 'admin_password'
+            AND NOT success AND ts > now() - interval '5 minutes'`, [phone])
+        .catch((): any => null);
+
+      const мин = (ост && ост.rows[0] && ост.rows[0].m) || 5;
+
+      throw new ForbiddenException(
+        `Слишком много неверных попыток. Подождите ${мин} ${
+          мин === 1 ? 'минуту' : мин < 5 ? 'минуты' : 'минут'}`);
+    }
 
     const e = await this.db.findLoginByPhone(phone);
-    const fail = async (reason: string) => {
+    const fail = async (reason: string): Promise<never> => {
       await this.db.raw(`SELECT auth_log_attempt($1,$2,NULL,'admin_password',$3,false,$4,$5,$6)`,
         [e?.account_id ?? null, e?.employee_id ?? null, phone, reason, meta.ip ?? null, meta.ua ?? null]);
       throw new UnauthorizedException('Неверный телефон или пароль');
