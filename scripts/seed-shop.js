@@ -224,7 +224,53 @@ const ЛЮДИ = [
       [ИМЯ, ТЕЛЕФОН, 'Нурлан Абдиров', bcrypt.hashSync(ПАРОЛЬ, 10)])).rows[0];
     acc = { id: r.out_account };
   } else {
-    console.log('Магазин уже есть — дополняю его');
+    console.log('Магазин уже есть — дополняю и чиню');
+
+    /* МАГАЗИН ВЫБИРАЕМ ДО ПОЧИНКИ. Защита строк прячет сотрудников,
+       пока он не выбран: запрос не падает, а МОЛЧИТ, и починка не
+       срабатывала вовсе. */
+    await c.query(`SET app.account_id = '${acc.id}'`);
+
+    /* ЧИНИМ ВЛАДЕЛЬЦА, а не только дополняем товары.
+     *
+     * Найдено на боевом сервере: первый запуск завёл его криво — без
+     * пароля от кабинета, с именем в поле телефона. Второй запуск это
+     * НЕ ПОПРАВИЛ, а вывел вход в кабинет, КОТОРОГО НЕТ.
+     *
+     * Печатать то, чего не сделал, хуже, чем не печатать вовсе:
+     * человек пойдёт входить и не сможет. */
+    const х = (await c.query(
+      `SELECT id, first_name, phone, password_hash FROM employee
+        WHERE account_id=$1 AND is_owner LIMIT 1`, [acc.id])).rows[0];
+
+    if (х) {
+      const чинили = [];
+
+      // Имя в поле телефона — верный признак кривого запуска.
+      if (!х.first_name || /^\+?\d[\d\s()-]{6,}$/.test(String(х.first_name))) {
+        чинили.push('имя владельца');
+      }
+      if (!х.phone || !/^\+?\d[\d\s()-]{6,}$/.test(String(х.phone))) {
+        чинили.push('телефон');
+      }
+      if (!х.password_hash) чинили.push('пароль от кабинета');
+
+      if (чинили.length) {
+        await c.query(
+          `UPDATE employee
+              SET first_name = $1, last_name = $2, phone = $3,
+                  password_hash = $4, can_login_admin = true
+            WHERE id = $5`,
+          ['Нурлан', 'Абдиров', ТЕЛЕФОН, bcrypt.hashSync(ПАРОЛЬ, 10), х.id]);
+
+        // И у самого магазина телефон мог остаться кривым.
+        await c.query(
+          `UPDATE account SET phone = $1 WHERE id = $2 AND (phone IS NULL OR phone !~ '^\\+?[0-9]')`,
+          [ТЕЛЕФОН, acc.id]).catch(() => {});
+
+        console.log('  починено: ' + чинили.join(', '));
+      }
+    }
   }
 
   const A = acc.id;
