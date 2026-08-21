@@ -1102,6 +1102,9 @@ const RULES = [
   { file: 'pos2/renderer/screen-pin.js', must: 'pinReset',
     why: 'Касса встала на вводе кода — выхода не было, кроме поиска файлов в системе' },
 
+  { file: 'scripts/check-shop.js', must: 'привязаны к магазину',
+    why: 'Самая скрытая беда: верный код даёт «Неверный PIN», и догадаться невозможно' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
