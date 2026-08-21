@@ -32,6 +32,7 @@ export default function GoodsPage() {
       await api('/goods', { method: 'POST', body: JSON.stringify({
         ...form,
         purchasePrice: form.purchasePrice ? +form.purchasePrice : undefined,
+        markupPercent: form.markupPercent ? +form.markupPercent : undefined,
         salePrice: form.salePrice ? +form.salePrice : undefined,
       }) });
       setMsg(`Товар «${form.name}» создан`); setForm({ kind: 'simple' }); setShowForm(false); load();
@@ -116,9 +117,59 @@ export default function GoodsPage() {
                     }
                   }}>+</button>
               </div>
+              {/* СКАЗАНО, ЧТО КОД ВЫДАСТСЯ САМ.
+                  Владелец оставлял поле пустым и думал, что забыл — а
+                  код выдаётся при сохранении. Молчание тут дороже
+                  слова: он звонил спрашивать. */}
+              {!form.barcode && (
+                <div className="hint" style={{ marginTop: 4, fontSize: 12 }}>
+                  {form.id
+                    ? 'Нажмите «+» — система придумает код и его можно напечатать на наклейке'
+                    : 'Оставьте пустым — код выдастся сам при сохранении'}
+                </div>
+              )}
             </Field>
-            <Field label="Закуп, ₸"><Input type="number" value={form.purchasePrice ?? ''} onChange={(e: any) => setForm({ ...form, purchasePrice: e.target.value })} w={110} style={{ textAlign: 'right' }} /></Field>
-            <Field label="Продажа, ₸"><Input type="number" value={form.salePrice ?? ''} onChange={(e: any) => setForm({ ...form, salePrice: e.target.value })} w={110} style={{ textAlign: 'right' }} /></Field>
+            {/* ЗАКУП, НАЦЕНКА, ПРОДАЖА — ТРИ ПОЛЯ ПОДРЯД.
+                Владелец вводит закуп и наценку, а цена продажи
+                считается У НЕГО НА ГЛАЗАХ. Без этого он вводил закуп и
+                не знал, за сколько товар пойдёт — считал в уме или в
+                телефоне. */}
+            <Field label="Закуп, ₸">
+              <Input type="number" value={form.purchasePrice ?? ''}
+                onChange={(e: any) => {
+                  const закуп = e.target.value;
+                  const н = Number(form.markupPercent);
+                  setForm({ ...form, purchasePrice: закуп,
+                    /* Цена пересчитывается САМА, пока владелец её не
+                       поправил руками: тронул — считаем, что он знает
+                       лучше, и больше не трогаем. */
+                    salePrice: (!form.priceTouched && закуп && н > 0)
+                      ? String(Math.round(Number(закуп) * (1 + н / 100)))
+                      : form.salePrice });
+                }}
+                w={110} style={{ textAlign: 'right' }} /></Field>
+
+            <Field label="Наценка, %">
+              <Input type="number" value={form.markupPercent ?? ''}
+                placeholder="30"
+                onChange={(e: any) => {
+                  const н = e.target.value;
+                  const закуп = Number(form.purchasePrice);
+                  setForm({ ...form, markupPercent: н,
+                    salePrice: (!form.priceTouched && закуп > 0 && Number(н) > 0)
+                      ? String(Math.round(закуп * (1 + Number(н) / 100)))
+                      : form.salePrice });
+                }}
+                w={90} style={{ textAlign: 'right' }} /></Field>
+            {/* ТРОНУЛ ЦЕНУ РУКАМИ — БОЛЬШЕ НЕ СЧИТАЕМ.
+                Владелец знает про товар больше, чем наша наценка:
+                акция, круглая цена, договор с поставщиком. Затирать его
+                число значит спорить с ним. */}
+            <Field label="Продажа, ₸">
+              <Input type="number" value={form.salePrice ?? ''}
+                onChange={(e: any) => setForm({ ...form,
+                  salePrice: e.target.value, priceTouched: true })}
+                w={110} style={{ textAlign: 'right' }} /></Field>
             <Btn onClick={create} disabled={!form.name}>Создать</Btn>
           </div>
           <p style={{ fontSize: 13, color: C.dim, margin: '14px 0 0', lineHeight: 1.55 }}>
