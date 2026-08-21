@@ -1078,6 +1078,11 @@ const RULES = [
   { file: 'scripts/seed-shop.js', must: 'ЗАЩИТА СТРОК ПРЯЧЕТ МАГАЗИН',
     why: 'Наполнение заводило второй магазин: запрос молчал, а не падал' },
 
+  { file: 'deploy/docker-compose.prod.yml', must: '../scripts:/app/scripts:ro',
+    why: 'На сервере node не установлен — без этой подключки наполнение запустить негде' },
+  { file: 'scripts/seed-shop.js', must: 'НАЗВАНИЕ ЛУЧШЕ НЕ ПЕРЕДАВАТЬ',
+    why: 'PowerShell портит русские буквы: «Мини-маркет» дошло как «-થ» и легло бы в базу' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },
