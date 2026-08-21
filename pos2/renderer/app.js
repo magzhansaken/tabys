@@ -230,8 +230,12 @@
 
   screen('locked', (state) => buildLock($('lock'), state, {
     onUnlock: async (pin) => {
+      /* Замку тот же путь входа, что и экрану кода: сперва сервер,
+         не вышло — пропуск с диска. Иначе касса, заперевшаяся ДО
+         первого входа, не отпирается ничем. */
       const r = await unlock({ pin, state: S, store: K,
-        deviceToken: S.deviceToken, offlineLogin });
+        deviceToken: S.deviceToken, offlineLogin,
+        login, ask, settings: SET });
       if (!r.ok) return r;
       if (r.changed) {
         S = (await K.saveState({ employee: r.employee })).data;

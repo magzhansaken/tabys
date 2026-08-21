@@ -76,8 +76,31 @@ function makeIdleWatch({ minutes = IDLE_MIN, onLock, now = () => Date.now() }) {
  * пробивает он, и чеки идут на него. Утренний ушёл — вечерний не
  * должен торговать под его именем.
  */
-async function unlock({ pin, state, store, deviceToken, offlineLogin }) {
-  const pass = await offlineLogin({ store, pin, deviceKey: deviceToken });
+async function unlock({ pin, state, store, deviceToken, offlineLogin, login, ask, settings }) {
+  /* ЗАМОК ИДЁТ ТЕМ ЖЕ ПУТЁМ, ЧТО И ВХОД: сперва сервер, не вышло —
+   * пропуск с диска.
+   *
+   * Было: смотрел ТОЛЬКО пропуск. А пропуск ложится при входе через
+   * сервер — значит если касса заперлась ДО первого входа, отпереть
+   * нечем вовсе. И даже при живой сети замок говорил «код не подошёл»,
+   * хотя код верный.
+   *
+   * Найдено владельцем: «код кассы в замке не подходит». */
+  let pass = await offlineLogin({ store, pin, deviceKey: deviceToken });
+
+  if (!pass && login && ask) {
+    /* Пропуска нет — спрашиваем сервер. Он же и положит пропуск, чтобы
+       в следующий раз замок отпёрся без сети. */
+    const r = await login({ ask, store, settings, deviceToken, pin })
+      .catch(() => ({ ok: false }));
+
+    if (r && r.ok) {
+      pass = { employee: r.employee };
+    } else if (r && r.said) {
+      return { ok: false, said: r.said };
+    }
+  }
+
   if (!pass) return { ok: false, said: 'Код не подошёл' };
 
   const тот_же = state.employee && pass.employee

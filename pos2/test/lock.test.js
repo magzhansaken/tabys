@@ -187,6 +187,48 @@ console.log('\n═══ ВЫХОД ═══\n');
      '★ Счёт по-русски: 1 позиция, 2 позиции, 5 позиций');
 }
 
+// ── ЗАМОК СПРАШИВАЕТ СЕРВЕР, ЕСЛИ ПРОПУСКА НЕТ ─────────────────────
+{
+  /* НАЙДЕНО ВЛАДЕЛЬЦЕМ: «код кассы в замке не подходит».
+   *
+   * Замок смотрел ТОЛЬКО пропуск с диска. А пропуск ложится при входе
+   * ЧЕРЕЗ СЕРВЕР — значит если касса заперлась ДО первого входа,
+   * отпереть нечем вовсе. И даже при живой сети замок говорил «код не
+   * подошёл», хотя код верный. */
+  const box = {};
+  const store = { passSave: async (k, v) => { box[k] = v; },
+    passRead: async (k) => box[k] || null };
+
+  let спрошен = null;
+  const login = async ({ pin }) => {
+    спрошен = pin;
+    return { ok: true, employee: { id: 'e9', name: 'Нурлан' } };
+  };
+
+  const r = await unlock({ pin: '7586', state: { employee: null }, store,
+    deviceToken: 'K', offlineLogin, login, ask: () => {}, settings: {} });
+
+  ok(r.ok, '★ Пропуска нет — замок СПРОСИЛ СЕРВЕР и отпёрся');
+  ok(спрошен === '7586', 'И тем самым кодом, что ввёл кассир');
+  ok(r.employee && r.employee.name === 'Нурлан',
+     'Кассир опознан по ответу сервера');
+
+  // Сервер отказал — замок держит
+  const плохо = await unlock({ pin: '9999', state: { employee: null }, store,
+    deviceToken: 'K', offlineLogin,
+    login: async () => ({ ok: false, said: 'Неверный PIN' }),
+    ask: () => {}, settings: {} });
+  ok(!плохо.ok && /Неверный PIN/.test(плохо.said),
+     '★ Сервер отказал — замок держит и говорит почему');
+
+  // Без сети и без пропуска — честный отказ, а не падение
+  const молча = await unlock({ pin: '1111', state: { employee: null }, store,
+    deviceToken: 'K', offlineLogin,
+    login: async () => { throw new Error('нет связи'); },
+    ask: () => {}, settings: {} });
+  ok(!молча.ok, '★ Нет связи и нет пропуска — отказ, а не падение');
+}
+
 console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
 process.exit(failed ? 1 : 0);
 })();
