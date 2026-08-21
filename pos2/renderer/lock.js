@@ -23,6 +23,13 @@
  * вернёт деньги. Он узнает при сверке и доказать не сможет.
  */
 
+/* Общие мелочи: счёт по-русски и разряды. Лежат отдельно, потому что
+   нужны всем, а одно имя в двух файлах ломает второй целиком. */
+if (typeof module !== 'undefined' && typeof plural === 'undefined') {
+  // eslint-disable-next-line global-require
+  var { plural } = require('./common.js');
+}
+
 /** Три минуты — их число. Ноль значит «не запирать». */
 const IDLE_MIN = 3;
 
@@ -119,15 +126,6 @@ function planLogout({ cart, state }) {
   return { warnings: предупреждения, canLogout: true };
 }
 
-/** Счёт по-русски. */
-function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  if (a >= 11 && a <= 14) return many;
-  const b = a % 10;
-  if (b === 1) return one;
-  if (b >= 2 && b <= 4) return few;
-  return many;
-}
 
 /**
  * СБОРЩИК ЭКРАНА ЗАМКА.
@@ -217,5 +215,5 @@ function buildLock(root, state, ctx) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { IDLE_MIN, LOCK_KEYS, makeIdleWatch, unlock, planLogout, buildLock, plural };
+  module.exports = { IDLE_MIN, LOCK_KEYS, makeIdleWatch, unlock, planLogout, buildLock };
 }

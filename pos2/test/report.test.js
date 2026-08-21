@@ -3,7 +3,12 @@
  *
  * Главное: числа сходятся, X не путают с Z, расхождение видно.
  */
-const { shiftSummary, reportLines, num } = require('../renderer/report.js');
+const { reportSummary, reportLines } = require('../renderer/report.js');
+const { num } = require('../renderer/common.js');
+
+/* Свод для печати зовётся reportSummary: в смене свой свод, и одно имя
+   на двоих ломало бы второй файл на странице целиком. */
+const shiftSummary = reportSummary;
 
 let passed = 0, failed = 0;
 const ok = (c, n) => { if (c) { passed++; console.log('✔ ' + n); } else { failed++; console.log('✘ ' + n); } };

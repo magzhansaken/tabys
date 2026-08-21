@@ -20,6 +20,13 @@
  * В магазине шума не меньше, а очередь длиннее.
  */
 
+/* Общие мелочи: счёт по-русски и разряды. Лежат отдельно, потому что
+   нужны всем, а одно имя в двух файлах ломает второй целиком. */
+if (typeof module !== 'undefined' && typeof plural === 'undefined') {
+  // eslint-disable-next-line global-require
+  var { plural } = require('./common.js');
+}
+
 /** Сколько держать экран. Восемь секунд — их число, и оно верное. */
 const HOLD_MS = 8000;
 
@@ -40,14 +47,6 @@ const СОТНИ = ['', 'сто', 'двести', 'триста', 'четыре�
   'шестьсот', 'семьсот', 'восемьсот', 'девятьсот'];
 
 /** Счёт по-русски: 1 тенге, 2 тенге, 5 тенге — но 1 тысяча, 2 тысячи. */
-function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100;
-  if (a >= 11 && a <= 14) return many;
-  const b = a % 10;
-  if (b === 1) return one;
-  if (b >= 2 && b <= 4) return few;
-  return many;
-}
 
 function tripletWords(n, женский) {
   const out = [];
@@ -145,5 +144,5 @@ function displayView({ cart, cartDiscount, receipt, lineSum, cartTotal }) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { HOLD_MS, moneyInWords, plural, paidView, displayView };
+  module.exports = { HOLD_MS, moneyInWords,  paidView, displayView };
 }

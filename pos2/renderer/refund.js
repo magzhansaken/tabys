@@ -26,7 +26,7 @@ const REASONS = [
 ];
 
 /** Куда девается товар после возврата — это решает владелец потом. */
-const ACTIONS = ['refund', 'refund_free', 'cash_out', 'cash_in', 'collection'];
+const CASH_ACTIONS = ['refund', 'refund_free', 'cash_out', 'cash_in', 'collection'];
 
 /**
  * НЕДАВНЯЯ ПРИЧИНА ПЕРВОЙ.
@@ -222,6 +222,6 @@ function checkMove(kind, amount, cashInDrawer) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { REASONS, ACTIONS, MOVE_NAME, orderReasons, rememberReason,
+  module.exports = { REASONS, CASH_ACTIONS, MOVE_NAME, orderReasons, rememberReason,
     planRefund, cashEnough, buildRefund, buildCashMove, checkMove };
 }

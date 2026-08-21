@@ -15,6 +15,13 @@
  * когда интернет как раз и падает.
  */
 
+/* Общие мелочи: счёт по-русски и разряды. Лежат отдельно, потому что
+   нужны всем, а одно имя в двух файлах ломает второй целиком. */
+if (typeof module !== 'undefined' && typeof num === 'undefined') {
+  // eslint-disable-next-line global-require
+  var { num } = require('./common.js');
+}
+
 /**
  * СВЕСТИ СМЕНУ ИЗ ЧЕКОВ.
  *
@@ -22,7 +29,7 @@
  * пересчитает по-своему, и числа должны сойтись — иначе владелец
  * увидит две правды.
  */
-function shiftSummary({ receipts, moves, shift, state }) {
+function reportSummary({ receipts, moves, shift, state }) {
   const свои = (receipts || []).filter((r) => !shift || r.shiftId === shift.id);
 
   const продажи = свои.filter((r) => r.kind !== 'refund');
@@ -205,11 +212,7 @@ function pad(left, right, width) {
   return l.slice(0, место).padEnd(место) + ' ' + r;
 }
 
-/** Число без значка валюты — валюта названа один раз, внизу. */
-function num(v) {
-  return String(Math.round(Number(v) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
 
 if (typeof module !== 'undefined') {
-  module.exports = { shiftSummary, reportLines, WAY_NAMES, num };
+  module.exports = { reportSummary, reportLines, WAY_NAMES };
 }
