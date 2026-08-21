@@ -105,13 +105,50 @@
     goods: pickGoods(CATALOG, { tab, query }),
     cart, cartDiscount, tab, query, money,
     tabs: catTabs(CATALOG),
+    /* ПОЛОСА МАРОК. Кассир видит состояние, не считая строки глазами.
+       Имя свёртки — marksReady: найдено запуском, связка звала
+       несуществующее markBar и падала молча. */
+    markBar: (() => {
+      const есть = (cart || []).some((l) => l.marked);
+      if (!есть) return null;
+      const r = marksReady(cart);
+      return r.ok
+        ? { kind: 'ok', title: 'Марки собраны',
+            note: 'Коды уйдут в чеке и выведут товар из оборота' }
+        : { kind: 'need', title: `Нужно марок: ${r.left}`,
+            note: 'Отсканируйте Data Matrix на каждой штуке — без кода чек нельзя' };
+    })(),
 
     onTab: (t) => { tab = t; query = ''; go('sale'); },
     onSearch: (q) => { query = q; go('sale'); },
     onPick: (g, qty) => { addToCart(cart, g, qty || 1, newId); go('sale'); },
+
+    /* ПРАВКА СТРОКИ ЧЕКА. Уменьшение идёт через одну дверь: там же
+       снимаются марки. Иначе убрали бутылку, а марка осталась и ушла
+       бы в налоговую как проданная. */
+    onLine: async (i, act) => {
+      const l = cart[i];
+      if (!l) return;
+      const было = l.qty;
+      const стало = act === 'plus' ? было + 1 : было - 1;
+
+      const r = await setQty(cart, l, стало, {
+        allow: (действие) => allow(действие, {
+          settings: SET, employee: S.employee,
+          askPin: async (t) => askPinFor(t),
+          ask, store: K, deviceToken: S.deviceToken,
+        }),
+        trimMarks,
+      });
+
+      if (!r.ok && r.said) toast($('toasts'), r.said, 'warn');
+      go('sale');
+    },
     onPay: () => {
-      const блок = payBlock(cart);
-      if (блок) { toast($('toasts'), блок, 'warn'); return; }
+      /* БЕЗ МАРОК К ОПЛАТЕ НЕ ПУСКАЕМ, и отказ НАЗЫВАЕТ ТОВАР: узнать
+         об этом после того, как покупатель достал деньги, хуже всего. */
+      const r = marksReady(cart);
+      if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
       go('pay');
     },
   }));
@@ -143,6 +180,47 @@
       return { ok: true };
     },
   }));
+
+  /* ОКНО КОДА СТАРШЕГО. Кассир жмёт «убрать позицию», а прав нет —
+     зовём старшего его же клавиатурой, той, что он знает. */
+  function askPinFor(title) {
+    return new Promise((resolve) => {
+      const root = $('modal');
+      openModal(root, `
+        <h2>${title}</h2>
+        <p class="muted">Нужен код старшего смены</p>
+        <div class="dots" id="apDots"></div>
+        <div class="gate-err" id="apErr"></div>
+        <div class="keypad" id="apPad"></div>
+        <div class="row-actions"><button id="apNo">Отмена</button></div>`,
+        () => resolve(null));
+
+      let pin = '';
+      const dots = root.querySelector('#apDots');
+      const draw = () => {
+        dots.innerHTML = [0, 1, 2, 3]
+          .map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
+      };
+
+      const pad = root.querySelector('#apPad');
+      for (const k of ['1','2','3','4','5','6','7','8','9','C','0','⌫']) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = k;
+        b.className = (k === 'C' || k === '⌫') ? 'kb-aux' : '';
+        b.onclick = () => {
+          if (k === 'C') pin = '';
+          else if (k === '⌫') pin = pin.slice(0, -1);
+          else if (pin.length < 4) pin += k;
+          draw();
+          if (pin.length === 4) { const код = pin; closeModal(root); resolve(код); }
+        };
+        pad.appendChild(b);
+      }
+      root.querySelector('#apNo').onclick = () => { closeModal(root); resolve(null); };
+      draw();
+    });
+  }
 
   // ── Продажа доводится до конца ─────────────────────────────────
   async function finishSale({ way, cash, card }) {
@@ -220,10 +298,16 @@
   // ── Сканер ─────────────────────────────────────────────────────
   const scanner = makeScanner({
     onCode: (code) => {
-      if (currentScreen() !== 'sale') return;
+      /* НЕ НА ТОМ ЭКРАНЕ — не молчим. Кассир сканирует, а касса стоит
+         на оплате или смене: без слов он решит, что сканер сломан. */
+      if (currentScreen() !== 'sale') {
+        toast($('toasts'), 'Сканер работает на экране продажи', 'warn');
+        return;
+      }
       const r = resolveScan(code, CATALOG, { prefixes: SET.scalePrefixes });
       if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
       addToCart(cart, r.good, r.qty, newId);
+      toast($('toasts'), `${r.good.name} · ${money(r.good.price)}`);
       go('sale');
     },
   });

@@ -102,6 +102,19 @@ fi
 # Проверки кассы: запас каталога и очередь чеков. Взяты у донора из их
 # resilience.test.ts и queue.test.ts — тринадцать случаев про то, как
 # касса ведёт себя без связи.
+# ПРОВЕРКИ НОВОЙ КАССЫ. Их 635 против 19 у прежней: каждое правило
+# гоняется порознь — экраны, деньги, марки, связь, падения.
+#
+# Прежняя касса остаётся рядом и тоже проверяется: клиенты сидят на
+# ней, и снимать её можно только когда все обновятся.
+if (cd pos2 && npm test >/dev/null 2>&1); then
+  echo "Новая касса: 635 проверок пройдено"
+else
+  echo "ОСТАНОВЛЕНО: новая касса не проходит проверки."
+  (cd pos2 && npm test 2>&1 | grep -E "✘|провалено" | head -5)
+  exit 1
+fi
+
 if node pos-desktop/test/kassa.test.js; then
   :
 else
@@ -111,7 +124,7 @@ fi
 
 echo
 echo "── Копирую в $DST (настройки с паролями сохраняются)"
-for d in server admin db docs shared scripts pos pos-desktop; do
+for d in server admin db docs shared scripts pos pos-desktop pos2; do
   [ -d "$d" ] && cp -r "$d" "$DST"/ 2>/dev/null
 done
 for f in deploy/*.sh deploy/docker-compose*.yml; do cp "$f" "$DST"/deploy/; done

@@ -1,134 +1,141 @@
 /*
- * ЭКРАН ПРОДАЖИ — собирает себя сам.
+ * ЭКРАН ПРОДАЖИ — главный экран кассы.
  *
- * Три части: вкладки и поиск слева, товары плитками, чек справа.
+ * Слева товары, справа чек. Кассир смотрит вправо: там то, за что
+ * платит покупатель.
  *
- * Чек и оплата придут на этапах 13 и 16 — здесь только каталог, как
- * велит план. Место под них размечено, но пустым не показывается:
- * пустая колонка сбивает не меньше, чем пустой экран.
+ * НАЙДЕНО ЖИВЬЁМ: прежний экран рисовал только каталог. Товар
+ * пробивался, ложился в чек, но кассир его НЕ ВИДЕЛ — и не мог ни
+ * проверить, ни отменить.
+ *
+ * Собирает себя сам — правило этапа 1.
  */
-
 function buildSale(root, state, ctx) {
-  const { goods, onPick, onSearch } = ctx;
+  const { goods, cart, cartDiscount, tabs, tab, query, money,
+    onTab, onSearch, onPick, onPay, onLine, markBar } = ctx;
+
+  const итог = (cart || []).reduce((a, l) =>
+    a + Math.round(l.price * l.qty) - (l.discount || 0), 0) - (cartDiscount || 0);
 
   root.innerHTML = `
     <div class="sale">
       <div class="sale-left">
-        <div class="searchrow">
-          <input id="saleSearch" class="field" autocomplete="off"
-                 placeholder="Поиск или штрихкод">
-          <button id="saleClear" class="ghost hidden" title="Очистить">✕</button>
-        </div>
-        <div class="cattabs" id="saleTabs"></div>
-        <div class="goods" id="saleGoods"></div>
+        <input id="saleSearch" class="field sale-search" autocomplete="off"
+               placeholder="Поиск товара или штрихкод" value="${esc(query || '')}">
+        <div class="sale-tabs" id="saleTabs"></div>
+        <div class="sale-goods" id="saleGoods"></div>
       </div>
-      <div class="sale-right" id="saleCart"></div>
+
+      <div class="sale-right">
+        <div class="sale-marks" id="saleMarks"></div>
+        <div class="sale-cart" id="saleCart"></div>
+        <div class="sale-total">
+          <span>ИТОГО</span>
+          <b id="saleTotal">${money(Math.max(0, итог))}</b>
+        </div>
+        <button id="salePay" class="primary big" ${cart && cart.length ? '' : 'disabled'}
+          ${cart && cart.length ? '' : 'title="Чек пуст — сканируйте товар"'}>ОПЛАТА</button>
+      </div>
     </div>`;
 
-  const field = root.querySelector('#saleSearch');
-  const clear = root.querySelector('#saleClear');
-  const tabsBox = root.querySelector('#saleTabs');
-  const goodsBox = root.querySelector('#saleGoods');
+  /* ── ВКЛАДКИ ──────────────────────────────────────────────────── */
+  const рядВкладок = root.querySelector('#saleTabs');
+  for (const t of tabs || []) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = t;
+    b.className = t === tab ? 'on' : '';
+    b.onclick = () => onTab && onTab(t);
+    рядВкладок.appendChild(b);
+  }
 
-  let tab = null;
-  let query = '';
-
-  const G = require_goods();
-
-  function drawTabs() {
-    const tabs = G.catTabs(goods);
-    if (!tabs.includes(tab)) tab = tabs[0];
-    tabsBox.innerHTML = tabs.map((n) =>
-      `<button data-tab="${G.esc ? G.esc(n) : n}" class="${n === tab ? 'on' : ''}${
-        n === G.QUICK_TAB ? ' quick' : ''}">${n}</button>`).join('');
-
-    for (const b of tabsBox.querySelectorAll('button')) {
-      b.onclick = () => {
-        tab = b.dataset.tab;
-        // Смена вкладки чистит поиск: иначе кассир жмёт «Табак», видит
-        // молоко и решает, что касса сломалась.
-        query = '';
-        field.value = '';
-        clear.classList.add('hidden');
-        drawTabs();
-        drawGoods();
-      };
+  /* ── ТОВАРЫ ───────────────────────────────────────────────────── */
+  const сетка = root.querySelector('#saleGoods');
+  if (!goods || !goods.length) {
+    // Пусто ОБЪЯСНЕНО: пустое место — это звонок в поддержку.
+    сетка.innerHTML = `<div class="sale-empty">${esc(ctx.empty
+      || 'Ничего не нашлось — проверьте написание или отсканируйте штрихкод')}</div>`;
+  } else {
+    for (const g of goods) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'good';
+      b.innerHTML = `<span class="good-name">${esc(g.name)}</span>`
+        + `<span class="good-price">${money(g.price)}</span>`
+        + (g.marked ? '<span class="good-mark">марка</span>' : '');
+      b.onclick = () => onPick && onPick(g, 1);
+      сетка.appendChild(b);
     }
   }
 
-  function drawGoods() {
-    const list = G.pickGoods(goods, { tab, query });
+  /* ── ЧЕК ──────────────────────────────────────────────────────── */
+  const чек = root.querySelector('#saleCart');
+  if (!cart || !cart.length) {
+    чек.innerHTML = '<div class="cart-empty">Отсканируйте товар<br>или выберите слева</div>';
+  } else {
+    for (let i = 0; i < cart.length; i += 1) {
+      const l = cart[i];
+      const сумма = Math.round(l.price * l.qty) - (l.discount || 0);
+      const кол = l.qty % 1
+        ? String(Number(l.qty.toFixed(3))).replace('.', ',') + ' ' + (l.unit || 'кг')
+        : '×' + l.qty;
 
-    if (!list.length) {
-      /* ПУСТО — ОБЪЯСНЯЕМ. Кассир при очереди должен понимать, искать
-         дальше или звать владельца. */
-      goodsBox.innerHTML = `<div class="empty">${
-        query
-          ? `Ничего не нашлось по «${query}».<br><small>Проверьте написание или отсканируйте штрихкод</small>`
-          : 'В этой вкладке пока нет товаров'
-      }</div>`;
-      return;
+      const row = document.createElement('div');
+      row.className = 'cart-row';
+      row.innerHTML = `
+        <div class="cart-name">${esc(l.name)}${
+          l.marked ? '<i class="cart-mark">марка</i>' : ''}</div>
+        <div class="cart-qty">
+          <button data-act="minus" title="Меньше">−</button>
+          <span>${кол}</span>
+          <button data-act="plus" title="Больше">+</button>
+        </div>
+        <div class="cart-sum">${money(сумма)}${
+          l.discount ? `<i class="cart-disc">−${money(l.discount)}</i>` : ''}</div>`;
+
+      row.querySelectorAll('button').forEach((b) => {
+        b.onclick = () => onLine && onLine(i, b.dataset.act);
+      });
+      чек.appendChild(row);
     }
-
-    goodsBox.innerHTML = list.slice(0, 200).map((g, i) => `
-      <button class="good" data-i="${i}">
-        <span class="good-name">${g.name}</span>
-        <span class="good-price">${g.price}</span>
-        ${g.marked ? '<span class="good-mark">марка</span>' : ''}
-      </button>`).join('');
-
-    for (const b of goodsBox.querySelectorAll('.good')) {
-      b.onclick = () => {
-        const g = list[Number(b.dataset.i)];
-        if (!g) return;
-        onPick(g);
-
-        /* ТОВАР ВЫБРАН — ПОИСК УХОДИТ. Их правило: «клавиатура своё
-           отработала». Иначе в поиске висит «хле», и следующий товар
-           кассир ищет поверх старого слова. */
-        if (query) {
-          query = '';
-          field.value = '';
-          clear.classList.add('hidden');
-          drawGoods();
-        }
-      };
-    }
+    // Последняя строка на виду: кассир смотрит туда, куда пробил.
+    чек.scrollTop = чек.scrollHeight;
   }
 
-  field.oninput = () => {
-    query = field.value;
-    clear.classList.toggle('hidden', !query);
-    drawGoods();
-    if (onSearch) onSearch(query);
+  /* ── ПОЛОСА МАРОК ─────────────────────────────────────────────── */
+  const полоса = root.querySelector('#saleMarks');
+  if (markBar) {
+    полоса.className = 'sale-marks ' + markBar.kind;
+    полоса.innerHTML = `<b>${esc(markBar.title)}</b><small>${esc(markBar.note)}</small>`;
+  } else {
+    полоса.className = 'sale-marks hidden';
+  }
+
+  /* ── ПОИСК ────────────────────────────────────────────────────── */
+  const поле = root.querySelector('#saleSearch');
+  let ждём = null;
+
+  поле.oninput = () => {
+    /* НЕ ИЩЕМ НА КАЖДОЙ БУКВЕ. Перерисовка на каждый знак сносит
+       разметку и сбивает курсор — кассир печатает «мол», а поле
+       очищается на втором знаке. Ждём, пока он остановится. */
+    clearTimeout(ждём);
+    const q = поле.value;
+    ждём = setTimeout(() => onSearch && onSearch(q), 250);
   };
 
-  clear.onclick = () => {
-    query = ''; field.value = ''; clear.classList.add('hidden');
-    drawGoods(); field.focus();
-  };
+  root.querySelector('#salePay').onclick = () => onPay && onPay();
 
-  drawTabs();
-  drawGoods();
-
-  /* Курсор в поиск: сканер шлёт код как набор с клавиатуры, и он
-     должен попасть в поле, а не в пустоту. */
-  setTimeout(() => field.focus(), 0);
-
-  // Наружу — чтобы этапы 12 и 13 могли перерисовать товары и чек.
-  root.__sale = { drawGoods, drawTabs, focus: () => field.focus() };
+  /* КУРСОР В ПОЛЕ: сканер начнёт печатать в ту же секунду, и кассиру
+     не придётся сначала целиться пальцем. */
+  setTimeout(() => { поле.focus(); поле.setSelectionRange(поле.value.length, поле.value.length); }, 0);
 }
 
-/* Разбор товаров лежит отдельным листом: в браузере он уже загружен,
-   в проверке — берётся через require. */
-function require_goods() {
-  if (typeof module !== 'undefined' && typeof require === 'function') {
-    return require('./goods.js');
-  }
-  return {
-    QUICK_TAB: 'Ходовое', ALL_TAB: 'Все',
-    catTabs: window.catTabs, pickGoods: window.pickGoods,
-  };
-}
 
-if (typeof module !== 'undefined') module.exports = { buildSale };
+/* Экранирование берём из окон: оно там уже есть, и второе объявление
+   сломало бы этот файл целиком — все они на одной странице. */
+if (typeof module !== 'undefined') {
+  // eslint-disable-next-line global-require
+  var { esc } = require('./ui.js');
+  module.exports = { buildSale };
+}

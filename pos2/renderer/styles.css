@@ -165,3 +165,54 @@ button.big { width: min(420px, 90vw); min-height: 64px; font-size: 19px; }
 .lock-hint { margin-top: 10px; font-size: 14px; color: #999; line-height: 1.5; }
 .lock-card .dots { justify-content: center; margin: 18px 0 8px; }
 .lock-card .keypad { margin: 10px auto 0; }
+
+/* ═══ ЭКРАН ПРОДАЖИ ════════════════════════════════════════════════
+   Слева товары, справа чек. Кассир смотрит вправо: там то, за что
+   платит покупатель. Чек занимает треть — меньше нельзя, названия
+   длинные. */
+.sale { display: grid; grid-template-columns: 1fr 380px; gap: 12px;
+        height: 100%; padding: 12px; }
+.sale-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.sale-search { width: 100%; text-align: left; letter-spacing: normal; font-size: 17px; }
+.sale-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.sale-tabs button { min-height: 44px; padding: 0 14px; font-size: 15px; }
+.sale-tabs button.on { background: #2d4a2d; border-color: #c9a227; }
+
+.sale-goods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+              gap: 8px; overflow-y: auto; align-content: start; flex: 1; }
+.good { min-height: 84px; display: flex; flex-direction: column; justify-content: center;
+        gap: 4px; text-align: left; padding: 10px 12px; }
+.good-name { font-size: 15px; line-height: 1.25; }
+.good-price { font-size: 18px; color: #c9a227; font-variant-numeric: tabular-nums; }
+.good-mark { font-size: 11px; color: #e0a86c; }
+.sale-empty { grid-column: 1/-1; padding: 30px; text-align: center;
+              color: #888; font-size: 15px; line-height: 1.6; }
+
+/* ── ЧЕК ─────────────────────────────────────────────────────────── */
+.sale-right { display: flex; flex-direction: column; gap: 10px; min-height: 0;
+              background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 12px; }
+.sale-cart { flex: 1; overflow-y: auto; }
+.cart-empty { padding: 40px 12px; text-align: center; color: #666; line-height: 1.7; }
+.cart-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+            padding: 10px 0; border-bottom: 1px solid #262626; }
+.cart-name { font-size: 15px; line-height: 1.3; }
+.cart-mark { font-style: normal; font-size: 11px; color: #e0a86c; margin-left: 6px; }
+.cart-qty { display: flex; align-items: center; gap: 6px; }
+.cart-qty button { min-height: 40px; min-width: 40px; padding: 0; font-size: 20px; }
+.cart-qty span { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+.cart-sum { text-align: right; font-size: 17px; font-variant-numeric: tabular-nums;
+            align-self: center; }
+.cart-disc { display: block; font-style: normal; font-size: 12px; color: #e0a86c; }
+
+.sale-total { display: flex; justify-content: space-between; align-items: baseline;
+              padding-top: 10px; border-top: 2px solid #333; }
+.sale-total span { color: #999; font-size: 15px; }
+.sale-total b { font-size: 30px; color: #c9a227; font-variant-numeric: tabular-nums; }
+.sale-right .big { width: 100%; }
+
+/* Полоса марок: кассир видит состояние, не считая строки глазами. */
+.sale-marks { padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; }
+.sale-marks.need { background: #4a3d2d; border: 1px solid #5f4f3a; }
+.sale-marks.ok { background: #2d4a2d; border: 1px solid #3a5f3a; }
+.sale-marks b { display: block; font-size: 14px; }
+.sale-marks small { color: #bbb; }

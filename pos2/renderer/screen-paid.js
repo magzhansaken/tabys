@@ -7,13 +7,24 @@
 function buildPaid(root, view, ctx) {
   const { money, onDone } = ctx;
 
+  /* ПОЛЯ СВОДИМ ПОД СВЁРТКУ. Найдено ЗАПУСКОМ: экран ждал heroLabel и
+     heroAmount, а свёртка отдаёт title, change и changeWords — на
+     экране выходило «undefined» вместо сдачи.
+
+     СДАЧА ГЛАВНАЯ, когда она есть. Нет сдачи — главным становится
+     итог: кассиру всё равно надо убедиться, что чек закрыт. */
+  const сдача = Math.round(Number(view.change) || 0);
+  const главное = сдача > 0
+    ? { label: 'Сдача', amount: сдача, words: view.changeWords }
+    : { label: 'Оплачено', amount: view.total, words: null };
+
   root.innerHTML = `
     <div class="paid-card">
       <div class="paid-num">Чек №${view.number ?? ''} · ${view.positions} поз.</div>
-      ${view.hero === 'change' ? `<div class="paid-sum">${money(view.total)}</div>` : ''}
-      <div class="paid-label">${view.heroLabel}</div>
-      <div class="paid-hero">${money(view.heroAmount)}</div>
-      ${view.heroWords ? `<div class="paid-words">${view.heroWords}</div>` : ''}
+      ${сдача > 0 ? `<div class="paid-sum">${money(view.total)}</div>` : ''}
+      <div class="paid-label">${главное.label}</div>
+      <div class="paid-hero">${money(главное.amount)}</div>
+      ${главное.words ? `<div class="paid-words">${главное.words}</div>` : ''}
       ${view.printNote ? `<div class="paid-warn">${view.printNote}</div>` : ''}
       <div class="paid-hint">Коснитесь, чтобы продолжить</div>
     </div>`;
