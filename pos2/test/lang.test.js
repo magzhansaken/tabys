@@ -97,10 +97,34 @@ console.log('\n═══ ЭКРАННАЯ КЛАВИАТУРА ═══\n');
   ok(все.includes('ж') && все.includes('ё'), 'Русские буквы на месте');
   ok(все.includes('ә') && все.includes('қ') && все.includes('ң'),
      '★ Казахские буквы есть: в товарах бывают «Айран», «Құрт»');
-  ok(все.includes('q') && все.includes('z'),
-     'И английские: названия вроде «Winston» набирают ими');
+  /* ЛАТИНИЦА ЗА КЛАВИШЕЙ «ABC», а не простынёй в восемь рядов.
+     Довод облика: она нужна редко — «Winston», «Nescafe» — а место ест
+     всегда. На планшете каждый лишний ряд отнимает высоту у списка
+     товаров.
+     Проверяем, что попасть на неё МОЖНО, а не что она сразу на виду. */
+  const переклю = [...kb.querySelectorAll('button')]
+    .find((b) => /^(ABC|abc|EN|Lat)$/i.test(b.textContent.trim()));
+  ok(!!переклю, '★ Латиница за клавишей «ABC»: нужна редко, а место ест всегда');
+
+  if (переклю) {
+    переклю.dispatchEvent(new dom.window.MouseEvent('mousedown',
+      { bubbles: true, cancelable: true }));
+    const после = [...kb.querySelectorAll('.kbd-key')].map((b) => b.textContent);
+    ok(после.includes('q') && после.includes('z'),
+       'И по нажатию она приходит: «Winston» набрать есть чем');
+  }
   ok(DIGITS.every((d) => все.includes(d)), 'Цифры тоже');
-  ok(все.includes('⌫') && все.includes('␣'), 'Стереть и пробел');
+  /* ПРОВЕРЯЕМ ДЕЙСТВИЕМ, А НЕ ЗНАЧКОМ. Прежняя проверка искала «⌫» и
+     «␣»: облик поменял их на слова, и она упала — хотя клавиши
+     работают. Значок дело облика, а стереть и пробел дело кассы. */
+  const шлют = [];
+  buildKeyboard(kb, { onKey: (v) => шлют.push(v) });
+  for (const b of kb.querySelectorAll('button')) {
+    b.dispatchEvent(new dom.window.MouseEvent('mousedown',
+      { bubbles: true, cancelable: true }));
+  }
+  ok(шлют.includes('\b'), '★ Стереть работает — как бы ни выглядела клавиша');
+  ok(шлют.includes(' '), 'И пробел');
 
   buildKeyboard(kb, { mode: 'number', onKey: () => {} });
   const цифровая = [...kb.querySelectorAll('.kbd-key')].map((b) => b.textContent);

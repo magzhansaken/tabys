@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark">
+  <title>Табыс · Касса — предпросмотр облика</title>
+  <link rel="stylesheet" href="../renderer/styles.css">
+  <style>
+    /* Панель предпросмотра. К кассе отношения не имеет. */
+    #demo { position: fixed; left: 14px; bottom: 14px; z-index: 900; max-width: 44vw;
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+            background: oklch(0.13 0.01 255 / .92); border: 1px solid oklch(0.35 0.02 255);
+            border-radius: 12px; padding: 8px 10px; box-shadow: 0 10px 30px oklch(0 0 0/.5); }
+    #demo b { font-size: 11px; color: oklch(0.6 0.02 255); letter-spacing: .1em; }
+    #demo button, #demo select { min-height: 38px; font-size: 13px; padding: 0 12px;
+            border-radius: 8px; background: oklch(0.22 0.015 255); color: oklch(0.9 0 0);
+            border: 1px solid oklch(0.35 0.02 255); }
+    #demo.min > :not(b) { display: none; }
+    #demo b { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="topbar"></div>
+  <div id="app">Касса загружается…</div>
+  <div id="paid" class="hidden"></div>
+  <div id="lock" class="hidden"></div>
+  <div id="modal" class="hidden"></div>
+  <div id="kbd" class="hidden"></div>
+  <div id="toasts"></div>
+
+  <script src="../renderer/common.js"></script>
+  <script src="../renderer/ids.js"></script>
+  <script src="../renderer/i18n.js"></script>
+  <script src="../renderer/ui.js"></script>
+  <script src="../renderer/keyboard.js"></script>
+  <script src="../renderer/hotkeys.js"></script>
+  <script src="../renderer/net.js"></script>
+  <script src="../renderer/catalog.js"></script>
+  <script src="../renderer/setup.js"></script>
+  <script src="../renderer/passes.js"></script>
+  <script src="../renderer/rights.js"></script>
+  <script src="../renderer/goods.js"></script>
+  <script src="../renderer/scan.js"></script>
+  <script src="../renderer/cart.js"></script>
+  <script src="../renderer/marks.js"></script>
+  <script src="../renderer/age.js"></script>
+  <script src="../renderer/discount.js"></script>
+  <script src="../renderer/pay.js"></script>
+  <script src="../renderer/paid.js"></script>
+  <script src="../renderer/receipt.js"></script>
+  <script src="../renderer/refund.js"></script>
+  <script src="../renderer/shift.js"></script>
+  <script src="../renderer/attendance.js"></script>
+  <script src="../renderer/report.js"></script>
+  <script src="../renderer/sync.js"></script>
+  <script src="../renderer/lock.js"></script>
+  <script src="../renderer/crash.js"></script>
+  <script src="../renderer/screen-setup.js"></script>
+  <script src="../renderer/screen-pin.js"></script>
+  <script src="../renderer/screen-shift.js"></script>
+  <script src="../renderer/screen-sale.js"></script>
+  <script src="../renderer/screen-menu.js"></script>
+  <script src="../renderer/screen-pay.js"></script>
+  <script src="../renderer/screen-paid.js"></script>
+  <script src="../renderer/core.js"></script>
+
+  <script>
+  /* ПРЕДПРОСМОТР ОБЛИКА. Живая связка НЕ грузится (app.js): вместо неё
+     этот сценарий с выдуманными товарами. Все экраны, окна, клавиатуры
+     и переходы — настоящие, из renderer/. */
+  (function () {
+    const $ = (id) => document.getElementById(id);
+    const money = (v) => num(v) + ' ₸';
+    let счёт = 0;
+    const newId = () => 'demo-' + (++счёт);
+
+    /* ── Выдуманный магазин ── */
+    const CATALOG = [
+      { id: 'g1', name: 'Хлеб «Тандыр» бездрожжевой с семенами льна', price: 320, category: 'Хлеб', quick: true, barcodes: ['4870001001', '22000450'] },
+      { id: 'g2', name: 'Хлеб «Тандыр» на закваске', price: 340, category: 'Хлеб', barcodes: ['4870001002'] },
+      { id: 'g3', name: 'Молоко «Айналайын» 2,5% 1 л', price: 480, category: 'Молочное', quick: true, barcodes: ['4870002001'] },
+      { id: 'g4', name: 'Айран «Родник» 0,9 л', price: 390, category: 'Молочное', quick: true, barcodes: ['4870002002'] },
+      { id: 'g5', name: 'Құрт солёный, упаковка 200 г', price: 750, category: 'Молочное', barcodes: ['4870002003'] },
+      { id: 'g6', name: 'Сыр «Адыгейский»', price: 2800, category: 'Молочное', unit: 'кг', weight: true, plu: '112' },
+      { id: 'g7', name: 'Сигареты «Winston» синий', price: 1200, category: 'Табак', quick: true, marked: true, marking: 'tobacco', ageLimit: 21, barcodes: ['4870003001'] },
+      { id: 'g8', name: 'Сигареты «Parliament» аква', price: 1650, category: 'Табак', marked: true, marking: 'tobacco', ageLimit: 21, barcodes: ['4870003002'] },
+      { id: 'g9', name: 'Пиво «Line Brew» светлое 0,5', price: 690, category: 'Алкоголь', marked: true, marking: 'beer', ageLimit: 21, barcodes: ['4870004001'] },
+      { id: 'g10', name: 'Картофель', price: 280, category: 'Овощи', quick: true, unit: 'кг', weight: true, plu: '101' },
+      { id: 'g11', name: 'Помидоры розовые', price: 890, category: 'Овощи', unit: 'кг', weight: true, plu: '102' },
+      { id: 'g12', name: 'Яблоки «Апорт»', price: 620, category: 'Овощи', unit: 'кг', weight: true, plu: '103' },
+      { id: 'g13', name: 'Вода «Tassay» газ. 1 л', price: 350, category: 'Напитки', quick: true, barcodes: ['4870005001'] },
+      { id: 'g14', name: 'Чай «Пиала Gold» гранулы 250 г', price: 1450, category: 'Бакалея', quick: true, barcodes: ['4870006001'] },
+      { id: 'g15', name: 'Макароны «Барлық» рожки 400 г', price: 260, category: 'Бакалея', barcodes: ['4870006002'] },
+      { id: 'g16', name: 'Мука «Цесна» высший сорт 2 кг', price: 980, category: 'Бакалея', barcodes: ['4870006003'] },
+      { id: 'g17', name: 'Казы варёное', price: 4200, category: 'Мясо', unit: 'кг', weight: true, plu: '120' },
+      { id: 'g18', name: 'Фарш говяжий охлаждённый', price: 2900, category: 'Мясо', unit: 'кг', weight: true, plu: '121' },
+      { id: 'g19', name: 'Шоколад «Казахстан» 100 г', price: 720, category: 'Сладости', quick: true, barcodes: ['4870007001'] },
+      { id: 'g20', name: 'Баурсаки, упаковка 300 г', price: 540, category: 'Сладости', barcodes: ['4870007002'] },
+      { id: 'g21', name: 'Мыло хозяйственное 72%', price: 190, category: 'Хозтовары', barcodes: ['4870008001'] },
+      { id: 'g22', name: 'Пакет-майка большой', price: 30, category: 'Хозтовары', quick: true, barcodes: ['4870008002'] },
+    ];
+
+    const SETD = { lang: 'ru', discountMaxPct: 30, printWidth: 48 };
+    let S = {
+      deviceToken: 'T', storeName: 'Мини-маркет на Абая', registerName: 'Касса 1',
+      employee: { id: 'e1', name: 'Айгуль' },
+      shift: { id: 's1', openedAt: new Date(Date.now() - 6.2 * 3600e3).toISOString(),
+               openedBy: 'e1', openedByName: 'Айгуль' },
+      cashInDrawer: 87400, lang: 'ru', lastNumber: 42,
+    };
+    let cart = [];
+    let cartDiscount = 0;
+    let tab = null;
+    let query = '';
+    let lastWayId = 'cash';
+    let netDown = false;
+    let pendingN = 0;
+    let rejectedN = 0;
+    let printFail = false;
+    let parked = [];
+    let чеки = [
+      { id: 'r1', number: 41, at: new Date(Date.now() - 40 * 60e3).toISOString(), kind: 'sale',
+        total: 2450, cashPart: 2450,
+        items: [{ name: 'Чай «Пиала Gold» гранулы 250 г', price: 1450, qty: 1 },
+                { name: 'Молоко «Айналайын» 2,5% 1 л', price: 480, qty: 2, returned: 1 }] },
+      { id: 'r2', number: 42, at: new Date(Date.now() - 12 * 60e3).toISOString(), kind: 'sale',
+        total: 1520, cardPart: 1520,
+        items: [{ name: 'Сигареты «Winston» синий', price: 1200, qty: 1 },
+                { name: 'Хлеб «Тандыр» бездрожжевой с семенами льна', price: 320, qty: 1 }] },
+    ];
+
+    const allowOk = async () => ({ ok: true, silent: true, approvedName: S.employee.name });
+
+    function go(name, ctx) {
+      const el = $('app');
+      if (el.__cleanup) { try { el.__cleanup(); } catch {} el.__cleanup = null; }
+      const r = show(name, S, ctx || {});
+      if (!r.ok) toast($('toasts'), r.reason, 'warn');
+      return r;
+    }
+
+    /* ── Экраны (связка как в app.js, но на демо-данных) ── */
+    screen('setup', (state) => buildSetup($('app'), state, {
+      version: '3.0.0',
+      onPair: async () => { await new Promise((r) => setTimeout(r, 700)); go('pin'); },
+    }));
+
+    screen('pin', (state) => buildPin($('app'), state, {
+      onPin: async () => { go(S.shift ? 'sale' : 'shift'); return { ok: true }; },
+      onClockOut: async () => ({ ok: true }),
+      onReset: async () => {
+        const да = await askSure($('modal'), {
+          title: 'Отвязать кассу от магазина?',
+          text: 'Кассу придётся привязывать заново — кодом из кабинета.',
+          yes: 'Отвязать', danger: true,
+        });
+        if (да) go('setup');
+      },
+    }));
+
+    screen('shift', (state) => buildShift($('app'), state, {
+      money,
+      onOpen: async (f) => { S.shift = { id: newId(), openedAt: new Date().toISOString(), openedBy: 'e1', openedByName: 'Айгуль' }; S.cashInDrawer = f; go('sale'); },
+      onClose: async (fact) => {
+        const diff = fact - (S.cashInDrawer || 0);
+        S.shift = null; S.cashInDrawer = 0;
+        toast($('toasts'), diff === 0 ? 'Смена закрыта, сходится'
+          : `Смена закрыта · ${diff > 0 ? 'излишек' : 'не хватает'} ${money(Math.abs(diff))}`);
+        go('pin');
+      },
+      onContinue: () => go('sale'),
+    }));
+
+    screen('sale', (state) => {
+      buildTopBar($('topbar'), state, {
+        netDown, pending: pendingN, rejected: rejectedN, money,
+        onMenu: () => openMenu(),
+        onLock: () => { $('lock').classList.remove('hidden'); go('locked'); },
+      });
+      return buildSale($('app'), state, {
+        goods: pickGoods(CATALOG, { tab, query }),
+        cart, cartDiscount, tab, query, money,
+        tabs: catTabs(CATALOG),
+        markBar: (() => {
+          const есть = cart.some((l) => l.marked);
+          if (!есть) return null;
+          const r = marksReady(cart);
+          return r.ok
+            ? { kind: 'ok', title: 'Марки собраны', note: 'Коды уйдут в чеке и выведут товар из оборота' }
+            : { kind: 'need', title: `Нужно марок: ${r.left}`, note: 'Отсканируйте Data Matrix на каждой штуке — без кода чек нельзя' };
+        })(),
+        onTab: (t) => { tab = t; query = ''; go('sale'); },
+        onSearch: (q) => { query = q; go('sale'); },
+        onPick: (g, qty) => { addToCart(cart, g, qty || 1, newId); go('sale'); },
+        onLine: async (i, act) => {
+          const l = cart[i];
+          if (!l) return;
+          const r = await setQty(cart, l, act === 'plus' ? l.qty + 1 : l.qty - 1, { allow: allowOk });
+          if (!r.ok && r.said) toast($('toasts'), r.said, 'warn');
+          go('sale');
+        },
+        onPay: () => {
+          const r = marksReady(cart);
+          if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
+          const в = ageCheck(cart);
+          if (в.need) { askAge(в); return; }
+          go('pay');
+        },
+        onPrice: () => priceCheck(),
+        onDiscount: () => askDiscount(),
+        onPark: () => parkNow(),
+        onClear: async () => {
+          const да = await askSure($('modal'), {
+            title: 'Очистить чек?',
+            text: `В чеке ${cart.length} ${plural(cart.length, 'позиция', 'позиции', 'позиций')}. `
+              + 'Они пропадут — отложите чек, если он ещё нужен',
+            yes: 'Очистить', danger: true,
+          });
+          if (!да) return;
+          cart = []; cartDiscount = 0;
+          go('sale');
+        },
+      });
+    });
+
+    screen('pay', () => buildPay($('app'), S, {
+      due: cartTotal(cart, cartDiscount),
+      ways: WAYS, lastWay: lastWayId, tenderOptions, money,
+      onBack: () => go('sale'),
+      onPay: async (d) => {
+        lastWayId = d.way;
+        const receipt = buildReceipt({ cart, cartDiscount, way: d.way, cash: d.cash,
+          card: d.card, due: cartTotal(cart, cartDiscount), state: S, newId });
+        S.lastNumber = receipt.number;
+        S.cashInDrawer = (S.cashInDrawer || 0) + receipt.cashDelta;
+        чеки.unshift(receipt);
+        cart = []; cartDiscount = 0;
+        const view = paidView(receipt);
+        if (printFail) view.printNote = 'Чек не напечатался — оплата ПРОШЛА, не пробивайте заново. Повторите печать из меню.';
+        $('paid').classList.remove('hidden');
+        go('paid', { view });
+      },
+    }));
+
+    screen('paid', (state, ctx) => buildPaid($('paid'), ctx.view, {
+      money,
+      onDone: () => { $('paid').classList.add('hidden'); go('sale'); },
+    }));
+
+    screen('locked', (state) => buildLock($('lock'), state, {
+      onUnlock: async () => {
+        $('lock').classList.add('hidden');
+        go(S.shift ? 'sale' : 'shift');
+        return { ok: true };
+      },
+    }));
+
+    /* ── Окна из связки (копии разметки app.js — для глаз) ── */
+    function askPinFor(title) {
+      return new Promise((resolve) => {
+        const root = $('modal');
+        openModal(root, `
+          <h2>${title}</h2>
+          <p class="muted">Нужен код старшего смены</p>
+          <div class="dots" id="apDots"></div>
+          <div class="gate-err" id="apErr"></div>
+          <div class="keypad" id="apPad"></div>
+          <div class="row-actions"><button id="apNo">Отмена</button></div>`,
+          () => resolve(null));
+        let pin = '';
+        const dots = root.querySelector('#apDots');
+        const draw = () => {
+          dots.innerHTML = [0, 1, 2, 3]
+            .map((i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join('');
+        };
+        const pad = root.querySelector('#apPad');
+        for (const k of ['1','2','3','4','5','6','7','8','9','C','0','⌫']) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = k;
+          b.className = (k === 'C' || k === '⌫') ? 'kb-aux' : '';
+          b.onclick = () => {
+            if (k === 'C') pin = '';
+            else if (k === '⌫') pin = pin.slice(0, -1);
+            else if (pin.length < 4) pin += k;
+            draw();
+            if (pin.length === 4) { const код = pin; closeModal(root); resolve(код); }
+          };
+          pad.appendChild(b);
+        }
+        root.querySelector('#apNo').onclick = () => { closeModal(root); resolve(null); };
+        draw();
+      });
+    }
+
+    function askAge(в) {
+      const card = openSheet($('modal'), {
+        title: 'Спросите документ',
+        html: `
+          <div class="age-what">${esc(в.what.join(', '))}</div>
+          <div class="age-year">${в.bornBefore}</div>
+          <p class="muted">год рождения или раньше — тогда можно продавать.
+            Продажа с ${в.years} лет.</p>
+          <div class="row-actions">
+            <button id="ageNo" class="bad">Нет документа</button>
+            <button id="ageYes" class="primary">Проверил, всё верно</button>
+          </div>`,
+      });
+      card.querySelector('#ageYes').onclick = () => { closeModal($('modal')); go('pay'); };
+      card.querySelector('#ageNo').onclick = () => {
+        const r = ageAnswer(cart, false);
+        cart = r.cart;
+        closeModal($('modal'));
+        toast($('toasts'), r.said, 'warn');
+        go('sale');
+      };
+    }
+
+    let ценаЖдёт = false;
+    function priceCheck() {
+      ценаЖдёт = true;
+      const card = openSheet($('modal'), {
+        title: 'Сколько стоит?',
+        html: `
+          <p class="muted">Поднесите товар к сканеру — цена покажется здесь.
+            В чек он НЕ попадёт.</p>
+          <div id="pcOut" class="pc-empty">жду товар…</div>
+          <div class="row-actions"><button id="pcClose">Закрыть</button></div>`,
+        onClose: () => { ценаЖдёт = false; },
+      });
+      card.querySelector('#pcClose').onclick = () => { ценаЖдёт = false; closeModal($('modal')); };
+    }
+
+    function showPrice(code) {
+      const out = $('modal').querySelector('#pcOut');
+      if (!out) return;
+      const r = resolveScan(code, CATALOG, {});
+      if (!r.ok) { out.className = 'pc-bad'; out.textContent = r.said; return; }
+      const g = r.good;
+      const весовой = r.from === 'весы';
+      out.className = 'pc-good';
+      out.innerHTML = `
+        <div class="pc-name">${esc(g.name)}</div>
+        <div class="pc-price">${money(g.price)}${весовой ? ' за кг' : ''}</div>
+        ${весовой ? `<div class="pc-note">${String(r.qty).replace('.', ',')} кг → ${money(Math.round(g.price * r.qty))}</div>` : ''}
+        ${g.marked ? '<div class="pc-note">нужна марка при продаже</div>' : ''}`;
+    }
+
+    function askDiscount() {
+      const база = cartTotal(cart, 0);
+      if (!база) { toast($('toasts'), 'Чек пуст — скидывать не с чего', 'warn'); return; }
+      const cap = capFor({ shopMaxPct: SETD.discountMaxPct, employee: S.employee });
+      const card = openSheet($('modal'), {
+        title: 'Скидка на чек',
+        html: `
+          <p class="muted">В чеке ${money(база)} · ваш потолок ${cap}%</p>
+          <div class="pay-notes" id="dcPre"></div>
+          <input id="dcSum" class="field" inputmode="numeric" placeholder="сумма скидки">
+          <div class="gate-err" id="dcErr"></div>
+          <div class="row-actions">
+            <button id="dcOff">Убрать скидку</button>
+            <button id="dcGo" class="primary">Применить</button>
+          </div>`,
+      });
+      const поле = card.querySelector('#dcSum');
+      const err = card.querySelector('#dcErr');
+      for (const p of PRESETS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = p + '%';
+        b.onclick = () => { поле.value = String(pctToAmount(база, p)); err.textContent = ''; };
+        card.querySelector('#dcPre').appendChild(b);
+      }
+      card.querySelector('#dcOff').onclick = () => { cartDiscount = 0; closeModal($('modal')); go('sale'); };
+      card.querySelector('#dcGo').onclick = async () => {
+        const r = checkDiscount(Number(поле.value) || 0, { base: база, capPct: cap });
+        if (!r.ok) {
+          if (!r.needSenior) { err.textContent = r.said; return; }
+          const pin = await askPinFor('Скидка сверх вашего предела');
+          if (!pin) return;
+        }
+        cartDiscount = Math.round(Number(поле.value) || 0);
+        closeModal($('modal'));
+        go('sale');
+      };
+      setTimeout(() => поле.focus(), 0);
+    }
+
+    function parkNow() {
+      if (!cart.length) { toast($('toasts'), 'Чек пуст — откладывать нечего', 'warn'); return; }
+      parked.push({ id: newId(), at: new Date().toISOString(),
+        label: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + ' · ' + S.employee.name,
+        items: cart.length, total: cartTotal(cart, 0),
+        lines: JSON.parse(JSON.stringify(cart)) });
+      cart = []; cartDiscount = 0;
+      toast($('toasts'), 'Чек отложен — касса свободна');
+      go('sale');
+    }
+
+    function openParked() {
+      if (!parked.length) { toast($('toasts'), 'Отложенных чеков нет', 'warn'); return; }
+      const html = parked.map((p) => `
+        <button class="menu-item" data-take="${p.id}">
+          <span class="menu-name">${p.label} · ${p.items} поз. · ${money(p.total)}</span>
+          <span class="menu-hint">Забрать обратно</span>
+        </button>`).join('');
+      const card = openSheet($('modal'), { title: 'Отложенные чеки', html: `<div class="menu">${html}</div>` });
+      card.querySelectorAll('[data-take]').forEach((b) => {
+        b.onclick = () => {
+          const p = parked.find((x) => x.id === b.dataset.take);
+          parked = parked.filter((x) => x.id !== p.id);
+          cart = p.lines; cartDiscount = 0;
+          closeModal($('modal'));
+          go('sale');
+        };
+      });
+    }
+
+    function openRefund() {
+      const продажи = чеки.filter((r) => r.kind !== 'refund');
+      if (!продажи.length) { toast($('toasts'), 'Чеков этой кассы ещё нет', 'warn'); return; }
+      const html = продажи.map((r) => `
+        <button class="menu-item" data-rec="${r.id}">
+          <span class="menu-name">Чек №${r.number} · ${money(r.total)}</span>
+          <span class="menu-hint">${new Date(r.at).toLocaleString('ru-RU',
+            { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            · ${(r.items || []).length} поз.</span>
+        </button>`).join('');
+      const card = openSheet($('modal'), { title: 'Возврат — выберите чек',
+        html: `<div class="menu">${html}</div>` });
+      card.querySelectorAll('[data-rec]').forEach((b) => {
+        b.onclick = () => {
+          const чек = продажи.find((r) => r.id === b.dataset.rec);
+          closeModal($('modal'));
+          refundLines2(чек);
+        };
+      });
+    }
+
+    function refundLines2(чек) {
+      const html = (чек.items || []).map((it, i) => `
+        <div class="cart-row">
+          <div class="cart-name">${esc(it.name)}</div>
+          <div class="cart-qty">
+            <button data-m="${i}">−</button>
+            <span data-q="${i}">0</span>
+            <button data-p="${i}">+</button>
+          </div>
+          <div class="cart-sum">${money(Math.round(it.price * it.qty))}</div>
+        </div>`).join('');
+      const выбор = (чек.items || []).map(() => 0);
+      const card = openSheet($('modal'), {
+        title: `Возврат по чеку №${чек.number}`,
+        html: `${html}
+          <div class="gate-err" id="rfErr"></div>
+          <div class="row-actions"><button id="rfGo" class="bad">Вернуть деньги</button></div>`,
+      });
+      const draw = () => выбор.forEach((v, i) => {
+        card.querySelector(`[data-q="${i}"]`).textContent = String(v);
+      });
+      card.querySelectorAll('[data-p]').forEach((b) => {
+        b.onclick = () => {
+          const i = Number(b.dataset.p);
+          const мах = чек.items[i].qty - (чек.items[i].returned || 0);
+          выбор[i] = Math.min(мах, выбор[i] + 1);
+          draw();
+        };
+      });
+      card.querySelectorAll('[data-m]').forEach((b) => {
+        b.onclick = () => { const i = Number(b.dataset.m); выбор[i] = Math.max(0, выбор[i] - 1); draw(); };
+      });
+      card.querySelector('#rfGo').onclick = async () => {
+        const err = card.querySelector('#rfErr');
+        const всего = выбор.reduce((a, v, i) => a + Math.round(чек.items[i].price * v), 0);
+        if (!всего) { err.textContent = 'Отметьте, что возвращаем'; return; }
+        const pin = await askPinFor('Возврат по чеку');
+        if (!pin) return;
+        closeModal($('modal'));
+        toast($('toasts'), `Возврат ${money(всего)} · в ящике ${money((S.cashInDrawer || 0) - всего)}`);
+        S.cashInDrawer -= всего;
+        go('sale');
+      };
+      draw();
+    }
+
+    function askCashMove(вид) {
+      const имя = { cash_in: 'Внести в кассу', cash_out: 'Изъять из кассы', collection: 'Инкассация' }[вид];
+      const card = openSheet($('modal'), {
+        title: имя,
+        html: `
+          <p class="muted">В ящике сейчас ${money(S.cashInDrawer || 0)}</p>
+          <input id="cmSum" class="field" inputmode="numeric" placeholder="сумма">
+          ${вид === 'cash_out' ? '<input id="cmNote" class="field" placeholder="на что взяли — обязательно">' : ''}
+          <div class="gate-err" id="cmErr"></div>
+          <div class="row-actions"><button id="cmGo" class="primary">Записать</button></div>`,
+      });
+      const поле = card.querySelector('#cmSum');
+      const примечание = card.querySelector('#cmNote');
+      const err = card.querySelector('#cmErr');
+      card.querySelector('#cmGo').onclick = () => {
+        if (вид === 'cash_out' && !(примечание.value || '').trim()) {
+          err.textContent = 'Напишите, на что взяли — иначе в отчёте будет дыра';
+          return;
+        }
+        const сумма = Number(поле.value) || 0;
+        if (!сумма) { err.textContent = 'Впишите сумму'; return; }
+        S.cashInDrawer += вид === 'cash_in' ? сумма : -сумма;
+        closeModal($('modal'));
+        toast($('toasts'), `${имя}: ${money(сумма)} · в ящике ${money(S.cashInDrawer)}`);
+        go('sale');
+      };
+      setTimeout(() => поле.focus(), 0);
+    }
+
+    function openRejected() {
+      if (!rejectedN) { toast($('toasts'), 'Все чеки приняты сервером'); return; }
+      const html = `
+        <div class="menu-item" style="cursor:default">
+          <span class="menu-name">Чек №43 · ${money(3180)}</span>
+          <span class="menu-hint">штрихкод марки не прошёл проверку</span>
+        </div>`;
+      openSheet($('modal'), {
+        title: 'Сервер не принял: 1',
+        html: `<p class="muted">Деньги за эти чеки в ящике, а в отчёте владельца их нет.
+          Покажите ему этот список.</p><div class="menu">${html}</div>`,
+      });
+    }
+
+    function openPrinterSheet() {
+      const список = [{ name: 'XPrinter XP-58', virtual: false },
+                      { name: 'Microsoft Print to PDF', virtual: true }];
+      const card = openSheet($('modal'), { title: 'Настройки печати',
+        html: `<div class="menu">${список.map((p) => `
+          <button class="menu-item" data-pr="${esc(p.name)}">
+            <span class="menu-name">${esc(p.name)}${p.name === 'XPrinter XP-58' ? ' ✓' : ''}</span>
+            <span class="menu-hint">${p.virtual
+              ? 'ПЕЧАТЬ В ФАЙЛ — чеки на бумагу НЕ выйдут'
+              : 'чековый принтер'}</span>
+          </button>`).join('')}</div>
+          <div class="row-actions"><button id="prTest">Пробная печать</button></div>` });
+      card.querySelector('#prTest').onclick = () => toast($('toasts'), 'Если бумага вышла — принтер настроен');
+      card.querySelectorAll('[data-pr]').forEach((b) => {
+        b.onclick = () => { closeModal($('modal')); toast($('toasts'), `Принтер: ${b.dataset.pr}`); };
+      });
+    }
+
+    function openKeysHelp() {
+      const html = hotkeyHelp().map((k) => `
+        <div class="menu-item" style="cursor:default">
+          <span class="menu-name">${esc(k.key)}</span>
+          <span class="menu-hint">${esc(k.name)}</span>
+        </div>`).join('');
+      openSheet($('modal'), { title: 'Горячие клавиши',
+        html: `<p class="muted">Работают, когда курсор не в поле ввода</p>
+          <div class="menu">${html}</div>` });
+    }
+
+    function openMenu() {
+      buildMenu($('modal'), { ...S, lang: SETD.lang }, {
+        openSheet, closeModal, money,
+        hasCart: cart.length, parked: parked.length, rejected: rejectedN,
+        on: (дело) => делай(дело),
+      });
+    }
+
+    async function делай(дело) {
+      switch (дело) {
+        case 'park': return parkNow();
+        case 'unpark': return openParked();
+        case 'discount': return askDiscount();
+        case 'reprint': return toast($('toasts'), `Чек №${чеки[0] ? чеки[0].number : 42} напечатан заново`);
+        case 'refund': return openRefund();
+        case 'cash_in': case 'cash_out': case 'collection': return askCashMove(дело);
+        case 'drawer': return toast($('toasts'), 'Ящик открыт');
+        case 'xreport': return toast($('toasts'), 'X-отчёт напечатан · смена продолжается');
+        case 'shift_close': return go('shift');
+        case 'rejected': return openRejected();
+        case 'printer': return openPrinterSheet();
+        case 'log': return toast($('toasts'), 'Журнал открыт в блокноте');
+        case 'lang': SETD.lang = SETD.lang === 'kz' ? 'ru' : 'kz';
+          toast($('toasts'), SETD.lang === 'kz'
+            ? 'Тіл: қазақша. Чек әрқашан орысша басылады'
+            : 'Язык: русский. Чек всегда печатается по-русски');
+          return go('sale');
+        case 'keys': return openKeysHelp();
+        case 'price': return priceCheck();
+        case 'logout': {
+          const план = planLogout({ cart, state: S });
+          if (план.warnings.length) {
+            const да = await askSure($('modal'), {
+              title: 'Выйти из кассы?',
+              text: план.warnings.map((w) => w.said).join('\n\n'),
+              yes: 'Выйти', danger: true,
+            });
+            if (!да) return null;
+          }
+          cart = []; cartDiscount = 0;
+          return go('pin');
+        }
+        default: return null;
+      }
+    }
+
+    /* ── Сканер и клавиши — настоящие ── */
+    const scanner = makeScanner({
+      onCode: (code) => {
+        if (ценаЖдёт) { showPrice(code); return; }
+        if (currentScreen() !== 'sale') {
+          toast($('toasts'), 'Сканер работает на экране продажи', 'warn');
+          return;
+        }
+        const r = resolveScan(code, CATALOG, {});
+        if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
+        addToCart(cart, r.good, r.qty, newId);
+        toast($('toasts'), `${r.good.name} · ${money(r.good.price)}`);
+        go('sale');
+      },
+    });
+    wireHotkeys(document, {
+      scanner,
+      isBusy: () => hasModal(),
+      onAction: (a) => {
+        if (a === 'pay' && currentScreen() === 'sale' && cart.length) go('pay');
+        if (a === 'price' && currentScreen() === 'sale') priceCheck();
+        if (a === 'menu' && currentScreen() === 'sale') openMenu();
+        if (a === 'close') closeModal();
+      },
+    });
+    wireEscape(document);
+
+    /* ── Панель предпросмотра ── */
+    const скан = (code) => {
+      const r = resolveScan(code, CATALOG, {});
+      if (currentScreen() === 'sale' && r.ok) {
+        addToCart(cart, r.good, r.qty, newId);
+        toast($('toasts'), `${r.good.name} · ${money(r.good.price)}`);
+        go('sale');
+      } else if (ценаЖдёт && r.ok) showPrice(code);
+    };
+    const demo = document.createElement('div');
+    demo.id = 'demo';
+    demo.innerHTML = `
+      <b>ДЕМО</b>
+      <select id="dmGo">
+        <option value="">экран…</option>
+        <option value="setup">Привязка</option>
+        <option value="pin">Код кассира</option>
+        <option value="shift">Смена</option>
+        <option value="sale">Продажа</option>
+        <option value="pay">Оплата</option>
+        <option value="locked">Замок</option>
+      </select>
+      <button id="dmScan1">Скан: хлеб</button>
+      <button id="dmScan2">Скан: сигареты</button>
+      <button id="dmScan3">Скан: весы 4,5 кг</button>
+      <button id="dmMark">Марка собрана</button>
+      <button id="dmNet">Связь: есть</button>
+      <button id="dmPrint">Печать: работает</button>`;
+    document.body.appendChild(demo);
+    demo.querySelector('b').onclick = () => demo.classList.toggle('min');
+    demo.querySelector('#dmGo').onchange = (e) => {
+      const v = e.target.value;
+      if (!v) return;
+      if (v === 'locked') $('lock').classList.remove('hidden');
+      go(v);
+      e.target.value = '';
+    };
+    demo.querySelector('#dmScan1').onclick = () => скан('4870001001');
+    demo.querySelector('#dmScan2').onclick = () => скан('4870003001');
+    demo.querySelector('#dmScan3').onclick = () => скан('2200101045005');
+    demo.querySelector('#dmMark').onclick = () => {
+      const l = cart.find((x) => x.marked && (x.codes || []).length < x.qty);
+      if (!l) { toast($('toasts'), 'Марки уже собраны или маркированного нет', 'warn'); return; }
+      l.codes = l.codes || [];
+      while (l.codes.length < l.qty) l.codes.push('0104870003001DEMO' + l.codes.length);
+      go('sale');
+    };
+    demo.querySelector('#dmNet').onclick = (e) => {
+      netDown = !netDown;
+      pendingN = netDown ? 3 : 0;
+      rejectedN = netDown ? 1 : 0;
+      e.target.textContent = netDown ? 'Связь: НЕТ' : 'Связь: есть';
+      if (currentScreen() === 'sale') go('sale');
+    };
+    demo.querySelector('#dmPrint').onclick = (e) => {
+      printFail = !printFail;
+      e.target.textContent = printFail ? 'Печать: СЛОМАНА' : 'Печать: работает';
+    };
+
+    // Куда встать — по состоянию, как в живой кассе.
+    go(startScreen(S));
+  })();
+  </script>
+</body>
+</html>
