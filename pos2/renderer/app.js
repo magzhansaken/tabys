@@ -184,6 +184,17 @@
          об этом после того, как покупатель достал деньги, хуже всего. */
       const r = marksReady(cart);
       if (!r.ok) { toast($('toasts'), r.said, 'warn'); return; }
+
+      /* ПРОВЕРКА ВОЗРАСТА. Спрашиваем ОДИН РАЗ за чек, при закрытии:
+         дёргать на каждой бутылке значит злить и кассира, и очередь.
+         В Казахстане продажа табака и алкоголя несовершеннолетнему —
+         штраф до 200 МРП на продавца ЛИЧНО. */
+      const в = ageCheck(cart);
+      if (в.need) {
+        askAge(в);
+        return;
+      }
+
       go('pay');
     },
 
@@ -316,6 +327,40 @@
       case 'logout': return logoutNow();
       default: return null;
     }
+  }
+
+  /* ── ВОЗРАСТ ──────────────────────────────────────────────────
+   *
+   * Окно с ДВУМЯ РАВНЫМИ кнопками. Не «да/отмена»: отказ — это не
+   * ошибка кассира, а обычный ход дела. Покупатель без документа или
+   * младше — товар снимается, остальное пробивается.
+   */
+  function askAge(в) {
+    const card = openSheet($('modal'), {
+      title: 'Спросите документ',
+      html: `
+        <div class="age-what">${esc(в.what.join(', '))}</div>
+        <div class="age-year">${в.bornBefore}</div>
+        <p class="muted">год рождения или раньше — тогда можно продавать.
+          Продажа с ${в.years} лет.</p>
+        <div class="row-actions">
+          <button id="ageNo" class="bad">Нет документа</button>
+          <button id="ageYes" class="primary">Проверил, всё верно</button>
+        </div>`,
+    });
+
+    card.querySelector('#ageYes').onclick = () => {
+      closeModal($('modal'));
+      go('pay');
+    };
+
+    card.querySelector('#ageNo').onclick = () => {
+      const r = ageAnswer(cart, false);
+      cart = r.cart;
+      closeModal($('modal'));
+      toast($('toasts'), r.said, 'warn');
+      go('sale');
+    };
   }
 
   /* ── ПРОВЕРКА ЦЕНЫ ────────────────────────────────────────────

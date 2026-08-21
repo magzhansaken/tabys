@@ -98,6 +98,13 @@ function addToCart(cart, g, qty = 1, newId) {
     unit: g.unit || 'шт',
     barcodes: g.barcodes || [],
     marked: !!g.marked,
+    /* ВИД МАРКИРОВКИ НЕСЁМ В СТРОКУ. Найдено живьём: строка теряла
+       его, и проверка возраста не срабатывала — пиво уходило без
+       вопроса о документе.
+       «marked» говорит «нужна марка», а «marking» — ЧТО это за товар:
+       табак, алкоголь, пиво. Возраст спрашивают по второму. */
+    marking: g.marking || null,
+    ageLimit: g.ageLimit || null,
     codes: [],            // марки соберутся на этапе 14
     discount: 0,
     priceChanged: false,

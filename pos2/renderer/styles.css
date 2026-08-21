@@ -296,3 +296,12 @@ button.dim:active { color: #999; }
 .pc-price { font-size: 52px; font-weight: 700; color: #c9a227;
             font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 6px; }
 .pc-note { margin-top: 8px; font-size: 14px; color: #9ec49e; }
+
+/* ═══ ВОЗРАСТ ══════════════════════════════════════════════════════
+   Год рождения крупно: кассир читает его через стол и сверяет с
+   документом, не вычитая в уме при очереди. */
+.age-what { text-align: center; font-size: 17px; color: #e0a86c; }
+.age-year {
+  text-align: center; font-size: 64px; font-weight: 700; color: #c9a227;
+  font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0;
+}
