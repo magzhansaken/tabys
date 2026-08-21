@@ -1133,6 +1133,9 @@ const RULES = [
   { file: 'pos2/renderer/styles.css', must: 'ТОВАРЫ СТРОКАМИ ВО ВСЮ ШИРИНУ',
     why: 'Плитками длинное имя обрезалось, а кассиру с плохим зрением 15 точек мелко' },
 
+  { file: 'admin/app/platform/sections/Requests.tsx', must: 'МАГАЗИНА ЕЩЁ НЕТ',
+    why: 'Имя вело на несуществующий магазин: владелец видел «Internal server error» на живой заявке' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

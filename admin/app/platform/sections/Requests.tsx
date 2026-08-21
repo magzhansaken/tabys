@@ -152,10 +152,23 @@ export default function Requests({ me }: { me: Me }) {
             <article key={r.id}
               className={`req ${r.status === 'pending' ? 'waiting' : ''} ${leaving[r.id] ? 'leaving' : ''}`}>
               <div className="req-head">
-                <button className="link-name"
-                  onClick={() => { window.location.hash = `#/client/${r.account_id}`; }}>
-                  {r.client}
-                </button>
+                {/* МАГАЗИНА ЕЩЁ НЕТ — ОТКРЫВАТЬ НЕЧЕГО.
+                    У заявки на нового клиента account_id пуст: магазин
+                    появится только после одобрения. Кнопка вела на
+                    #/client/null, кабинет просил несуществующий
+                    магазин, и сервер отвечал ошибкой.
+                    Владелец видел «Internal server error» и не понимал,
+                    что сломано — а сломано ничего. */}
+                {r.account_id ? (
+                  <button className="link-name"
+                    onClick={() => { window.location.hash = `#/client/${r.account_id}`; }}>
+                    {r.client}
+                  </button>
+                ) : (
+                  <span className="link-name is-new" title="Магазин появится после одобрения">
+                    {r.client}
+                  </span>
+                )}
                 <span className="sub">{r.author ?? '—'} · {dateTime(r.created_at)}</span>
               </div>
 

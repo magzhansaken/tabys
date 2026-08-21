@@ -756,6 +756,18 @@ main { padding: var(--space-6) 30px var(--space-12); max-width: 1440px; width: 1
 }
 .link-name:hover { color: var(--accent-strong); text-decoration: underline; }
 
+/* ИМЯ БЕЗ МАГАЗИНА не притворяется ссылкой: курсор обычный, при
+   наведении не подчёркивается.
+   Иначе владелец платформы жмёт и получает ошибку — а сломано ничего,
+   магазин просто ещё не заведён. */
+.link-name.is-new { cursor: default; color: var(--text); }
+.link-name.is-new:hover { text-decoration: none; color: var(--text); }
+.link-name.is-new::after {
+  content: 'ещё не заведён';
+  margin-left: 8px; font-size: 11px; font-weight: 400;
+  color: var(--muted); vertical-align: middle;
+}
+
 .client { display: flex; flex-direction: column; gap: var(--space-4); }
 .client .back { align-self: flex-start; margin-left: 0; }
 .client-head {
