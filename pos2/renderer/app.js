@@ -188,6 +188,7 @@
     },
 
     /* ── КНОПКИ ПРИ ПОКУПАТЕЛЕ ──────────────────────────────────── */
+    onPrice: () => priceCheck(),
     onDiscount: () => askDiscount(),
     onPark: () => parkNow(),
     onClear: async () => {
@@ -311,9 +312,66 @@
       case 'log': return K.openLog().catch(() => toast($('toasts'), 'Журнал не открылся', 'warn'));
       case 'lang': return switchLang();
       case 'keys': return openKeysHelp();
+      case 'price': return priceCheck();
       case 'logout': return logoutNow();
       default: return null;
     }
+  }
+
+  /* ── ПРОВЕРКА ЦЕНЫ ────────────────────────────────────────────
+   *
+   * Покупатель подходит: «сколько стоит?» Кассир подносит товар к
+   * сканеру и ВИДИТ ЦЕНУ, не пробивая его.
+   *
+   * Без этого товар сразу падает в чек, и его надо убирать — а на
+   * отмену может понадобиться старший. Это случается по десять раз за
+   * смену: ценник оторвался, покупатель сомневается, товар с полки без
+   * цены.
+   */
+  let ценаЖдёт = false;
+
+  function priceCheck() {
+    ценаЖдёт = true;
+
+    const card = openSheet($('modal'), {
+      title: 'Сколько стоит?',
+      html: `
+        <p class="muted">Поднесите товар к сканеру — цена покажется здесь.
+          В чек он НЕ попадёт.</p>
+        <div id="pcOut" class="pc-empty">жду товар…</div>
+        <div class="row-actions"><button id="pcClose">Закрыть</button></div>`,
+      onClose: () => { ценаЖдёт = false; },
+    });
+
+    card.querySelector('#pcClose').onclick = () => {
+      ценаЖдёт = false;
+      closeModal($('modal'));
+    };
+  }
+
+  /** Показать цену отсканированного, не трогая чек. */
+  function showPrice(code) {
+    const out = $('modal').querySelector('#pcOut');
+    if (!out) return;
+
+    const r = resolveScan(code, CATALOG, { prefixes: SET.scalePrefixes });
+    if (!r.ok) {
+      out.className = 'pc-bad';
+      out.textContent = r.said;
+      return;
+    }
+
+    const g = r.good;
+    const весовой = r.from === 'весы';
+    out.className = 'pc-good';
+    out.innerHTML = `
+      <div class="pc-name">${esc(g.name)}</div>
+      <div class="pc-price">${money(g.price)}${весовой ? ' за кг' : ''}</div>
+      ${весовой
+        ? `<div class="pc-note">${String(r.qty).replace('.', ',')} кг → `
+          + `${money(Math.round(g.price * r.qty))}</div>`
+        : ''}
+      ${g.marked ? '<div class="pc-note">нужна марка при продаже</div>' : ''}`;
   }
 
   /* ── ОТЛОЖЕННЫЕ ЧЕКИ ──────────────────────────────────────────── */
@@ -738,8 +796,20 @@
       const п = catalogWarning(r.ageDays);
       if (п) toast($('toasts'), п, 'warn');
     } catch (e) {
-      CATALOG = [];
-      toast($('toasts'), e.message, 'warn');
+      /* КАТАЛОГ С ДИСКА НЕ СТИРАЕМ. Найдено живьём: связь пропала —
+         CATALOG становился пустым, и касса СЛЕПЛА. Товары лежали на
+         диске, а на экране пусто и «товар не найден» на каждый скан.
+         Ради этого запас на диске и делался. */
+      const запас = ((await K.getCatalog()).data || {}).items || [];
+      if (запас.length) {
+        CATALOG = запас;
+        const дней = (await K.catalogAge()).data;
+        const п = catalogWarning(дней);
+        toast($('toasts'), п || 'Нет связи — работаю по сохранённому каталогу', 'warn');
+      } else {
+        CATALOG = [];
+        toast($('toasts'), e.message, 'warn');
+      }
     }
   }
 
@@ -773,6 +843,10 @@
   // ── Сканер ─────────────────────────────────────────────────────
   const scanner = makeScanner({
     onCode: (code) => {
+      /* ПРОВЕРКА ЦЕНЫ ОТКРЫТА — показываем цену и НЕ кладём в чек.
+         Ради этого она и нужна: узнать цену, не пробивая. */
+      if (ценаЖдёт) { showPrice(code); return; }
+
       /* НЕ НА ТОМ ЭКРАНЕ — не молчим. Кассир сканирует, а касса стоит
          на оплате или смене: без слов он решит, что сканер сломан. */
       if (currentScreen() !== 'sale') {
@@ -792,6 +866,7 @@
     isBusy: () => hasModal(),
     onAction: (a) => {
       if (a === 'pay' && currentScreen() === 'sale') go('pay');
+      if (a === 'price' && currentScreen() === 'sale') priceCheck();
       if (a === 'drawer') K.openDrawer();
       if (a === 'close') closeModal();
     },

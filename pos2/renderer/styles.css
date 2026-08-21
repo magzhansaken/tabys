@@ -257,3 +257,14 @@ body { display: flex; flex-direction: column; }
    поиском файлов в системе. */
 button.dim { color: #666; font-size: 13px; min-height: 34px; }
 button.dim:active { color: #999; }
+
+/* ═══ СКОЛЬКО СТОИТ ════════════════════════════════════════════════
+   Цену спрашивают при покупателе, и он ждёт у прилавка. Крупно:
+   кассир читает её через стол, не наклоняясь. */
+.pc-empty { padding: 30px; text-align: center; color: #666; font-size: 15px; }
+.pc-bad { padding: 20px; text-align: center; color: #e0a86c; font-size: 15px; line-height: 1.5; }
+.pc-good { padding: 20px; text-align: center; }
+.pc-name { font-size: 18px; color: #ccc; line-height: 1.3; }
+.pc-price { font-size: 52px; font-weight: 700; color: #c9a227;
+            font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 6px; }
+.pc-note { margin-top: 8px; font-size: 14px; color: #9ec49e; }

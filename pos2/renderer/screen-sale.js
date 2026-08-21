@@ -34,6 +34,10 @@ function buildSale(root, state, ctx) {
           <b id="saleTotal">${money(Math.max(0, итог))}</b>
         </div>
         <div class="sale-acts">
+          <!-- ЦЕНА НА ВИДУ: её спрашивают ПРИ ПОКУПАТЕЛЕ, и он ждёт у
+               прилавка. Работает и на пустом чеке: вопрос задают до
+               покупки. -->
+          <button id="salePrice">Цена?</button>
           <button id="saleDisc" ${cart && cart.length ? '' : 'disabled'}>Скидка</button>
           <button id="salePark" ${cart && cart.length ? '' : 'disabled'}>Отложить</button>
           <button id="saleClear" class="bad" ${cart && cart.length ? '' : 'disabled'}>Очистить</button>
@@ -134,6 +138,7 @@ function buildSale(root, state, ctx) {
 
   /* КНОПКИ ПРИ ПОКУПАТЕЛЕ. Скидка, отложить, очистить — их жмут, пока
      человек стоит у кассы, и прятать их в меню значит держать очередь. */
+  root.querySelector('#salePrice').onclick = () => ctx.onPrice && ctx.onPrice();
   root.querySelector('#saleDisc').onclick = () => ctx.onDiscount && ctx.onDiscount();
   root.querySelector('#salePark').onclick = () => ctx.onPark && ctx.onPark();
   root.querySelector('#saleClear').onclick = () => ctx.onClear && ctx.onClear();

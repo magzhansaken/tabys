@@ -17,6 +17,7 @@
 /** Что умеет касса с клавиатуры. */
 const KEYS = [
   { key: 'F2',  name: 'Поиск товара',      act: 'search' },
+  { key: 'F5',  name: 'Сколько стоит?',    act: 'price' },
   { key: 'F3',  name: 'Отложить чек',      act: 'park' },
   { key: 'F4',  name: 'Отложенные',        act: 'unpark' },
   { key: 'F6',  name: 'Скидка',            act: 'discount' },
