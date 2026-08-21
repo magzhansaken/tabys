@@ -1121,6 +1121,11 @@ const RULES = [
   { file: 'admin/app/platform/ui/describeRequest.ts', must: 'new_tenant',
     why: 'Без этого владелец платформы видит «Прочее» и не понимает, что от него хотят' },
 
+  { file: 'admin/app/platform/sections/Clients.tsx', must: 'КНОПКА НУЖНА ОБОИМ',
+    why: 'Партнёр не видел кнопки вовсе: заявка на сервере работала, а нажать было негде' },
+  { file: 'admin/app/platform/sections/Clients.tsx', must: 'ПОДПИСЬ РАЗНАЯ',
+    why: 'Партнёру писало «Все магазины платформы», а он видит только своих — подпись врала' },
+
   // ── Уборка на сервере: опасные команды под запретом ────────────────
   { file: 'deploy/11_server_hygiene.sh', mustNot: /^\s*docker system prune/m,
     why: 'system prune с томами снесёт базы, включая чеки живого клиента ресторана' },

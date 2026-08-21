@@ -213,6 +213,32 @@ export default function Requests({ me }: { me: Me }) {
                       onClick={() => decide(r, true)}>Одобрить…</button>
                   </div>
                 )}
+
+                {/* ОТЗЫВ. Партнёр передумал: клиент отказался, телефон
+                    записан неверно. Без кнопки заявка висит вечно, и
+                    владелец платформы разбирает мусор. */}
+                {r.status === 'pending' && !isSuper && (
+                  <div className="pay-actions">
+                    <button className="btn" disabled={busy}
+                      onClick={async () => {
+                        const да = await ask({
+                          title: 'Отозвать заявку?',
+                          sub: 'Владелец платформы её больше не увидит. '
+                            + 'Отправить заново можно в любой момент.',
+                          effects: [['Просили', describeRequest(r.kind, r.payload)]],
+                        });
+                        if (!да) return;
+                        setBusy(true);
+                        try {
+                          await api(`/requests/${r.id}/withdraw`, { method: 'POST' });
+                          toast({ text: 'Заявка отозвана' });
+                          await load();
+                        } catch (e: any) {
+                          toast({ text: humanError(e), kind: 'err' });
+                        } finally { setBusy(false); }
+                      }}>Отозвать…</button>
+                  </div>
+                )}
                 {/* Партнёру решение не рисуем: мёртвая кнопка хуже
                     отсутствующей. */}
                 {r.status === 'pending' && !isSuper && (
