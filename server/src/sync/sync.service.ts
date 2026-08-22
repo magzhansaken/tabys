@@ -126,7 +126,13 @@ export class SyncService {
     const reg = await c.query(
       `SELECT * FROM sync_push_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [e.id, accountId, source.deviceId ?? null, e.employeeId ?? source.employeeId ?? null, e.storeId ?? null,
-       e.entity, e.entityId, e.op, JSON.stringify(e.payload ?? {}), e.clientSeq ?? null, e.clientTs]);
+       e.entity, e.entityId, e.op, JSON.stringify(e.payload ?? {}), e.clientSeq ?? null,
+       /* ВРЕМЯ СТАВИМ САМИ, ЕСЛИ КАССА НЕ ПРИСЛАЛА.
+        * Найдено на боевом сервере: смены отбивались с «null value in
+        * column client_ts» — и за смену цеплялись ВСЕ чеки магазина.
+        * Метка нужна для порядка событий, а не для денег. Терять из-за
+        * неё смену со всей выручкой несоразмерно. */
+       e.clientTs ?? new Date().toISOString()]);
 
     if (reg.rows[0].result === 'duplicate')
       return { id: e.id, result: 'duplicate', serverSeq: Number(reg.rows[0].server_seq) };

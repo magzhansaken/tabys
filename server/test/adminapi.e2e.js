@@ -126,10 +126,18 @@ const today = new Date().toISOString().slice(0, 10);
   TOK = ownerTok;
 
   // Увольнение защищает владельца
+  /* СПИСОК МОЖЕТ ПРИЙТИ ОБЁРТКОЙ ИЛИ ОТКАЗОМ. Проверка звала find
+     напрямую и падала целиком — а падение скрывает всё, что дальше. */
   r = await j('GET', '/auth/employees');
-  const ownerId = r.d.find((x) => x.is_owner).id;
-  r = await j('PATCH', `/auth/employees/${ownerId}`, { isActive: false });
-  ok(r.status === 400, 'Владельца уволить нельзя (400)');
+  const люди = Array.isArray(r.d) ? r.d : (r.d?.rows ?? []);
+  ok(люди.length > 0, `Список сотрудников получен: ${люди.length}`);
+  const хозяин = люди.find((x) => x.is_owner || x.isOwner);
+  ok(!!хозяин, 'Владелец в списке есть');
+  const ownerId = хозяин ? хозяин.id : null;
+  if (ownerId) {
+    r = await j('PATCH', `/auth/employees/${ownerId}`, { isActive: false });
+    ok(r.status === 400, 'Владельца уволить нельзя (400)');
+  }
 
   console.log(`\n=== ИТОГ: пройдено ${pass}, провалено ${fail} ===`);
   srv.kill(); process.exit(fail ? 1 : 0);

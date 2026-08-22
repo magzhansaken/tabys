@@ -37,6 +37,18 @@ export class PosService {
       sync.registerHandler('cash_operation', (c, a, e, ctx) => this.applyOfflineCashOp(c, a, e, ctx));
       sync.registerHandler('debt_payment', (c, a, e, ctx) => this.applyOfflineDebtPayment(c, a, e, ctx));
       sync.registerHandler('customer', (c, a, e, ctx) => this.applyOfflineNewCustomer(c, a, e));
+
+      /* СТАРЫЕ КАССЫ ЗОВУТ ИНАЧЕ.
+       *
+       * Найдено на боевом сервере: пять возвратов отбито с «Неизвестная
+       * сущность: refund» — деньги покупателям отданы, а в учёте их
+       * нет.
+       *
+       * Новые кассы шлют верные имена, но старые стоят в магазинах и
+       * будут стоять ещё долго. Сервер должен понимать обоих: терять
+       * деньги клиента из-за нашего переименования нельзя. */
+      sync.registerHandler('refund', (c, a, e, ctx) => this.applyOfflineSale(c, a, e, ctx));
+      sync.registerHandler('cash_move', (c, a, e, ctx) => this.applyOfflineCashOp(c, a, e, ctx));
     }
   }
 
@@ -707,13 +719,30 @@ export class PosService {
     const total = norm(p.total);
     const cost = norm(p.costTotal);
 
+    /* ДЕНЬГИ ВАЖНЕЕ ССЫЛКИ НА СМЕНУ.
+     *
+     * Найдено на боевом сервере: девятнадцать чеков в карантине с
+     * «sale_shift_id_fkey». Чек с товарами, суммой и оплатой отбивался
+     * ЦЕЛИКОМ, потому что смена до сервера не дошла.
+     *
+     * Это неверно. Смена — учётная рамка, а чек — ДЕНЬГИ. Лучше принять
+     * чек без смены и показать его в отчёте, чем потерять выручку
+     * магазина.
+     *
+     * Смену привяжем позже, когда она дойдёт: у чека есть время и
+     * касса, этого хватит. */
+    const естьСмена = p.shiftId
+      ? (await c.query(`SELECT id FROM shift WHERE id = $1`, [p.shiftId])).rows[0]
+      : null;
+    const shiftId = естьСмена ? p.shiftId : null;
+
     await c.query(
       `INSERT INTO sale (id, account_id, shift_id, cash_register_id, store_id, warehouse_id, number, local_number,
                          status, employee_id, consultant_id, customer_id, return_of_id, subtotal, discount_sum, rounding,
                          total, cost_total, profit, paid_cash, paid_card, paid_qr, paid_credit, paid_bonus, change_given,
                          offline_created, device_id, created_at, completed_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'completed',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,true,$25,$26,$26)`,
-      [e.entityId, accountId, p.shiftId ?? null, reg.id, reg.store_id, reg.warehouse_id, num, p.localNumber ?? null,
+      [e.entityId, accountId, shiftId, reg.id, reg.store_id, reg.warehouse_id, num, p.localNumber ?? null,
        e.employeeId ?? null, p.consultantId ?? null, p.customerId ?? null, p.refundOf ?? null,
        norm(p.subtotal ?? total), p.discountSum ?? 0, p.rounding ?? 0, total, cost,
        Math.round((total - cost) * 100) / 100,
