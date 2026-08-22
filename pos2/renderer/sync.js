@@ -42,7 +42,8 @@ async function flush({ ask, store, settings, deviceToken, employeeId }) {
       body: {
         events: пачка.map((e) => ({
           id: e.id, entity: e.entity, entityId: e.entityId, op: e.op,
-          payload: e.payload, clientSeq: e.clientSeq, clientTs: e.clientTs,
+          payload: e.entity === 'sale' ? чекДляСервера(e.payload) : e.payload,
+          clientSeq: e.clientSeq, clientTs: e.clientTs,
           employeeId: e.employeeId || employeeId,
         })),
       },
@@ -192,8 +193,64 @@ function queueNote({ left, rejected, lastSync, netDown }) {
   return части.length ? части.join(' · ') : null;
 }
 
+/**
+ * ЧЕК В ВИД СЕРВЕРА.
+ *
+ * НАЙДЕНО ВЛАДЕЛЬЦЕМ: продажу пробили, а в кабинете её нет. Сервер
+ * отвечал 500, и чек НАВСЕГДА оставался в очереди — деньги взяты,
+ * учёта нет.
+ *
+ * Касса зовёт оплату way/cash/card, сервер ждёт payment. Имена строк
+ * тоже свои: discountSum вместо discount, у каждой строки свой total.
+ *
+ * Переводим ЗДЕСЬ, а не в самом чеке: чек читает кассир на ленте, и
+ * менять его имена значит менять печать, отчёты и возвраты разом.
+ */
+function чекДляСервера(r) {
+  if (!r) return r;
+
+  const строки = (r.items || []).map((l) => ({
+    productId: l.productId || l.id,
+    qty: Number(l.qty) || 0,
+    price: Number(l.price) || 0,
+    discountSum: Number(l.discount) || 0,
+    total: Math.round((Number(l.price) || 0) * (Number(l.qty) || 0))
+      - (Number(l.discount) || 0),
+    /* Марки едут в строке: без них товар не выйдет из оборота, а
+       налоговая спросит именно за них. */
+    marks: l.codes && l.codes.length ? l.codes : undefined,
+  }));
+
+  const подытог = строки.reduce((a, l) => a + l.total, 0);
+
+  return {
+    localNumber: r.number,
+    shiftId: r.shiftId || null,
+    subtotal: подытог,
+    discountSum: Number(r.discount) || 0,
+    total: Number(r.total) || 0,
+    rounding: 0,
+    items: строки,
+
+    /* ОПЛАТА ОТДЕЛЬНЫМ УЗЛОМ. Смешанная едет обеими частями: карта
+       точно, наличными добирают — иначе в отчёте магазина деньги
+       разойдутся с ящиком. */
+    payment: {
+      cash: Number(r.cash) || 0,
+      card: Number(r.card) || 0,
+      qr: r.way === 'qr' ? (Number(r.total) || 0) : 0,
+      credit: r.way === 'credit' ? (Number(r.total) || 0) : 0,
+      bonus: 0,
+      change: Number(r.change) || 0,
+    },
+
+    // Возврат несёт ссылку на свой чек, а не знак минус.
+    refundOf: r.refundOf || r.returnOf || null,
+  };
+}
+
 if (typeof module !== 'undefined') {
   // eslint-disable-next-line global-require
   var { развернуть } = require('./common.js');
-  module.exports = { BATCH, flush, makeSyncLoop, queueNote };
+  module.exports = { BATCH, чекДляСервера, flush, makeSyncLoop, queueNote };
 }
