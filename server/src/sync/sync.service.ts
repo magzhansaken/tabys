@@ -126,8 +126,20 @@ export class SyncService {
         continue;
       }
 
+      /* ПРОВЕРЯЕМ ПО ТАБЛИЦЕ, А НЕ ВЕРИМ ОБРАБОТЧИКУ.
+       *
+       * Обработчик может выйти МОЛЧА, ничего не сделав: чек уже есть,
+       * устройство не то, тело неполное. Молчание я считал успехом — и
+       * говорил «применено 22», когда в продажах ноль.
+       *
+       * Смотрим саму таблицу: появилась строка или нет. Это
+       * единственная правда, которую стоит показывать владельцу. */
+      const куда = r.entity === 'shift' ? 'shift'
+        : (r.entity === 'sale' || r.entity === 'refund') ? 'sale'
+          : 'cash_operation';
+
       try {
-        await this.db.withTenant(accountId, async (c) => {
+        const легло = await this.db.withTenant(accountId, async (c) => {
           await handler(c, accountId, {
             id: r.id,
             entity: r.entity,
@@ -138,13 +150,23 @@ export class SyncService {
             clientSeq: r.client_seq,
           } as any, { deviceId: r.device_id ?? undefined });
 
-          /* Помечаем разобранным ТОЛЬКО после того, как применили: иначе
-             запись пропадёт из виду, а деньги останутся вне учёта. */
-          await c.query(
-            `UPDATE oplog_dead_letter SET resolved_at = now()
-              WHERE account_id = $1 AND id = $2`, [accountId, r.id]);
+          const есть = (await c.query(
+            `SELECT 1 FROM ${куда} WHERE id = $1`, [r.entity_id])).rowCount;
+
+          if (есть) {
+            /* Помечаем разобранным ТОЛЬКО когда строка ВПРАВДУ есть:
+               иначе запись пропадёт из виду, а деньги останутся вне
+               учёта. */
+            await c.query(
+              `UPDATE oplog_dead_letter SET resolved_at = now()
+                WHERE account_id = $1 AND id = $2`, [accountId, r.id]);
+          }
+          return !!есть;
         });
-        применено += 1;
+
+        if (легло) применено += 1;
+        else беды.push({ id: r.id,
+          error: `${r.entity}: обработчик отработал молча, строки в «${куда}» нет` });
       } catch (e: any) {
         беды.push({ id: r.id, error: String(e.message || e).slice(0, 120) });
       }
@@ -154,7 +176,9 @@ export class SyncService {
       всего: записи.length,
       применено,
       осталось: записи.length - применено,
-      беды: беды.slice(0, 5),
+      /* Беды показываем ВСЕ до десяти: пять скрывали половину правды,
+         и я сам не видел, что происходит. */
+      беды: беды.slice(0, 10),
     };
   }
 
