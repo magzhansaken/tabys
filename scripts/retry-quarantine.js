@@ -19,6 +19,38 @@ const ЧИНИТЬ = process.argv.includes('--fix');
 const деньги = (v) => Math.round(Number(v) || 0)
   .toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₸';
 
+/**
+ * РАЗОБРАТЬ КАРАНТИН ОДНОГО МАГАЗИНА.
+ *
+ * Поднимаем ход обмена сервера прямо здесь: скрипт живёт внутри его
+ * контейнера, и весь код рядом.
+ */
+async function разбери(accountId) {
+  /* СБОРКА СЕРВЕРА ЛЕЖИТ РЯДОМ. В контейнере это /app/dist, при
+     запуске из исходников — server/dist. Понимаем оба. */
+  const fs = require('fs');
+  const path = require('path');
+  const где = ['/app/dist', path.join(__dirname, '..', 'server', 'dist'),
+    path.join(__dirname, '..', 'dist')]
+    .find((p) => fs.existsSync(path.join(p, 'main.js')));
+
+  if (!где) throw new Error('Не нашёл сборку сервера — запустите внутри контейнера');
+
+  const корень = path.join(где, '..');
+  const { NestFactory } = require(path.join(корень, 'node_modules', '@nestjs', 'core'));
+  /* AppModule живёт в main.js — там же, где запуск сервера. */
+  const { AppModule } = require(path.join(где, 'main.js'));
+  const { SyncService } = require(path.join(где, 'sync', 'sync.service.js'));
+
+  if (!разбери._app) {
+    разбери._app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  }
+  const sync = разбери._app.get(SyncService);
+  const r = await sync.retryQuarantine(accountId);
+  return { применено: r.применено, осталось: r.осталось,
+    беды: (r.беды || []).map((b) => b.error) };
+}
+
 (async () => {
   const c = new Client({
     host: process.env.PGHOST || 'localhost',
@@ -79,29 +111,21 @@ const деньги = (v) => Math.round(Number(v) || 0)
       continue;
     }
 
-    /* ПРИМЕНЯЕМ В ТОМ ЖЕ ПОРЯДКЕ, в каком касса их пробила: смена
-       первой, иначе чеки снова не найдут её. */
-    const вес = { shift: 0, sale: 1, refund: 1, cash_move: 2, cash_operation: 2 };
-    записи.sort((a, b) => (вес[a.entity] ?? 9) - (вес[b.entity] ?? 9));
+    /* ВОЗВРАЩАЕМ ЧЕРЕЗ СЕРВЕР, а не правкой журнала.
+     *
+     * Было: разбор возвращал события в журнал, но НЕ ПРИМЕНЯЛ их —
+     * чеков в продажах не появлялось. «Возвращено» было правдой лишь
+     * наполовину, а владелец видел ноль и думал, что мы не доделали.
+     *
+     * Зовём свёртку сервера напрямую: скрипт работает ВНУТРИ его
+     * контейнера, и городить вход в кабинет ради своего же кода
+     * незачем. */
+    const итог = await разбери(м.id);
 
-    for (const r of записи) {
-      try {
-        const res = (await c.query(
-          `SELECT * FROM sync_push_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [r.id, м.id, r.device_id, null, null, r.entity, r.entity_id, r.op,
-           JSON.stringify(r.payload || {}), r.client_seq,
-           r.client_ts || new Date().toISOString()])).rows[0];
-
-        /* Событие снова в журнале — помечаем разобранным. Применит его
-           обычный ход обмена, тот же, что и живые чеки. */
-        await c.query(
-          `UPDATE oplog_dead_letter SET resolved_at = now() WHERE id = $1`, [r.id]);
-        вернули += 1;
-      } catch (e) {
-        console.log('      ✘ ' + r.entity + ': ' + String(e.message).slice(0, 70));
-      }
-    }
-    console.log('      вернули: ' + записи.length);
+    console.log('      применено: ' + итог.применено
+      + (итог.осталось ? ' · осталось ' + итог.осталось : ' ✔'));
+    вернули += итог.применено;
+    for (const b of итог.беды) console.log('        ✘ ' + b);
   }
 
   await c.end();

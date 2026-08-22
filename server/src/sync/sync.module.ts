@@ -45,6 +45,13 @@ export class SyncController {
 export class AdminSyncController {
   constructor(private sync: SyncService) {}
 
+  /* ВЕРНУТЬ ЧЕКИ ИЗ КАРАНТИНА. Владелец видит ноль в отчёте, а деньги
+     взяты — этой кнопкой они возвращаются в учёт. */
+  @Post('retry-quarantine') @RequirePermission('settings', 'edit')
+  retryQuarantine(@Ctx() ctx: EmployeeContext) {
+    return this.sync.retryQuarantine(ctx.accountId);
+  }
+
   @Post('push') @RequirePermission('settings', 'edit')
   push(@Ctx() ctx: EmployeeContext, @Body() d: PushDto) {
     return this.sync.push(ctx.accountId, { employeeId: ctx.employeeId }, d.events, 0);

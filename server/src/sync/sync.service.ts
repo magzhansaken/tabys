@@ -72,6 +72,67 @@ export class SyncService {
   // ==================================================================
   // PUSH: приём батча событий с устройства
   // ==================================================================
+  /**
+   * ВЕРНУТЬ ЧЕКИ ИЗ КАРАНТИНА.
+   *
+   * Чек в карантине — это взятые деньги без учёта. Тело события лежит
+   * целиком, и применить его можно тем же ходом, что и живые чеки.
+   *
+   * Порядок важен: сперва смены, потом чеки. Чек ссылается на смену, и
+   * наоборот не выйдет.
+   */
+  async retryQuarantine(accountId: string) {
+    const записи = await this.db.withTenant(accountId, async (c) => (await c.query(
+      `SELECT id, device_id, entity, entity_id, op, payload,
+              client_ts, client_seq
+         FROM oplog_dead_letter
+        WHERE account_id = $1 AND resolved_at IS NULL
+        ORDER BY CASE entity WHEN 'shift' THEN 0 WHEN 'sale' THEN 1
+                             WHEN 'refund' THEN 1 ELSE 2 END,
+                 first_seen_at`, [accountId])).rows);
+
+    if (!записи.length) return { всего: 0, применено: 0, осталось: 0, беды: [] };
+
+    const события = записи.map((r) => ({
+      id: r.id,
+      entity: r.entity,
+      entityId: r.entity_id,
+      op: r.op,
+      payload: r.payload,
+      clientTs: r.client_ts,
+      clientSeq: r.client_seq,
+    }));
+
+    /* Шлём ТЕМ ЖЕ ХОДОМ, что и живая касса: он и запишет, и применит.
+       Устройство берём из первой записи — оно у магазина одно. */
+    const итог = await this.push(accountId,
+      { deviceId: записи[0].device_id || undefined }, события as any, 0);
+
+    const принятые = (итог.results || [])
+      .filter((r: any) => r.result === 'accepted' || r.result === 'duplicate')
+      .map((r: any) => r.id);
+
+    if (принятые.length) {
+      await this.db.withTenant(accountId, async (c) => {
+        await c.query(
+          `UPDATE oplog_dead_letter SET resolved_at = now()
+            WHERE account_id = $1 AND id = ANY($2::uuid[])`,
+          [accountId, принятые]);
+      });
+    }
+
+    const беды = (итог.results || [])
+      .filter((r: any) => r.result !== 'accepted' && r.result !== 'duplicate')
+      .map((r: any) => ({ id: r.id, error: String(r.error || '').slice(0, 120) }));
+
+    return {
+      всего: записи.length,
+      применено: принятые.length,
+      осталось: записи.length - принятые.length,
+      беды: беды.slice(0, 5),
+    };
+  }
+
   async push(
     accountId: string,
     source: { deviceId?: string; employeeId?: string },
