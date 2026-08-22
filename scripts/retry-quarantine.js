@@ -43,6 +43,16 @@ async function разбери(accountId, все) {
 
   const корень = path.join(где, '..');
   const { NestFactory } = require(path.join(корень, 'node_modules', '@nestjs', 'core'));
+
+  /* СВОБОДНЫЙ ПОРТ ДЛЯ РАЗБОРА.
+   *
+   * main.js не только отдаёт AppModule — он ЗАПУСКАЕТ сервер. А боевой
+   * уже слушает 3000, и разбор падал с «address already in use».
+   *
+   * Берём порт 0: система выдаст свободный. Разбор поднимет свой ход на
+   * минуту, сделает дело и выйдет — боевой сервер не тронут. */
+  process.env.PORT = '0';
+
   /* AppModule живёт в main.js — там же, где запуск сервера. */
   const { AppModule } = require(path.join(где, 'main.js'));
   const { SyncService } = require(path.join(где, 'sync', 'sync.service.js'));
