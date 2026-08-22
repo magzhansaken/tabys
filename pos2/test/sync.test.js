@@ -192,6 +192,50 @@ console.log('\n═══ ЧТО ВИДИТ КАССИР ═══\n');
      `★ Отклонённые названы отдельно: «${беда}»`);
 }
 
-console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
-process.exit(failed ? 1 : 0);
+(async () => {
+
+// ── КАРАНТИН — ЭТО НЕ «УШЛО» ──────────────────────────────────────
+
+  /* НАЙДЕНО ВЛАДЕЛЬЦЕМ: продажу пробили, а в кабинете ноль.
+   *
+   * Сервер отвечает «quarantined», когда принял чек, но НЕ ПРИМЕНИЛ:
+   * например, строка пришла без ключа товара — списывать со склада
+   * нечего.
+   *
+   * Касса считала такой чек ушедшим и убирала из очереди МОЛЧА: деньги
+   * взяты, в отчёте пусто, и никто не знает. */
+  const очередь = [
+    { id: 'a', entity: 'sale', entityId: 'a', op: 'insert', payload: { number: 1, total: 250 } },
+    { id: 'b', entity: 'sale', entityId: 'b', op: 'insert', payload: { number: 2, total: 400 } },
+  ];
+  const ящик = [];
+
+  const store = {
+    outboxPending: async () => очередь,
+    outboxDone: async (ids) => { for (const i of ids) {
+      const k = очередь.findIndex((x) => x.id === i); if (k >= 0) очередь.splice(k, 1); } },
+    outboxAck: async (ids) => { for (const i of ids) {
+      const k = очередь.findIndex((x) => x.id === i); if (k >= 0) очередь.splice(k, 1); } },
+    // Ящик принимает СПИСОК разом, а не по одной записи.
+    rejectedAdd: async (список) => { ящик.push(...(Array.isArray(список) ? список : [список])); },
+  };
+
+  const ask = async () => ({ results: [
+    { id: 'a', result: 'accepted' },
+    { id: 'b', result: 'quarantined', error: 'null value in product_id' },
+  ] });
+
+  const r = await flush({ ask, store, settings: {}, deviceToken: 'T' });
+
+  ok(r.sent === 1, `★ Ушёл только принятый: ${r.sent}`);
+  ok(r.rejected === 1, '★ Карантин посчитан ОТКЛОНЁННЫМ, а не ушедшим');
+  ok(ящик.length === 1 && ящик[0].number === 2,
+     '★ И лёг в ящик «Сервер не принял»: деньги остались на виду');
+  ok(!очередь.some((x) => x.id === 'b'),
+     'Из очереди убран — иначе крутился бы вечно');
+
+
+  console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
+  process.exit(failed ? 1 : 0);
+})();
 })();
