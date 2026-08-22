@@ -172,6 +172,44 @@ console.log('\n═══ ВХОД: СЕРВЕР И ПРОПУСК ═══\n');
   ok(!passTooOld(p), '★ Живой вход обновил пропуск: кто работает — тот и входит');
 }
 
-console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
-process.exit(failed ? 1 : 0);
+// ── МОСТ ОТДАЁТ ОБЁРТКУ ───────────────────────────────────────────
+(async () => {
+  /* НАЙДЕНО ВЛАДЕЛЬЦЕМ: замок не отпирался выданным кодом.
+   *
+   * Мост кассы отвечает { ok, data }, а offlineLogin читал это как
+   * пропуск: employee внутри не виделся, и замок падал на «Cannot read
+   * properties of undefined». Кассир вводил ВЕРНЫЙ код и оставался
+   * запертым. */
+  const диск = {};
+  const мост = {
+    passSave: async (k, v) => { диск[k] = v; return { ok: true }; },
+    passRead: async (k) => ({ ok: true, data: диск[k] || null }),
+  };
+
+  await savePass({ store: мост, pin: '1234', deviceKey: 'K',
+    employee: { id: 'e1', name: 'Айгуль' } });
+
+  const через = await offlineLogin({ store: мост, pin: '1234', deviceKey: 'K' });
+  ok(через && через.employee && через.employee.name === 'Айгуль',
+     '★ Через мост пропуск читается: замок отопрётся');
+
+  const чужой = await offlineLogin({ store: мост, pin: '9999', deviceKey: 'K' });
+  ok(чужой === null,
+     '★ Чужого кода нет — отдаём ПУСТО, а не пустой предмет: иначе впустим кого угодно');
+
+  // И простой склад тоже понимаем — на нём стоят остальные проверки.
+  const прямой = {};
+  const простой = {
+    passSave: async (k, v) => { прямой[k] = v; },
+    passRead: async (k) => прямой[k] || null,
+  };
+  await savePass({ store: простой, pin: '1234', deviceKey: 'K',
+    employee: { id: 'e2', name: 'Нурлан' } });
+  const п2 = await offlineLogin({ store: простой, pin: '1234', deviceKey: 'K' });
+  ok(п2 && п2.employee.name === 'Нурлан',
+     '★ Простой склад тоже работает — понимаем оба вида ответа');
+
+  console.log(`\n=== ИТОГ: пройдено ${passed}, провалено ${failed} ===`);
+  process.exit(failed ? 1 : 0);
+})();
 })();

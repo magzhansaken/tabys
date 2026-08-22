@@ -146,7 +146,9 @@ async function approveByPin(pin, { ask, store, deviceToken, settings, action }) 
        Смотрим пропуска — старший мог входить на этой кассе. */
     const { pinPrint } = require('./passes.js');
     const print = await pinPrint(pin, deviceToken);
-    const pass = await store.passRead(print);
+    /* Мост отдаёт обёртку. Без развёртки старший НЕ МОГ разрешить
+     скидку или отмену при пропавшей связи: пропуск читался как пустой. */
+  const pass = разверни(await store.passRead(print));
 
     if (pass && isSenior(pass.employee)) {
       return {
@@ -178,5 +180,7 @@ async function approveByPin(pin, { ask, store, deviceToken, settings, action }) 
 }
 
 if (typeof module !== 'undefined') {
+  // eslint-disable-next-line global-require
+  var { разверни } = require('./common.js');
   module.exports = { LEVELS, ACTIONS, isSenior, discountCap, needFor, allow, approveByPin };
 }

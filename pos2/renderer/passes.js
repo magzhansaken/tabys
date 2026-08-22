@@ -81,8 +81,16 @@ async function savePass({ store, pin, deviceKey, employee, extra }) {
  */
 async function offlineLogin({ store, pin, deviceKey }) {
   const print = await pinPrint(pin, deviceKey);
-  const pass = await store.passRead(print);
-  return pass || null;
+
+  /* МОСТ ОТДАЁТ ОБЁРТКУ { ok, data }, а мы читали её как пропуск.
+   *
+   * НАЙДЕНО ВЛАДЕЛЬЦЕМ: замок не отпирался выданным кодом. Пропуск
+   * приходил обёрнутым, employee внутри не виделся — замок падал на
+   * «Cannot read properties of undefined».
+   *
+   * Кассир вводил ВЕРНЫЙ код и оставался запертым. */
+  const pass = разверни(await store.passRead(print));
+  return pass && pass.employee ? pass : null;
 }
 
 /**
@@ -132,7 +140,9 @@ async function login({ ask, store, settings, deviceToken, pin }) {
     const pass = await offlineLogin({ store, pin, deviceKey: deviceToken });
 
     if (!pass) {
-      const сколько = await store.passCount();
+      /* Мост отдаёт обёртку — разворачиваем, иначе счёт всегда «объект»
+     и первый вход выглядит не первым. */
+  const сколько = разверни(await store.passCount());
       return {
         ok: false,
         said: сколько
@@ -155,5 +165,7 @@ async function login({ ask, store, settings, deviceToken, pin }) {
 }
 
 if (typeof module !== 'undefined') {
+  // eslint-disable-next-line global-require
+  var { разверни } = require('./common.js');
   module.exports = { pinPrint, makePass, savePass, offlineLogin, passTooOld, login, PASS_DAYS };
 }
