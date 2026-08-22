@@ -107,42 +107,53 @@ export class SyncService {
 
     if (!записи.length) return { всего: 0, применено: 0, осталось: 0, беды: [] };
 
-    const события = записи.map((r) => ({
-      id: r.id,
-      entity: r.entity,
-      entityId: r.entity_id,
-      op: r.op,
-      payload: r.payload,
-      clientTs: r.client_ts,
-      clientSeq: r.client_seq,
-    }));
+    /* ПРИМЕНЯЕМ ТЕЛО НАПРЯМУЮ, а не шлём как новое событие.
+     *
+     * Событие УЖЕ в журнале — его положил туда прежний разбор. Обычный
+     * ход видит повтор и пропускает применение: «применено 22» было
+     * неправдой, а чеков в продажах не появлялось.
+     *
+     * Здесь зовём обработчик сам: чек ляжет в продажи, смена в смены.
+     * Обработчики идемпотентны — повторный чек они пропускают сами. */
+    let применено = 0;
+    const беды: { id: string; error: string }[] = [];
 
-    /* Шлём ТЕМ ЖЕ ХОДОМ, что и живая касса: он и запишет, и применит.
-       Устройство берём из первой записи — оно у магазина одно. */
-    const итог = await this.push(accountId,
-      { deviceId: записи[0].device_id || undefined }, события as any, 0);
+    for (const r of записи) {
+      const handler = this.handlers.get(r.entity);
 
-    const принятые = (итог.results || [])
-      .filter((r: any) => r.result === 'accepted' || r.result === 'duplicate')
-      .map((r: any) => r.id);
+      if (!handler) {
+        беды.push({ id: r.id, error: `Неизвестная сущность: ${r.entity}` });
+        continue;
+      }
 
-    if (принятые.length) {
-      await this.db.withTenant(accountId, async (c) => {
-        await c.query(
-          `UPDATE oplog_dead_letter SET resolved_at = now()
-            WHERE account_id = $1 AND id = ANY($2::uuid[])`,
-          [accountId, принятые]);
-      });
+      try {
+        await this.db.withTenant(accountId, async (c) => {
+          await handler(c, accountId, {
+            id: r.id,
+            entity: r.entity,
+            entityId: r.entity_id,
+            op: r.op,
+            payload: r.payload,
+            clientTs: r.client_ts,
+            clientSeq: r.client_seq,
+          } as any, { deviceId: r.device_id ?? undefined });
+
+          /* Помечаем разобранным ТОЛЬКО после того, как применили: иначе
+             запись пропадёт из виду, а деньги останутся вне учёта. */
+          await c.query(
+            `UPDATE oplog_dead_letter SET resolved_at = now()
+              WHERE account_id = $1 AND id = $2`, [accountId, r.id]);
+        });
+        применено += 1;
+      } catch (e: any) {
+        беды.push({ id: r.id, error: String(e.message || e).slice(0, 120) });
+      }
     }
-
-    const беды = (итог.results || [])
-      .filter((r: any) => r.result !== 'accepted' && r.result !== 'duplicate')
-      .map((r: any) => ({ id: r.id, error: String(r.error || '').slice(0, 120) }));
 
     return {
       всего: записи.length,
-      применено: принятые.length,
-      осталось: записи.length - принятые.length,
+      применено,
+      осталось: записи.length - применено,
       беды: беды.slice(0, 5),
     };
   }
