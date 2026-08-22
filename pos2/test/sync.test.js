@@ -27,6 +27,48 @@ const чек = (id, n) => ({ id, entity: 'sale', entityId: id, op: 'insert',
 
 console.log('═══ ЭТАП 21 · ОЧЕРЕДЬ ═══\n');
 
+// ── ИМЕНА СОБЫТИЙ СВОДЯТСЯ ПОД СЕРВЕР ─────────────────────────────
+{
+  /* НАЙДЕНО НА БОЕВОМ СЕРВЕРЕ: девятнадцать чеков в карантине.
+   *   «refund» сервер НЕ ЗНАЕТ — возвраты не принимались вовсе;
+   *   «cash_move» он зовёт «cash_operation»;
+   *   у смены пустая метка времени, а поле обязательно — и за смену
+   *     цеплялись все чеки: «sale_shift_id_fkey». */
+  const { переведи, движениеДляСервера } = require('../renderer/sync.js');
+
+  const в = переведи({ id: '1', entity: 'refund', entityId: '1', op: 'insert',
+    payload: { number: 5, total: 500, items: [], refundOf: 'r1' } }, 'e1');
+  ok(в.entity === 'sale',
+     '★ Возврат едет как ЧЕК со ссылкой: сервер не знает слова «refund»');
+  ok(в.payload.refundOf === 'r1', 'И ссылка на исходный чек сохранена');
+
+  const д = переведи({ id: '2', entity: 'cash_move', entityId: '2', op: 'insert',
+    payload: { kind: 'cash_out', amount: 5000, note: 'на расходы' } }, 'e1');
+  ok(д.entity === 'cash_operation', '★ Движение денег: cash_move → cash_operation');
+  ok(д.payload.kind === 'withdrawal',
+     `★ И вид сведён: cash_out → ${д.payload.kind}`);
+  ok(д.payload.comment === 'на расходы', 'Причина: note → comment');
+  ok(/Изъятие/.test(д.payload.name || ''),
+     `★ Имя по-русски для отчёта: «${д.payload.name}»`);
+
+  /* МЕТКА ВРЕМЕНИ ОБЯЗАТЕЛЬНА. Без неё сервер отбивал смену, а за
+     смену цеплялись все чеки. */
+  const см = переведи({ id: '3', entity: 'shift', entityId: '3', op: 'insert',
+    payload: { openedAt: '2026-08-22T09:00:00.000Z' } }, 'e1');
+  ok(см.clientTs === '2026-08-22T09:00:00.000Z',
+     '★ Метка времени взята из смены: без неё чеки теряют смену');
+
+  const без = переведи({ id: '4', entity: 'shift', entityId: '4', op: 'insert',
+    payload: {} }, 'e1');
+  ok(!!без.clientTs, 'А нет её вовсе — ставим текущее, но не пустое');
+
+  // Внесение и инкассация тоже сводятся.
+  ok(движениеДляСервера({ kind: 'cash_in', amount: 1 }).kind === 'deposit',
+     'Внесение: cash_in → deposit');
+  ok(движениеДляСервера({ kind: 'collection', amount: 1 }).kind === 'collection',
+     'Инкассация остаётся собой');
+}
+
 (async () => {
 
 // ── ВСЁ УШЛО ───────────────────────────────────────────────────────

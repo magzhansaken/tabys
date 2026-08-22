@@ -44,12 +44,13 @@ async function flush({ ask, store, settings, deviceToken, employeeId }) {
     ответ = await ask('/sync/push', {
       settings, deviceToken, method: 'POST',
       body: {
-        events: пачка.map((e) => ({
-          id: e.id, entity: e.entity, entityId: e.entityId, op: e.op,
-          payload: e.entity === 'sale' ? чекДляСервера(e.payload) : e.payload,
-          clientSeq: e.clientSeq, clientTs: e.clientTs,
-          employeeId: e.employeeId || employeeId,
-        })),
+        /* ИМЕНА СОБЫТИЙ СВОДИМ ПОД СЕРВЕР.
+         *
+         * Найдено на боевом сервере: девятнадцать чеков в карантине.
+         *   «refund» сервер НЕ ЗНАЕТ — возвраты не принимались вовсе;
+         *   «cash_move» он зовёт «cash_operation»;
+         *   у смены пустая метка времени, а поле обязательно. */
+        events: пачка.map((e) => переведи(e, employeeId)),
       },
     });
   } catch (e) {
@@ -215,6 +216,79 @@ function queueNote({ left, rejected, lastSync, netDown }) {
  * Переводим ЗДЕСЬ, а не в самом чеке: чек читает кассир на ленте, и
  * менять его имена значит менять печать, отчёты и возвраты разом.
  */
+/**
+ * СОБЫТИЕ В ВИД СЕРВЕРА.
+ *
+ * Касса и сервер зовут одно разными словами. Пока их не свести, чек
+ * уходит в карантин: деньги взяты, а в отчёте пусто.
+ */
+function переведи(e, employeeId) {
+  /* ВОЗВРАТ — ЭТО ТОТ ЖЕ ЧЕК со ссылкой на исходный.
+     Сервер не знает слова «refund»: у него возвратность несёт
+     return_of_id, а не отдельный вид события. */
+  const вид = e.entity === 'refund' ? 'sale'
+    : e.entity === 'cash_move' ? 'cash_operation'
+      : e.entity;
+
+  const тело = вид === 'sale' ? чекДляСервера(e.payload)
+    : вид === 'cash_operation' ? движениеДляСервера(e.payload)
+      : e.payload;
+
+  return {
+    id: e.id,
+    entity: вид,
+    entityId: e.entityId,
+    op: e.op,
+    payload: тело,
+    clientSeq: e.clientSeq,
+    /* МЕТКА ВРЕМЕНИ ОБЯЗАТЕЛЬНА. Без неё сервер отбивал смену, а за
+       смену цеплялись все чеки: «sale_shift_id_fkey — смены нет».
+       Берём из самого события, а нет — ставим текущее. */
+    clientTs: e.clientTs || (e.payload && (e.payload.at || e.payload.openedAt))
+      || new Date().toISOString(),
+    employeeId: e.employeeId || employeeId,
+  };
+}
+
+/**
+ * ДВИЖЕНИЕ ДЕНЕГ В ВИД СЕРВЕРА.
+ *
+ * Касса зовёт причину «note», сервер ждёт «comment». И просит имя
+ * движения отдельным полем — иначе в отчёте владельца будет
+ * «cash_out» вместо «Изъятие из кассы».
+ */
+function движениеДляСервера(m) {
+  if (!m) return m;
+  return {
+    /* ВИДЫ У СЕРВЕРА СВОИ: deposit, withdrawal, opening_float,
+       collection. Касса зовёт их по-своему — сводим, иначе движение
+       уходит в карантин, и ящик в отчёте не сойдётся с настоящим. */
+    kind: ВИД_ДВИЖЕНИЯ[m.kind || m.type] || (m.kind || m.type),
+    amount: Math.abs(Number(m.amount) || 0),
+    comment: m.note || m.comment || null,
+    /* Имя по-русски: владелец читает отчёт, а не наши слова. */
+    name: MOVE_NAMES[m.kind || m.type] || null,
+    shiftId: m.shiftId || null,
+    approvedBy: m.approvedBy || null,
+    openingFloat: m.openingFloat,
+  };
+}
+
+/* Виды движения: слева как зовёт касса, справа как ждёт сервер. */
+const ВИД_ДВИЖЕНИЯ = {
+  cash_in: 'deposit',
+  cash_out: 'withdrawal',
+  collection: 'collection',
+  opening: 'opening_float',
+};
+
+/* Имена движений по-русски — те же, что видит кассир на кассе. */
+const MOVE_NAMES = {
+  cash_in: 'Внесение в кассу',
+  cash_out: 'Изъятие из кассы',
+  collection: 'Инкассация',
+};
+
 function чекДляСервера(r) {
   if (!r) return r;
 
@@ -261,5 +335,5 @@ function чекДляСервера(r) {
 if (typeof module !== 'undefined') {
   // eslint-disable-next-line global-require
   var { развернуть } = require('./common.js');
-  module.exports = { BATCH, чекДляСервера, flush, makeSyncLoop, queueNote };
+  module.exports = { BATCH, чекДляСервера, переведи, движениеДляСервера, flush, makeSyncLoop, queueNote };
 }
