@@ -48,8 +48,8 @@ export class AdminSyncController {
   /* ВЕРНУТЬ ЧЕКИ ИЗ КАРАНТИНА. Владелец видит ноль в отчёте, а деньги
      взяты — этой кнопкой они возвращаются в учёт. */
   @Post('retry-quarantine') @RequirePermission('settings', 'edit')
-  retryQuarantine(@Ctx() ctx: EmployeeContext) {
-    return this.sync.retryQuarantine(ctx.accountId);
+  retryQuarantine(@Ctx() ctx: EmployeeContext, @Body() d: any) {
+    return this.sync.retryQuarantine(ctx.accountId, !!(d && d.all));
   }
 
   @Post('push') @RequirePermission('settings', 'edit')

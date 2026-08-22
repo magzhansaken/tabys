@@ -81,15 +81,29 @@ export class SyncService {
    * Порядок важен: сперва смены, потом чеки. Чек ссылается на смену, и
    * наоборот не выйдет.
    */
-  async retryQuarantine(accountId: string) {
+  async retryQuarantine(accountId: string, все = false) {
+    /* ПОМЕЧЕННЫЕ, НО НЕ ПРИМЕНЁННЫЕ — ТОЖЕ ДЕНЬГИ.
+     *
+     * Прежний разбор помечал записи разобранными, а применить забывал.
+     * Они остались с пометкой, и обычный разбор их больше не видит — а
+     * чеков в продажах нет.
+     *
+     * С «все» берём и такие: проверяем по САМОЙ ТАБЛИЦЕ, лёг чек или
+     * нет. Тело события цело, применить можно. */
     const записи = await this.db.withTenant(accountId, async (c) => (await c.query(
-      `SELECT id, device_id, entity, entity_id, op, payload,
-              client_ts, client_seq
-         FROM oplog_dead_letter
-        WHERE account_id = $1 AND resolved_at IS NULL
-        ORDER BY CASE entity WHEN 'shift' THEN 0 WHEN 'sale' THEN 1
-                             WHEN 'refund' THEN 1 ELSE 2 END,
-                 first_seen_at`, [accountId])).rows);
+      `SELECT d.id, d.device_id, d.entity, d.entity_id, d.op, d.payload,
+              d.client_ts, d.client_seq
+         FROM oplog_dead_letter d
+        WHERE d.account_id = $1
+          AND (d.resolved_at IS NULL OR ($2::boolean AND NOT EXISTS (
+                SELECT 1 FROM sale s WHERE s.id = d.entity_id
+                UNION ALL
+                SELECT 1 FROM shift sh WHERE sh.id = d.entity_id
+                UNION ALL
+                SELECT 1 FROM cash_operation co WHERE co.id = d.entity_id)))
+        ORDER BY CASE d.entity WHEN 'shift' THEN 0 WHEN 'sale' THEN 1
+                               WHEN 'refund' THEN 1 ELSE 2 END,
+                 d.first_seen_at`, [accountId, все])).rows);
 
     if (!записи.length) return { всего: 0, применено: 0, осталось: 0, беды: [] };
 

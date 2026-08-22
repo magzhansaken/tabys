@@ -16,6 +16,11 @@ const { Client } = require('pg');
 
 const ЧИНИТЬ = process.argv.includes('--fix');
 
+/* КЛЮЧ «ВСЕ» поднимает и помеченные разобранными, но НЕ ПРИМЕНЁННЫЕ.
+   Прежний разбор помечал их и забывал применить — деньги остались вне
+   учёта, а обычный разбор их больше не видит. */
+const ВСЕ = process.argv.includes('--all');
+
 const деньги = (v) => Math.round(Number(v) || 0)
   .toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₸';
 
@@ -25,7 +30,7 @@ const деньги = (v) => Math.round(Number(v) || 0)
  * Поднимаем ход обмена сервера прямо здесь: скрипт живёт внутри его
  * контейнера, и весь код рядом.
  */
-async function разбери(accountId) {
+async function разбери(accountId, все) {
   /* СБОРКА СЕРВЕРА ЛЕЖИТ РЯДОМ. В контейнере это /app/dist, при
      запуске из исходников — server/dist. Понимаем оба. */
   const fs = require('fs');
@@ -46,7 +51,7 @@ async function разбери(accountId) {
     разбери._app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   }
   const sync = разбери._app.get(SyncService);
-  const r = await sync.retryQuarantine(accountId);
+  const r = await sync.retryQuarantine(accountId, !!все);
   return { применено: r.применено, осталось: r.осталось,
     беды: (r.беды || []).map((b) => b.error) };
 }
@@ -82,8 +87,12 @@ async function разбери(accountId) {
     const записи = (await c.query(
       `SELECT id, entity, entity_id, op, payload, error, client_ts, client_seq, device_id
          FROM oplog_dead_letter
-        WHERE account_id = $1 AND resolved_at IS NULL
-        ORDER BY first_seen_at`, [м.id])).rows;
+        WHERE account_id = $1
+          AND (resolved_at IS NULL OR ($2::boolean AND NOT EXISTS (
+                SELECT 1 FROM sale s WHERE s.id = entity_id
+                UNION ALL SELECT 1 FROM shift sh WHERE sh.id = entity_id
+                UNION ALL SELECT 1 FROM cash_operation co WHERE co.id = entity_id)))
+        ORDER BY first_seen_at`, [м.id, ВСЕ])).rows;
 
     if (!записи.length) continue;
 
@@ -120,7 +129,7 @@ async function разбери(accountId) {
      * Зовём свёртку сервера напрямую: скрипт работает ВНУТРИ его
      * контейнера, и городить вход в кабинет ради своего же кода
      * незачем. */
-    const итог = await разбери(м.id);
+    const итог = await разбери(м.id, ВСЕ);
 
     console.log('      применено: ' + итог.применено
       + (итог.осталось ? ' · осталось ' + итог.осталось : ' ✔'));
@@ -143,6 +152,9 @@ async function разбери(accountId) {
   if (!ЧИНИТЬ) {
     console.log('');
     console.log('  Вернуть в работу: node scripts/retry-quarantine.js --fix');
+    console.log('');
+    console.log('  Если разбор уже делали, а чеков в отчёте нет — добавьте');
+    console.log('  --all: он поднимет помеченные, но не применённые.');
     console.log('');
     console.log('  Сперва выложите свежий код: старые чеки отбивались по');
     console.log('  трём причинам, и все три чинены. Без свежего кода они');
