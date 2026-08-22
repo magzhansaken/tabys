@@ -61,8 +61,16 @@ const дата = (d) => (d
        стоит без ссылки. Это точное совпадение по ключу. */
     const найдены = (await c.query(
       `SELECT s.id, s.number, s.total, s.created_at,
-              o.payload->>'ofReceiptId' AS исходный,
-              o.payload->>'ofReceiptNumber' AS номер_исходного,
+              /* ССЫЛКУ ИЩЕМ ВСЕМИ ИМЕНАМИ, какими её звали.
+                 Очень старая касса звала «returnOf», нынешняя —
+                 «ofReceiptId», перевод ставит «refundOf». Смотреть одно
+                 имя значит не найти возврат и оставить выручку
+                 завышенной, а владелец решит, что таких нет. */
+              coalesce(o.payload->>'ofReceiptId',
+                       o.payload->>'returnOf',
+                       o.payload->>'refundOf') AS исходный,
+              coalesce(o.payload->>'ofReceiptNumber',
+                       o.payload->>'returnOfNumber') AS номер_исходного,
               o.payload->>'reason' AS причина
          FROM sale s
          JOIN oplog o ON o.entity_id = s.id AND o.entity = 'refund'
