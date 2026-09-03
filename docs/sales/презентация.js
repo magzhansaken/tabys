@@ -22,13 +22,48 @@ const notes = (s, t) => s.addNotes(t);
   s.addText('Касса · Қойма · Есептер · Kaspi · Салық — бір жерде',
     { x: 0.7, y: 3.3, w: 8, h: 0.5, fontFace: F.b, fontSize: 16, color: 'B8C9BF',
       isTextBox: true, margin: 0 });
-  s.addText('Айына 6 900 ₸-ден · Орнату тегін · 14 күн сынақ',
+  s.addText('Айына 9 990 ₸-ден · Орнату 20 000 ₸ · 2 күн тегін сынақ',
     { x: 0.7, y: 4.5, w: 8, h: 0.4, fontFace: F.b, fontSize: 14, color: C.gold,
       isTextBox: true, margin: 0, italic: true });
   notes(s, 'Табыс — Қазақстан дүкендері үшін жасалған. Кассадан бастап салыққа дейін бір жүйеде.');
 }
 
-// ─── 2. ПРОБЛЕМА ─────────────────────────────────────────────────────
+// ─── 2. КРЮЧОК: НАСТОЯЩАЯ КАССА ──────────────────────────────────────
+//
+// Владелец магазина не читает списки функций. Он смотрит на экран и
+// решает: справится моя кассирша или нет. Снимок настоящей кассы
+// отвечает на это без единого слова.
+//
+// Это НЕ рисунок: экран снят с работающей кассы — весы дали 4,5 кг
+// картопа, итог 2 210 ₸.
+{
+  const s = pres.addSlide();
+  s.background = { color: C.dark };
+  s.addText('Кассирдің экраны', { x: 0.5, y: 0.3, w: 5.5, h: 0.55, fontFace: F.h, fontSize: 30,
+    bold: true, color: C.white, isTextBox: true, margin: 0 });
+  s.addText('Нақты касса. Сурет емес.', { x: 0.5, y: 0.85, w: 5.5, h: 0.35, fontFace: F.b,
+    fontSize: 14, color: C.gold, isTextBox: true, margin: 0, italic: true });
+
+  s.addImage({ path: '/home/claude/pres/kassa.png', x: 0.5, y: 1.35, w: 6.6, h: 3.71 });
+
+  const крюк = [
+    ['Бір экран', 'Тауар да, чек те көрінеді'],
+    ['Ірі әріп', 'Көзі нашар кассир де оқиды'],
+    ['Салмақ өзі', 'Картоп 4,5 кг — қолмен енгізілмеген'],
+    ['ОПЛАТА-да сома', 'Кассир қанша алатынын көріп тұрады'],
+  ];
+  крюк.forEach((k, i) => {
+    const y = 1.4 + i * 0.92;
+    s.addShape(pres.shapes.OVAL, { x: 7.4, y: y + 0.06, w: 0.32, h: 0.32, fill: { color: C.gold } });
+    s.addText(k[0], { x: 7.85, y, w: 2.05, h: 0.4, fontFace: F.b, fontSize: 15, bold: true,
+      color: C.white, isTextBox: true, margin: 0 });
+    s.addText(k[1], { x: 7.85, y: y + 0.36, w: 2.05, h: 0.5, fontFace: F.b, fontSize: 11,
+      color: 'B8C9BF', isTextBox: true, margin: 0 });
+  });
+  notes(s, 'Осы экранды көрсетіңіз. Дүкен иесі функция тізімін оқымайды — экранға қарап шешеді: кассирім істей ме, жоқ па.');
+}
+
+// ─── 3. ПРОБЛЕМА ─────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.white };
@@ -53,7 +88,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'Әр дүкен иесі осы төрт сұрақпен күн сайын кездеседі.');
 }
 
-// ─── 3. КАССА ────────────────────────────────────────────────────────
+// ─── 4. КАССА ────────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.light };
@@ -82,7 +117,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'Касса Windows планшетінде немесе компьютерде. Сканер, таразы, чек принтері, ақша жәшігі қосылады.');
 }
 
-// ─── 4. ЦИФРЫ КАССЫ ──────────────────────────────────────────────────
+// ─── 5. ЦИФРЫ КАССЫ ──────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.dark };
@@ -103,7 +138,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, '690 автоматты тексеру — әр жаңарту алдында өтеді.');
 }
 
-// ─── 5. КАБИНЕТ ──────────────────────────────────────────────────────
+// ─── 6. КАБИНЕТ ──────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.white };
@@ -125,7 +160,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'Барлық 21 бөлім Стандарт тарифінде. Старт тарифінде негізгі 8.');
 }
 
-// ─── 6. ЧЕГО НЕТ У ДРУГИХ ────────────────────────────────────────────
+// ─── 7. ЧЕГО НЕТ У ДРУГИХ ────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.light };
@@ -155,7 +190,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'Бұл алты функция UMAG пен Wipon-да жоқ.');
 }
 
-// ─── 7. ТЕЛЕФОН ──────────────────────────────────────────────────────
+// ─── 8. ТЕЛЕФОН ──────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.white };
@@ -199,31 +234,35 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'Телефон қосымшасы — иесі үшін. Кассирге кассадағы бағдарлама.');
 }
 
-// ─── 8. СРАВНЕНИЕ ЦЕН ────────────────────────────────────────────────
+// ─── 9. СРАВНЕНИЕ ЦЕН ────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.white };
-  s.addText('Бағаны салыстырыңыз', { x: 0.6, y: 0.4, w: 9, h: 0.7,
+  s.addText('Бірінші жылдың құны', { x: 0.6, y: 0.4, w: 9, h: 0.7,
     fontFace: F.h, fontSize: 30, bold: true, color: C.dark, isTextBox: true, margin: 0 });
-  s.addText('Айлық төлем, теңге. Ресми сайттардан, 2026 жылғы қыркүйек', { x: 0.6, y: 1.0, w: 9, h: 0.35,
+  s.addText('Толық тариф + орнату, бірінші жыл. Ресми сайттардан, 2026 жылғы қыркүйек', { x: 0.6, y: 1.0, w: 9, h: 0.35,
     fontFace: F.b, fontSize: 12, color: C.muted, isTextBox: true, margin: 0 });
+  /* СРАВНИВАЕМ ПО ПЕРВОМУ ГОДУ, а не по месяцу.
+     По месяцу Старт 9 990 дороже UMAG 8 800 — такая диаграмма работает
+     против нас. А за год со Стандартом мы дешевле на 70 000 ₸, и это
+     правда: 14 900×12 + 20 000 против 19 900×12 + 30 000. */
   s.addChart(pres.charts.BAR, [
-    { name: 'Негізгі тариф', labels: ['Табыс', 'UMAG', 'Wipon'], values: [6900, 8800, 15000] },
-    { name: 'Толық тариф', labels: ['Табыс', 'UMAG', 'Wipon'], values: [14900, 19900, 22500] },
+    { name: 'Бірінші жыл, барлығы', labels: ['Табыс', 'UMAG', 'Wipon'],
+      values: [198800, 268800, 300000] },
   ], {
     x: 0.6, y: 1.4, w: 5.6, h: 3.6, barDir: 'col', barGrouping: 'clustered',
-    chartColors: [C.gold, C.green], showValue: true, dataLabelPosition: 'outEnd',
+    chartColors: [C.green, C.gold], showValue: true, dataLabelPosition: 'outEnd',
     dataLabelFontSize: 10, dataLabelColor: C.text, dataLabelFormatCode: '#,##0',
     catAxisLabelFontSize: 13, catAxisLabelColor: C.text, valAxisLabelFontSize: 10,
     valAxisLabelColor: C.muted, valGridLine: { color: 'E5E5E5', size: 0.5 },
-    catGridLine: { style: 'none' }, showLegend: true, legendPos: 'b', legendFontSize: 11,
+    catGridLine: { style: 'none' }, showLegend: false,
     valAxisLabelFormatCode: '#,##0',
   });
   const дов = [
-    ['Орнату тегін', 'UMAG: 30 000 ₸ бір рет'],
+    ['70 000 ₸ арзан', 'Бірінші жылда — UMAG-пен салыстырғанда'],
+    ['Орнату 20 000 ₸', 'UMAG: 30 000 ₸ — 10 000 үнемдейсіз'],
     ['Кассирге шек жоқ', 'Wipon: қызметкер санына тариф'],
     ['AI кіреді', 'Бәсекелестерде мүлде жоқ'],
-    ['14 күн тегін', 'Картасыз, міндеттемесіз'],
   ];
   дов.forEach((d, i) => {
     const y = 1.4 + i * 0.9;
@@ -235,7 +274,7 @@ const notes = (s, t) => s.addNotes(t);
   notes(s, 'UMAG: Старт 8 800, Стандарт 19 900, орнату 30 000. Wipon: Lite 15 000, Standard 22 500 бөліп төлегенде. Дереккөз: umag.kz/tarify, docs.wipon.kz');
 }
 
-// ─── 9. ТАРИФЫ ───────────────────────────────────────────────────────
+// ─── 10. ТАРИФЫ ───────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.light };
@@ -246,7 +285,7 @@ const notes = (s, t) => s.addNotes(t);
     line: { color: C.card, width: 1 }, rectRadius: 0.12 });
   s.addText('Старт', { x: 0.9, y: 1.4, w: 3.7, h: 0.4, fontFace: F.b, fontSize: 20, bold: true,
     color: C.dark, isTextBox: true, margin: 0 });
-  s.addText('6 900 ₸', { x: 0.9, y: 1.8, w: 3.7, h: 0.7, fontFace: F.h, fontSize: 40, bold: true,
+  s.addText('9 990 ₸', { x: 0.9, y: 1.8, w: 3.7, h: 0.7, fontFace: F.h, fontSize: 40, bold: true,
     color: C.green, isTextBox: true, margin: 0 });
   s.addText('айына · 1 дүкен, 1 касса', { x: 0.9, y: 2.5, w: 3.7, h: 0.3, fontFace: F.b, fontSize: 12,
     color: C.muted, isTextBox: true, margin: 0 });
@@ -279,12 +318,12 @@ const notes = (s, t) => s.addNotes(t);
     { text: 'Автоматтандыру және API', options: { bullet: true } },
   ], { x: 5.4, y: 2.95, w: 3.7, h: 2, fontFace: F.b, fontSize: 12, color: C.white,
     isTextBox: true, margin: 0, paraSpaceAfter: 5 });
-  s.addText('Қосымша дүкен — 4 900 ₸ · Жылға төлесеңіз — 2 ай сыйлық', { x: 0.6, y: 5.2, w: 9, h: 0.3,
+  s.addText('Қосымша дүкен — 4 900 ₸ · Орнату 20 000 ₸ · Жылға төлесеңіз — 2 ай сыйлық', { x: 0.6, y: 5.2, w: 9, h: 0.3,
     fontFace: F.b, fontSize: 12, color: C.muted, align: 'center', isTextBox: true, margin: 0 });
   notes(s, 'Жылдық төлем: 10 ай бағасына 12 ай. Старт 69 000, Стандарт 149 000 жылына.');
 }
 
-// ─── 10. КАК НАЧАТЬ ──────────────────────────────────────────────────
+// ─── 11. КАК НАЧАТЬ ──────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.white };
@@ -310,14 +349,14 @@ const notes = (s, t) => s.addNotes(t);
   });
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 1.5, y: 3.9, w: 7, h: 1.1, fill: { color: C.light },
     rectRadius: 0.1 });
-  s.addText('14 күн тегін сынақ', { x: 1.5, y: 4.0, w: 7, h: 0.4, fontFace: F.b, fontSize: 18, bold: true,
+  s.addText('2 күн тегін сынақ', { x: 1.5, y: 4.0, w: 7, h: 0.4, fontFace: F.b, fontSize: 18, bold: true,
     color: C.dark, align: 'center', isTextBox: true, margin: 0 });
   s.addText('Ұнамаса — ештеңе төлемейсіз. Деректеріңіз сізде қалады.', { x: 1.5, y: 4.45, w: 7, h: 0.4,
     fontFace: F.b, fontSize: 13, color: C.muted, align: 'center', isTextBox: true, margin: 0 });
   notes(s, 'Серіктес — жергілікті адам. Ол дүкенге келеді, орнатады, оқытады.');
 }
 
-// ─── 11. КОНТАКТЫ ────────────────────────────────────────────────────
+// ─── 12. КОНТАКТЫ ────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.dark };
